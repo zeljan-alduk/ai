@@ -6,49 +6,49 @@ Last updated: 2026-04-24. Audience: Meridian founding team and design partners.
 
 ### Agent frameworks
 
-- **LangChain / LangGraph / LangGraph Cloud.** Dominant OSS surface area for composing LLM apps; LangGraph is the stateful graph runtime, LangGraph Cloud is the managed deploy + checkpointing layer. Strong observability via LangSmith. Provider-flexible but YAML-as-spec is bolted on, not native.
-- **CrewAI (+ Enterprise).** Role-based multi-agent OSS framework with a hosted Enterprise tier for monitoring, guardrails, and team deploy. Has gained traction with non-research developers. Light on replay and privacy tiers; provider-flexible in theory, OpenAI-friendly in practice.
-- **AutoGen (Microsoft).** Research-grade multi-agent conversation framework; v0.4 rewrote it as an actor system. Strong patterns for agent-to-agent dialogue. Operationally raw — you bring your own deploy, eval, and routing.
-- **OpenAI Agents SDK.** Tight, ergonomic Python/TS SDK with handoffs, tracing, and Responses API integration. Provider-locked by design; tracing UI is gated to OpenAI accounts. Will set defaults the rest of the market reacts to.
-- **Anthropic Claude Agent SDK.** Same idea, Claude-locked. Excellent tool-use semantics, MCP-native, computer use. Bound to Anthropic's billing and model lineup.
-- **Semantic Kernel (Microsoft).** Enterprise .NET/Python SDK with planners, plugins, and Azure-first deploy. Strong in regulated Microsoft shops. Less momentum among Python-native AI teams.
-- **Smol Agents (Hugging Face).** Minimal "code-as-action" agent library; emphasizes small, local models writing Python to act. Great philosophical alignment with local-first; not a platform.
-- **Pydantic-AI.** Type-safe agent framework from the Pydantic team. Excellent DX, structured outputs, model-agnostic. Library, not a runtime — no deploy, eval, routing.
-- **Letta (formerly MemGPT).** Stateful agents with memory as first-class. Differentiated on long-running memory, weaker on multi-agent orchestration and privacy controls.
+- **LangChain / LangGraph / LangGraph Cloud.** Dominant OSS surface for LLM apps; LangGraph is the stateful graph runtime, Cloud is managed deploy + checkpointing. Strong LangSmith tracing. Provider-flexible but YAML-as-spec is bolted on.
+- **CrewAI (+ Enterprise).** Role-based multi-agent OSS with a hosted tier for monitoring, guardrails, deploy. Traction with non-research devs. Light on replay and privacy; OpenAI-friendly in practice.
+- **AutoGen (Microsoft).** Research-grade multi-agent framework; v0.4 is actor-based. Strong agent-to-agent dialogue patterns. Operationally raw — bring your own deploy, eval, routing.
+- **OpenAI Agents SDK.** Ergonomic Python/TS SDK with handoffs, tracing, Responses API. Provider-locked; tracing UI gated to OpenAI accounts. Sets defaults the market reacts to.
+- **Anthropic Claude Agent SDK.** Same shape, Claude-locked. Excellent tool-use, MCP-native, computer use. Bound to Anthropic's billing and lineup.
+- **Semantic Kernel (Microsoft).** Enterprise .NET/Python SDK with planners, plugins, Azure-first deploy. Strong in Microsoft shops; little Python-native momentum.
+- **Smol Agents (Hugging Face).** Minimal "code-as-action" library; small local models writing Python to act. Aligned with local-first; not a platform.
+- **Pydantic-AI.** Type-safe agent framework from the Pydantic team. Excellent DX, structured outputs, model-agnostic. Library, not a runtime.
+- **Letta (formerly MemGPT).** Stateful agents with memory as first-class. Differentiated on long memory; weaker on orchestration and privacy.
 
 ### Autonomous coders
 
-- **Devin (Cognition).** Hosted autonomous SWE; sandboxed VM, browser, planning. Pricey, opaque internals, closed runtime.
-- **OpenHands (All Hands AI).** OSS autonomous coder with sandboxed runtime; the credible open Devin. Backend-flexible across providers. Self-host story is real.
-- **Cursor agents / Background Agents.** IDE-native agent that can run multi-file edits and background tasks. Tight UX moat; provider-mixed (Anthropic-heavy).
-- **Windsurf Cascade.** IDE agent with deep repo context; now under Cognition. Similar shape to Cursor; tight to its IDE.
-- **Claude Code (this tool).** Terminal/CLI agent with MCP, hooks, sub-agents. Excellent dev ergonomics; Anthropic-locked.
-- **Aider.** OSS pair-programming CLI; mature, opinionated, provider-flexible. Single-agent, no orchestration layer.
-- **Replit Agent.** Cloud IDE + agent for end-to-end app builds. Strong with non-developers. Closed runtime.
-- **Factory.** "Droids" for engineering workflows (PRs, incidents, migrations); enterprise-positioned. Closed platform.
+- **Devin (Cognition).** Hosted autonomous SWE with sandboxed VM, browser, planning. Pricey, opaque, closed runtime.
+- **OpenHands (All Hands AI).** OSS autonomous coder with sandboxed runtime — the credible open Devin. Backend-flexible; real self-host story.
+- **Cursor agents / Background Agents.** IDE-native multi-file and background tasks. Tight UX moat; Anthropic-heavy.
+- **Windsurf Cascade.** IDE agent with deep repo context; now under Cognition. Similar shape to Cursor.
+- **Claude Code.** Terminal/CLI agent with MCP, hooks, sub-agents. Excellent dev ergonomics; Anthropic-locked.
+- **Aider.** OSS pair-programming CLI; mature, opinionated, provider-flexible. Single-agent.
+- **Replit Agent.** Cloud IDE + agent for end-to-end app builds. Strong with non-developers; closed.
+- **Factory.** "Droids" for PRs, incidents, migrations; enterprise-positioned, closed.
 
 ### Low-code
 
 - **n8n.** OSS workflow automation with strong AI nodes; self-hostable. Increasingly the open default for AI workflows.
 - **Zapier Agents / Central.** Vast app catalog, business-user UX. Cloud-only, provider-bundled.
 - **Make.com.** Visual automation; AI modules added late. Cloud-only.
-- **Windmill.** OSS internal-tool / workflow platform with code-first ergonomics. Pragmatic alternative to n8n for engineers.
+- **Windmill.** OSS internal-tool / workflow platform with code-first ergonomics. Engineer-friendly n8n alternative.
 
 ### Managed agent platforms
 
-- **Sierra.** Customer-experience agents for enterprise; concierge sales motion, outcome-priced. Vertical, not a platform.
-- **Decagon.** Same lane as Sierra — managed CX agents with observability and brand-voice tuning.
-- **AWS Bedrock Agents / AgentCore.** Managed agents over Bedrock models; tight IAM/VPC story. Bedrock-locked.
-- **Google Vertex AI Agent Builder / ADK.** Managed agent runtime + ADK SDK; integrates Gemini, Search, and tools. Google-cloud-locked.
-- **Azure AI Agent Service / Foundry.** Managed agents over Azure OpenAI + tools; Semantic Kernel adjacent. Azure-locked.
+- **Sierra.** Enterprise CX agents; concierge sales, outcome-priced. Vertical, not a platform.
+- **Decagon.** Same lane — managed CX agents with observability and brand-voice tuning.
+- **AWS Bedrock Agents / AgentCore.** Managed agents over Bedrock models; tight IAM/VPC. Bedrock-locked.
+- **Google Vertex AI Agent Builder / ADK.** Managed runtime + ADK SDK; Gemini, Search, tools. Google-cloud-locked.
+- **Azure AI Agent Service / Foundry.** Managed agents over Azure OpenAI + tools; SK-adjacent. Azure-locked.
 
 ### Adjacent infra
 
-- **Temporal AI.** Durable execution for agent workflows; replay and retry are native. Not opinionated about LLMs — complements rather than competes.
-- **LiteLLM.** OSS proxy that normalizes provider APIs and adds budget/rate limits. The de facto "model gateway lite." Closest to a piece of Meridian.
-- **Helicone.** OSS-friendly LLM observability and gateway with caching and routing. Overlaps the gateway slice.
-- **Portkey.** Closed-source AI gateway with routing, guardrails, governance. Enterprise-focused.
-- **E2B.** Secure code-exec sandboxes for agents. Pure infra primitive; not a competitor, a likely dependency.
+- **Temporal AI.** Durable execution for agent workflows; replay and retry native. Complements rather than competes.
+- **LiteLLM.** OSS proxy normalizing provider APIs with budgets and rate limits. The de facto "gateway lite." Closest to a slice of Meridian.
+- **Helicone.** OSS-friendly LLM observability + gateway with caching and routing. Overlaps the gateway slice.
+- **Portkey.** Closed AI gateway with routing, guardrails, governance. Enterprise-focused.
+- **E2B.** Secure code-exec sandboxes. A likely dependency, not a competitor.
 
 ## 2. Feature matrix
 
@@ -114,15 +114,15 @@ Everything else (MCP-native, multi-tenant, OSS-core + managed) is table stakes w
 
 ## 6. Adoption tactics
 
-**First-20 design-partner profile.** Mid-size (50–500 eng) product or platform team that (a) has a regulated data class — health, finance, legal, defense, internal HR — that can't leave their VPC, (b) already runs at least one agent in production on LangChain/CrewAI/OpenAI SDK and has felt the pain, (c) has an internal LLM gateway proposal stuck in design review. Bonus: a platform team chartered to standardize agent infra across BUs.
+**First-20 design-partner profile.** Mid-size (50–500 eng) product or platform team that (a) has a regulated data class — health, finance, legal, defense, internal HR — that can't leave the VPC, (b) already runs at least one agent in production on LangChain/CrewAI/OpenAI SDK and has felt the pain, (c) has an internal LLM gateway proposal stuck in review. Bonus: a platform team chartered to standardize agent infra across BUs.
 
-**10-minute hello-world.** `pipx install meridian && meridian init`, drop in two YAML agents (a public researcher hitting a frontier model, a sensitive summarizer pinned to local Llama), run `meridian eval` against a seed dataset, watch the privacy router refuse to send sensitive traffic to OpenAI even when you misconfigure it. The demo *is* the wedge.
+**10-minute hello-world.** `pipx install meridian && meridian init`, drop in two YAML agents (a public researcher on a frontier model, a sensitive summarizer pinned to local Llama), run `meridian eval` against a seed dataset, watch the router refuse sensitive traffic to OpenAI even when you misconfigure it. The demo *is* the wedge.
 
-**Migration adapter angle.** Ship import shims from LangGraph graphs, CrewAI crews, and OpenAI Agents SDK definitions into Meridian YAML. Don't ask teams to rewrite — ask them to wrap. Then offer the gateway, replay, and eval gate as the upgrade.
+**Migration adapter angle.** Ship import shims from LangGraph graphs, CrewAI crews, and OpenAI Agents SDK specs into Meridian YAML. Don't ask teams to rewrite — wrap. Then sell the gateway, replay, and eval gate as the upgrade.
 
 ## 7. Pricing landscape
 
-Frameworks (LangGraph Cloud, CrewAI Enterprise, Letta) price per seat plus usage, typically four-figure-monthly entry with custom enterprise tiers. Hyperscaler agent services pass through model tokens with a thin platform margin. Vertical managed agents (Sierra, Decagon) price on outcomes — per resolved conversation, often six- to seven-figure ACVs. Coders split: per-seat (Cursor, Windsurf, Aider-via-key) vs. per-task (Devin, Factory). Gateways (LiteLLM cloud, Helicone, Portkey) price on request volume, with generous free tiers to seed. Meridian should anchor on OSS-core free + managed control plane priced per active agent and per gated eval run, with a clear sensitive-tier SKU that justifies itself on compliance.
+Frameworks (LangGraph Cloud, CrewAI Enterprise, Letta) price per seat plus usage, four-figure-monthly entry with custom enterprise tiers. Hyperscalers pass through tokens with thin platform margin. Vertical managed agents (Sierra, Decagon) price on outcomes — per resolved conversation, six- to seven-figure ACVs. Coders split: per-seat (Cursor, Windsurf, Aider-BYOK) vs. per-task (Devin, Factory). Gateways (LiteLLM cloud, Helicone, Portkey) price on request volume with generous free tiers. Meridian should anchor on OSS-core free + managed control plane priced per active agent and per gated eval run, with a sensitive-tier SKU that justifies itself on compliance.
 
 ## 8. Risks
 
