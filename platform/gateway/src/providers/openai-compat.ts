@@ -7,10 +7,10 @@ import type {
   ToolCallPart,
   ToolSchema,
 } from '@meridian/types';
+import { type GrammarHint, applyGrammarHint } from '../decode/constrained.js';
 import { ProviderError } from '../errors.js';
-import type { EmbedRequest, ProviderAdapter, ProviderConfig } from '../provider.js';
 import { buildUsageRecord } from '../pricing.js';
-import { applyGrammarHint, type GrammarHint } from '../decode/constrained.js';
+import type { EmbedRequest, ProviderAdapter, ProviderConfig } from '../provider.js';
 
 /**
  * Generic OpenAI-compatible adapter. Targets the `/chat/completions` and
@@ -36,10 +36,7 @@ interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content:
     | string
-    | Array<
-        | { type: 'text'; text: string }
-        | { type: 'image_url'; image_url: { url: string } }
-      >;
+    | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
   name?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -110,10 +107,7 @@ export function createOpenAICompatAdapter(
       const decoder = new TextDecoder();
       let buffer = '';
 
-      const toolBuffers = new Map<
-        number,
-        { id: string; name: string; args: string }
-      >();
+      const toolBuffers = new Map<number, { id: string; name: string; args: string }>();
       let finishReason: 'stop' | 'length' | 'tool_use' | 'error' = 'stop';
       let tokensIn = 0;
       let tokensOut = 0;
@@ -125,8 +119,9 @@ export function createOpenAICompatAdapter(
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
 
-          let idx: number;
-          while ((idx = buffer.indexOf('\n')) !== -1) {
+          for (;;) {
+            const idx = buffer.indexOf('\n');
+            if (idx === -1) break;
             const line = buffer.slice(0, idx).trim();
             buffer = buffer.slice(idx + 1);
             if (!line) continue;
@@ -298,9 +293,13 @@ function toOpenAIMessage(m: Message): OpenAIMessage {
   }
 
   // Mixed assistant messages: include tool_calls separately.
-  const toolCalls = m.content.filter((p): p is MessagePart & { type: 'tool_call' } => p.type === 'tool_call');
+  const toolCalls = m.content.filter(
+    (p): p is MessagePart & { type: 'tool_call' } => p.type === 'tool_call',
+  );
   const textParts = m.content
-    .filter((p): p is MessagePart & { type: 'text' | 'image' } => p.type === 'text' || p.type === 'image')
+    .filter(
+      (p): p is MessagePart & { type: 'text' | 'image' } => p.type === 'text' || p.type === 'image',
+    )
     .map((p) =>
       p.type === 'text'
         ? { type: 'text' as const, text: p.text }
@@ -346,6 +345,6 @@ async function safeReadText(res: Response): Promise<string> {
   try {
     return await res.text();
   } catch {
-    return `<unreadable body>`;
+    return '<unreadable body>';
   }
 }

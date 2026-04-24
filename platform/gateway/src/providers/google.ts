@@ -1,12 +1,7 @@
-import type {
-  CompletionRequest,
-  Delta,
-  Message,
-  ToolCallPart,
-} from '@meridian/types';
+import type { CompletionRequest, Delta, Message, ToolCallPart } from '@meridian/types';
 import { ProviderError } from '../errors.js';
-import type { ProviderAdapter, ProviderConfig } from '../provider.js';
 import { buildUsageRecord } from '../pricing.js';
+import type { ProviderAdapter, ProviderConfig } from '../provider.js';
 
 /**
  * Google Gemini adapter — targets the REST v1beta streamGenerateContent
@@ -86,8 +81,9 @@ export function createGoogleAdapter(): ProviderAdapter {
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
 
-          let idx: number;
-          while ((idx = buffer.indexOf('\n')) !== -1) {
+          for (;;) {
+            const idx = buffer.indexOf('\n');
+            if (idx === -1) break;
             const line = buffer.slice(0, idx).trim();
             buffer = buffer.slice(idx + 1);
             if (!line || !line.startsWith('data:')) continue;
@@ -233,7 +229,8 @@ function convertPart(p: Message['content'][number]): Record<string, unknown> {
       return {
         functionResponse: {
           name: p.callId,
-          response: typeof p.result === 'object' && p.result !== null ? p.result : { result: p.result },
+          response:
+            typeof p.result === 'object' && p.result !== null ? p.result : { result: p.result },
         },
       };
   }

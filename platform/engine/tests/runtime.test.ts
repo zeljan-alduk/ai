@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import type { AgentRef, TenantId } from '@meridian/types';
+import { describe, expect, it } from 'vitest';
 import { PlatformRuntime, SpawnNotAllowedError } from '../src/runtime.js';
 import {
   MockGateway,

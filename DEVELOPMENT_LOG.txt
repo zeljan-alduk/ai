@@ -97,3 +97,30 @@ and falls back to a bootable stub. Tests inject a fake RegistryLike via
 `setRegistry`. Assumed public surface: `validate(yaml: string):
 ValidationResult` — matches @meridian/types. When the registry ships a
 root export, swap the specifier; no call sites change.
+
+[2026-04-24 21:17 UTC] backend@engine-engineer — platform/engine v0
+Shipped @meridian/engine: Runtime with spawn-permission enforcement and
+parent/child tracking, LeafAgentRun implementing the per-turn loop
+(messages → ModelGateway.complete → tool dispatch via ToolHost → loop
+until finishReason==='stop'), AbortController wired through ctx.signal
+so cancel() propagates to gateway calls, InMemoryCheckpointer capturing
+messages + tool-results + rngSeed + overrides at every pre/post node
+boundary, and a full Orchestrator that walks Graph trees. Node runners:
+pipeline, supervisor, parallel (all|first|quorum with loser-cancel on
+'first'), router (label or JSON.branch), debate (N rounds + judge),
+subscription (EventBus-backed, lives until graph cancel), agent leaf.
+Stores: InMemoryMemoryStore (scope-aware), InProcessEventBus (pattern
+wildcards), permissive RuleChainPolicyEngine, NoopTracer. 27 files;
+8 vitest tests pass covering spawn tree, spawn-permission rejection,
+cancel-aborts-in-flight, pipeline order, parallel(first) returns
+immediately, supervisor parallel fan-out, checkpoint+resume-with-model-
+override. tsc strict + biome clean. Contract assumptions from other
+packages: (1) ModelGateway implementations read ctx.signal — the type
+in @meridian/types doesn't declare a signal field, but cancellation
+requires it; engine passes an augmented context. Worth formalising as
+a non-breaking `readonly signal?: AbortSignal` on CallContext. (2) The
+registry returns a fully-hydrated AgentSpec — engine does not read
+systemFile from disk (synthesises a minimal prompt from identity only);
+TODO(v1) once the registry exposes a resolved-prompt field. (3) The
+ModelDescriptor's id+provider is round-trip-stable enough that a
+resume-with-override can re-request the same model deterministically.

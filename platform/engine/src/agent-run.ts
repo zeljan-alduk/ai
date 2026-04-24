@@ -453,9 +453,7 @@ function renderSystemPrompt(spec: AgentSpec): string {
   // The registry hydrates a resolved prompt in a follow-up. TODO(v1).
   const vars = spec.prompt.variables ?? {};
   const base = `You are ${spec.identity.name} v${spec.identity.version}. ${spec.identity.description}`;
-  const varLine = Object.keys(vars).length
-    ? ` Variables: ${JSON.stringify(vars)}`
-    : '';
+  const varLine = Object.keys(vars).length ? ` Variables: ${JSON.stringify(vars)}` : '';
   return base + varLine;
 }
 

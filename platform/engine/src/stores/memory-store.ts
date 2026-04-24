@@ -56,11 +56,7 @@ export class InMemoryMemoryStore implements MemoryStore {
     this.data.set(composed, entry);
   }
 
-  async *scan(
-    scope: MemoryScope,
-    prefix: string,
-    ctx: CallContext,
-  ): AsyncIterable<MemoryEntry> {
+  async *scan(scope: MemoryScope, prefix: string, ctx: CallContext): AsyncIterable<MemoryEntry> {
     const composedPrefix = this.compose(scope, prefix, ctx);
     for (const [k, v] of this.data.entries()) {
       if (k.startsWith(composedPrefix)) yield v;

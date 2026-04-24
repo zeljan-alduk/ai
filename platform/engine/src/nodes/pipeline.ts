@@ -14,7 +14,8 @@ export async function runPipelineNode(
   let cursor: unknown = inputs;
   const children: RunId[] = [];
   for (const step of steps) {
-    if (ctx.signal.aborted) return { ok: false, output: { cancelled: true }, childRunIds: children };
+    if (ctx.signal.aborted)
+      return { ok: false, output: { cancelled: true }, childRunIds: children };
     const r = await ctx.execute(step, cursor, parent);
     children.push(...r.childRunIds);
     if (!r.ok) return { ok: false, output: r.output, childRunIds: children };

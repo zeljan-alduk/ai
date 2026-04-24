@@ -38,10 +38,7 @@ export class InProcessEventBus implements EventBus {
     this.emitter.emit(event, e);
   }
 
-  async subscribe(
-    pattern: string,
-    handler: (e: Event) => Promise<void>,
-  ): Promise<Unsubscribe> {
+  async subscribe(pattern: string, handler: (e: Event) => Promise<void>): Promise<Unsubscribe> {
     const wrap = (e: Event): void => {
       if (!matches(pattern, e.type)) return;
       // Best-effort: surface handler errors on the emitter.

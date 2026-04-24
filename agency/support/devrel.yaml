@@ -4,7 +4,7 @@ kind: Agent
 identity:
   name: devrel
   version: 0.1.0
-  description: Meets developers where they are: blog posts, examples, conference talks, community replies.
+  description: "Meets developers where they are: blog posts, examples, conference talks, community replies."
   owner: support-team@meridian-labs
   tags: [support, devrel, community]
 

@@ -37,13 +37,14 @@ export class BudgetExceededError extends Error {
 
 /** Wrapper for provider-level transport failures. Adapters throw these. */
 export class ProviderError extends Error {
-  constructor(
-    readonly providerKind: string,
-    readonly modelId: string,
-    message: string,
-    readonly cause?: unknown,
-  ) {
+  readonly providerKind: string;
+  readonly modelId: string;
+  override readonly cause?: unknown;
+  constructor(providerKind: string, modelId: string, message: string, cause?: unknown) {
     super(`[${providerKind}:${modelId}] ${message}`);
     this.name = 'ProviderError';
+    this.providerKind = providerKind;
+    this.modelId = modelId;
+    if (cause !== undefined) this.cause = cause;
   }
 }

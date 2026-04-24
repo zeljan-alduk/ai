@@ -1,0 +1,86 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: eval-runner
+  version: 0.1.0
+  description: Runs the eval harness against candidate agent versions and decides whether they pass their gate.
+  owner: meta-team@meridian-labs
+  tags: [meta, evaluation]
+
+role:
+  team: meta
+  reports_to: architect
+  pattern: pipeline
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.80
+    tokens_in_max: 150000
+    tokens_out_max: 6000
+  latency:
+    p95_ms: 300000
+  decoding:
+    mode: json
+    temperature: 0.0
+    json_schema_ref: "#/outputs/eval_report"
+
+prompt:
+  system_file: prompts/eval-runner.system.md
+  variables:
+    harness_version: project.evals.harness_version
+    suite_registry: project.evals.suite_registry
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-shell
+      allow: [shell.exec]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+    - server: meridian-agent
+      allow: [agent.list, agent.inspect]
+    - server: repo-fs
+      allow: [fs.read]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readonly
+
+memory:
+  read:  [private, org, project]
+  write: [private, org]
+  retention:
+    private: 180d
+    org: 730d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: regression.vs_previous_version == true
+      to: architect
+    - condition: suite.integrity_check_failed == true
+      to: architect
+
+inputs:
+  schema_ref: schemas/eval_request.json
+
+outputs:
+  eval_report:
+    json_schema_ref: schemas/eval_report.json
+
+eval_gate:
+  required_suites:
+    - suite: eval_harness_selftest_v2
+      min_score: 0.97
+    - suite: scoring_determinism_v1
+      min_score: 0.99
+  must_pass_before_promote: true

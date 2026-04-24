@@ -1,5 +1,5 @@
-import type { ProviderAdapter } from '../provider.js';
 import { ProviderError } from '../errors.js';
+import type { ProviderAdapter } from '../provider.js';
 
 /**
  * AWS Bedrock adapter — STUB.
@@ -17,9 +17,20 @@ export function createBedrockAdapter(): ProviderAdapter {
   const kind = 'bedrock';
   return {
     kind,
-    // eslint-disable-next-line require-yield
-    async *complete(_req, model) {
-      throw new ProviderError(kind, model.id, 'bedrock adapter not implemented');
+    complete(_req, model) {
+      // Throw synchronously via a lazy iterator so callers get the error on
+      // first iteration rather than on factory call.
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return Promise.reject(
+                new ProviderError(kind, model.id, 'bedrock adapter not implemented'),
+              );
+            },
+          };
+        },
+      };
     },
     async embed(_req, model) {
       throw new ProviderError(kind, model.id, 'bedrock adapter not implemented');

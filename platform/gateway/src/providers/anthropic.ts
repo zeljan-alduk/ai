@@ -1,12 +1,7 @@
-import type {
-  CompletionRequest,
-  Delta,
-  Message,
-  ToolCallPart,
-} from '@meridian/types';
+import type { CompletionRequest, Delta, Message, ToolCallPart } from '@meridian/types';
 import { ProviderError } from '../errors.js';
-import type { ProviderAdapter, ProviderConfig } from '../provider.js';
 import { buildUsageRecord } from '../pricing.js';
+import type { ProviderAdapter, ProviderConfig } from '../provider.js';
 
 /**
  * Native Anthropic Messages API adapter. We hand-roll `fetch` rather than
@@ -36,7 +31,12 @@ interface SSEEvent {
 interface AnthropicMessageStart {
   message: {
     id: string;
-    usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   };
 }
 
@@ -49,9 +49,7 @@ interface AnthropicContentBlockStart {
 
 interface AnthropicContentBlockDelta {
   index: number;
-  delta:
-    | { type: 'text_delta'; text: string }
-    | { type: 'input_json_delta'; partial_json: string };
+  delta: { type: 'text_delta'; text: string } | { type: 'input_json_delta'; partial_json: string };
 }
 
 interface AnthropicMessageDelta {
@@ -96,8 +94,9 @@ export function createAnthropicAdapter(): ProviderAdapter {
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
 
-          let sepIdx: number;
-          while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+          for (;;) {
+            const sepIdx = buffer.indexOf('\n\n');
+            if (sepIdx === -1) break;
             const raw = buffer.slice(0, sepIdx);
             buffer = buffer.slice(sepIdx + 2);
             const evt = parseSSE(raw);
@@ -228,9 +227,10 @@ function buildMessagesBody(req: CompletionRequest, model: { id: string }): Recor
   return body;
 }
 
-function splitSystem(
-  msgs: readonly Message[],
-): { system?: string; messages: Array<Record<string, unknown>> } {
+function splitSystem(msgs: readonly Message[]): {
+  system?: string;
+  messages: Array<Record<string, unknown>>;
+} {
   const sysParts: string[] = [];
   const out: Array<Record<string, unknown>> = [];
   for (const m of msgs) {
@@ -248,14 +248,14 @@ function splitSystem(
 function convertMessage(m: Message): Record<string, unknown> {
   if (m.role === 'tool') {
     const blocks = m.content
-      .filter((p): p is Extract<Message['content'][number], { type: 'tool_result' }> =>
-        p.type === 'tool_result',
+      .filter(
+        (p): p is Extract<Message['content'][number], { type: 'tool_result' }> =>
+          p.type === 'tool_result',
       )
       .map((p) => ({
         type: 'tool_result' as const,
         tool_use_id: p.callId,
-        content:
-          typeof p.result === 'string' ? p.result : JSON.stringify(p.result),
+        content: typeof p.result === 'string' ? p.result : JSON.stringify(p.result),
         ...(p.isError ? { is_error: true } : {}),
       }));
     return { role: 'user', content: blocks };

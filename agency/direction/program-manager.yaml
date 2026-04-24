@@ -4,7 +4,7 @@ kind: Agent
 identity:
   name: program-manager
   version: 0.1.0
-  description: Keeps multi-team initiatives moving: dependencies, dates, unblockers, status.
+  description: "Keeps multi-team initiatives moving: dependencies, dates, unblockers, status."
   owner: direction-team@meridian-labs
   tags: [direction, program, delivery]
 

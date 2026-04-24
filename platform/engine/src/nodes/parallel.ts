@@ -64,7 +64,11 @@ export async function runParallelNode(
       };
     } catch {
       // All rejected: collect all failures.
-      const all = await Promise.all(promises.map((p) => p.catch((e) => ({ ok: false, output: { error: String(e) }, childRunIds: [] as RunId[] }))));
+      const all = await Promise.all(
+        promises.map((p) =>
+          p.catch((e) => ({ ok: false, output: { error: String(e) }, childRunIds: [] as RunId[] })),
+        ),
+      );
       return {
         ok: false,
         output: all.map((r) => r.output),

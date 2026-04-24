@@ -1,5 +1,5 @@
-import { createOpenAICompatAdapter } from './openai-compat.js';
 import type { ProviderAdapter } from '../provider.js';
+import { createOpenAICompatAdapter } from './openai-compat.js';
 
 /**
  * xAI (Grok) adapter.

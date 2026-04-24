@@ -15,9 +15,5 @@ export interface NodeExecContext {
   /** Track every spawned child so we can cancel on abort. */
   readonly registerChild: (run: InternalAgentRun) => void;
   /** Recurse into nested nodes. */
-  readonly execute: (
-    node: Node,
-    inputs: unknown,
-    parent: RunId | undefined,
-  ) => Promise<NodeResult>;
+  readonly execute: (node: Node, inputs: unknown, parent: RunId | undefined) => Promise<NodeResult>;
 }

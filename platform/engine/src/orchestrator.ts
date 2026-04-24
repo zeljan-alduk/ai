@@ -1,12 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  EventBus,
-  Graph,
-  GraphRun,
-  Node,
-  Orchestrator,
-  RunId,
-} from '@meridian/types';
+import type { EventBus, Graph, GraphRun, Node, Orchestrator, RunId } from '@meridian/types';
 import type { InternalAgentRun } from './agent-run.js';
 import { runAgentNode } from './nodes/agent.js';
 import { runDebateNode } from './nodes/debate.js';
@@ -69,9 +62,7 @@ export class PlatformOrchestrator implements Orchestrator {
       wait: async () => done,
       cancel: async (reason: string) => {
         ac.abort(new Error(reason));
-        await Promise.all(
-          Array.from(children).map((c) => c.cancel(reason).catch(() => undefined)),
-        );
+        await Promise.all(Array.from(children).map((c) => c.cancel(reason).catch(() => undefined)));
       },
     };
     return run;

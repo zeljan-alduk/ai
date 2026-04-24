@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import type { Graph, TenantId } from '@meridian/types';
+import { describe, expect, it } from 'vitest';
 import { PlatformOrchestrator } from '../src/orchestrator.js';
 import { PlatformRuntime } from '../src/runtime.js';
 import { InProcessEventBus } from '../src/stores/event-bus.js';
@@ -26,7 +26,7 @@ describe('pipeline node', () => {
     const gateway = new MockGateway((req, ctx) => {
       const last = req.messages[req.messages.length - 1];
       const text =
-        last && last.content[0] && 'text' in last.content[0]
+        last?.content[0] && 'text' in last.content[0]
           ? (last.content[0] as { text: string }).text
           : '';
       order.push(ctx.agentName);
@@ -74,11 +74,9 @@ describe('parallel node — first', () => {
         await new Promise<void>((resolve, reject) => {
           const t = setTimeout(resolve, 2_000);
           t.unref?.();
-          signal?.addEventListener(
-            'abort',
-            () => reject(signal.reason ?? new Error('aborted')),
-            { once: true },
-          );
+          signal?.addEventListener('abort', () => reject(signal.reason ?? new Error('aborted')), {
+            once: true,
+          });
         });
         yield* textCompletion('slow-done');
       })();

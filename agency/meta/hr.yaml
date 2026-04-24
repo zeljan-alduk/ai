@@ -1,0 +1,83 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: hr
+  version: 0.1.0
+  description: Curates the agency itself - which agents are active, deprecated, or overlap - and proposes roster changes.
+  owner: meta-team@meridian-labs
+  tags: [meta, roster, governance]
+
+role:
+  team: meta
+  reports_to: principal
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: reasoning-small
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.50
+    tokens_in_max: 120000
+    tokens_out_max: 6000
+  latency:
+    p95_ms: 60000
+  decoding:
+    mode: json
+    temperature: 0.2
+    json_schema_ref: "#/outputs/roster_change"
+
+prompt:
+  system_file: prompts/hr.system.md
+  variables:
+    roster: org.agency.roster
+    usage_metrics: org.agency.usage_metrics
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+    - server: meridian-agent
+      allow: [agent.list, agent.inspect]
+  permissions:
+    network: none
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org]
+  write: [private, org]
+  retention:
+    private: 180d
+    org: 365d
+
+spawn:
+  allowed: [agent-smith]
+
+escalation:
+  on:
+    - condition: agent.unused_days > 90
+      to: principal
+    - condition: role.overlap_detected == true
+      to: architect
+
+inputs:
+  schema_ref: schemas/roster_query.json
+
+outputs:
+  roster_change:
+    json_schema_ref: schemas/roster_change.json
+
+eval_gate:
+  required_suites:
+    - suite: roster_consistency_v1
+      min_score: 0.90
+    - suite: overlap_detection_v1
+      min_score: 0.82
+  must_pass_before_promote: true

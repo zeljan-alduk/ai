@@ -24,9 +24,7 @@ export {
 } from './model-registry.js';
 export type { ModelRegistry, RegisteredModel } from './model-registry.js';
 
-export {
-  createAdapterRegistry,
-} from './provider.js';
+export { createAdapterRegistry } from './provider.js';
 export type {
   AdapterRegistry,
   EmbedRequest,

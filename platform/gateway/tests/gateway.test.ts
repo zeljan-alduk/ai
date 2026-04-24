@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import type {
   Budget,
   CallContext,
@@ -10,27 +9,28 @@ import type {
   TraceId,
 } from '@meridian/types';
 import { NoEligibleModelError } from '@meridian/types';
+import { describe, expect, it } from 'vitest';
+import { createGateway } from '../src/gateway.js';
+import { type RegisteredModel, createModelRegistry } from '../src/model-registry.js';
+import { buildUsageRecord } from '../src/pricing.js';
 import { createAdapterRegistry } from '../src/provider.js';
 import type { ProviderAdapter } from '../src/provider.js';
-import { createModelRegistry, type RegisteredModel } from '../src/model-registry.js';
-import { createGateway } from '../src/gateway.js';
-import { buildUsageRecord } from '../src/pricing.js';
 
 // ---------- Mock adapter ---------------------------------------------------
 
-function createMockAdapter(): ProviderAdapter & {
+interface MockAdapter extends ProviderAdapter {
   lastModel: ModelDescriptor | null;
   lastRequest: CompletionRequest | null;
-} {
-  const state: { lastModel: ModelDescriptor | null; lastRequest: CompletionRequest | null } = {
+}
+
+function createMockAdapter(): MockAdapter {
+  const adapter: MockAdapter = {
+    kind: 'mock',
     lastModel: null,
     lastRequest: null,
-  };
-  const adapter: ProviderAdapter = {
-    kind: 'mock',
     async *complete(req, model): AsyncIterable<Delta> {
-      state.lastModel = model;
-      state.lastRequest = req;
+      adapter.lastModel = model;
+      adapter.lastRequest = req;
       yield { textDelta: 'hello ' };
       yield { textDelta: 'world' };
       yield {
@@ -41,15 +41,19 @@ function createMockAdapter(): ProviderAdapter & {
           args: { ok: true },
         },
       };
-      const usage = buildUsageRecord(model, { tokensIn: 10, tokensOut: 5 }, new Date('2026-04-24T00:00:00Z'));
+      const usage = buildUsageRecord(
+        model,
+        { tokensIn: 10, tokensOut: 5 },
+        new Date('2026-04-24T00:00:00Z'),
+      );
       yield { end: { finishReason: 'stop', usage, model } };
     },
     async embed(req, model) {
-      state.lastModel = model;
+      adapter.lastModel = model;
       return req.input.map(() => [0.1, 0.2, 0.3]);
     },
   };
-  return Object.assign(adapter, state);
+  return adapter;
 }
 
 // ---------- Fixtures -------------------------------------------------------
@@ -93,9 +97,7 @@ function makeCtx(overrides: Partial<CallContext> = {}): CallContext {
 }
 
 const request: CompletionRequest = {
-  messages: [
-    { role: 'user', content: [{ type: 'text', text: 'ping' }] },
-  ],
+  messages: [{ role: 'user', content: [{ type: 'text', text: 'ping' }] }],
 };
 
 // ---------- Tests ----------------------------------------------------------
@@ -143,11 +145,9 @@ describe('gateway (end-to-end with mock adapter)', () => {
     const gateway = createGateway({ models, adapters });
 
     await expect(async () => {
-      for await (const _ of gateway.completeWith(
-        request,
-        makeCtx({ privacy: 'sensitive' }),
-        { primaryClass: 'reasoning-medium' },
-      )) {
+      for await (const _ of gateway.completeWith(request, makeCtx({ privacy: 'sensitive' }), {
+        primaryClass: 'reasoning-medium',
+      })) {
         // drain
       }
     }).rejects.toBeInstanceOf(NoEligibleModelError);

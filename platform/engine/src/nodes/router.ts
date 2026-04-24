@@ -24,11 +24,15 @@ export async function runRouterNode(
   children.push(clsRun.id);
   const cls = await clsRun.wait();
   if (!cls.ok) {
-    return { ok: false, output: { error: 'classifier failed', detail: cls.output }, childRunIds: children };
+    return {
+      ok: false,
+      output: { error: 'classifier failed', detail: cls.output },
+      childRunIds: children,
+    };
   }
 
   const label = extractLabel(cls.output, Object.keys(branches));
-  const target = (label !== null ? branches[label] : undefined) ?? branches['default'];
+  const target = (label !== null ? branches[label] : undefined) ?? branches.default;
   if (!target) {
     return {
       ok: false,

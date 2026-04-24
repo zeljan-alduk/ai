@@ -25,7 +25,11 @@ export async function runSubscriptionNode(
     const finalize = () => {
       if (resolved) return;
       resolved = true;
-      resolve({ ok: true, output: { stopped: true, spawned: children.length }, childRunIds: children });
+      resolve({
+        ok: true,
+        output: { stopped: true, spawned: children.length },
+        childRunIds: children,
+      });
     };
 
     const handle = async (e: Event): Promise<void> => {

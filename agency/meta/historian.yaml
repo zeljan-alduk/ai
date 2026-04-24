@@ -1,0 +1,88 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: historian
+  version: 0.1.0
+  description: Summarises runs, incidents, and decisions into durable institutional memory.
+  owner: meta-team@meridian-labs
+  tags: [meta, memory, summarisation]
+
+role:
+  team: meta
+  reports_to: principal
+  pattern: subscribe
+
+model_policy:
+  capability_requirements: [tool-use, 200k-context, structured-output, reasoning]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-small
+  fallbacks:
+    - capability_class: fast-draft
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.10
+    tokens_in_max: 200000
+    tokens_out_max: 4000
+  latency:
+    p95_ms: 30000
+  decoding:
+    mode: json
+    temperature: 0.1
+    json_schema_ref: "#/outputs/record"
+
+prompt:
+  system_file: prompts/historian.system.md
+  variables:
+    memory_scopes: org.memory.scopes
+    retention_policy: org.memory.retention_policy
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+  permissions:
+    network: none
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org, project]
+  write: [private, org, project]
+  retention:
+    private: 90d
+    org: 730d
+    project: 365d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: source.redaction_required == true
+      to: legal-compliance
+    - condition: contradiction.across_sources == true
+      to: principal
+
+subscriptions:
+  - event: run.completed
+    filter: "duration_ms > 60000 or cost_usd > 0.5"
+  - event: incident.resolved
+  - event: adr.committed
+
+inputs:
+  schema_ref: schemas/history_event.json
+
+outputs:
+  record:
+    json_schema_ref: schemas/history_record.json
+
+eval_gate:
+  required_suites:
+    - suite: summary_faithfulness_v2
+      min_score: 0.90
+    - suite: retention_policy_compliance_v1
+      min_score: 0.98
+  must_pass_before_promote: true

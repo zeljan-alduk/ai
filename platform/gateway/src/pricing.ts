@@ -49,12 +49,8 @@ export function buildUsageRecord(
     tokensOut: counts.tokensOut,
     usd,
     at: at.toISOString(),
-    ...(counts.cacheReadTokens !== undefined
-      ? { cacheReadTokens: counts.cacheReadTokens }
-      : {}),
-    ...(counts.cacheWriteTokens !== undefined
-      ? { cacheWriteTokens: counts.cacheWriteTokens }
-      : {}),
+    ...(counts.cacheReadTokens !== undefined ? { cacheReadTokens: counts.cacheReadTokens } : {}),
+    ...(counts.cacheWriteTokens !== undefined ? { cacheWriteTokens: counts.cacheWriteTokens } : {}),
   };
   return record;
 }

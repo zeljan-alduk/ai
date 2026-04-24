@@ -1,10 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import type { ModelDescriptor } from '@meridian/types';
-import {
-  buildUsageRecord,
-  estimateCallCeilingUsd,
-  estimateUsd,
-} from '../src/pricing.js';
+import { describe, expect, it } from 'vitest';
+import { buildUsageRecord, estimateCallCeilingUsd, estimateUsd } from '../src/pricing.js';
 
 const cloudModel: ModelDescriptor = {
   id: 'claude-sonnet-4-6',

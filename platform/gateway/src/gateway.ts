@@ -1,12 +1,7 @@
-import type {
-  CallContext,
-  CompletionRequest,
-  Delta,
-  ModelGateway,
-} from '@meridian/types';
+import type { CallContext, CompletionRequest, Delta, ModelGateway } from '@meridian/types';
 import { UnknownProviderKindError } from './errors.js';
-import type { AdapterRegistry, ProviderConfig } from './provider.js';
 import type { ModelRegistry, RegisteredModel } from './model-registry.js';
+import type { AdapterRegistry, ProviderConfig } from './provider.js';
 import type { Router } from './router.js';
 import { createRouter } from './router.js';
 
@@ -45,11 +40,7 @@ export interface RoutingHints {
 
 export interface GatewayEx extends ModelGateway {
   /** Variant of `complete` that accepts explicit routing hints. */
-  completeWith(
-    req: CompletionRequest,
-    ctx: CallContext,
-    hints: RoutingHints,
-  ): AsyncIterable<Delta>;
+  completeWith(req: CompletionRequest, ctx: CallContext, hints: RoutingHints): AsyncIterable<Delta>;
 }
 
 export function createGateway(deps: GatewayDeps): GatewayEx {
@@ -87,16 +78,12 @@ export function createGateway(deps: GatewayDeps): GatewayEx {
       // TODO(v1): embeddings routing should use a dedicated 'embeddings' class
       // and dimension negotiation. For now, find the first registered model
       // that has the 'embeddings' capability and allows this privacy tier.
-      const candidate = deps.models.list().find(
-        (m) =>
-          m.provides.includes('embeddings') &&
-          m.privacyAllowed.includes(ctx.privacy),
-      );
+      const candidate = deps.models
+        .list()
+        .find((m) => m.provides.includes('embeddings') && m.privacyAllowed.includes(ctx.privacy));
       if (!candidate) {
         // Deliberately throw NoEligibleModelError via the router shape.
-        throw new Error(
-          `no embedding model available for privacy="${ctx.privacy}"`,
-        );
+        throw new Error(`no embedding model available for privacy="${ctx.privacy}"`);
       }
       const adapter = deps.adapters.get(candidate.providerKind);
       if (!adapter) throw new UnknownProviderKindError(candidate.providerKind);

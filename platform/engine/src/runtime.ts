@@ -10,8 +10,8 @@ import type {
   ToolHost,
   Tracer,
 } from '@meridian/types';
-import { LeafAgentRun, type InternalAgentRun } from './agent-run.js';
-import { InMemoryCheckpointer, type Checkpointer } from './checkpointer/index.js';
+import { type InternalAgentRun, LeafAgentRun } from './agent-run.js';
+import { type Checkpointer, InMemoryCheckpointer } from './checkpointer/index.js';
 
 export interface RuntimeDeps {
   readonly modelGateway: ModelGateway;

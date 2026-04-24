@@ -1,8 +1,4 @@
-import type {
-  CompletionRequest,
-  Delta,
-  ModelDescriptor,
-} from '@meridian/types';
+import type { CompletionRequest, Delta, ModelDescriptor } from '@meridian/types';
 
 /**
  * ProviderAdapter is the only contract the router knows about. Adapters hide
@@ -84,9 +80,7 @@ export interface AdapterRegistry {
   list(): readonly ProviderKind[];
 }
 
-export function createAdapterRegistry(
-  seed: readonly ProviderAdapter[] = [],
-): AdapterRegistry {
+export function createAdapterRegistry(seed: readonly ProviderAdapter[] = []): AdapterRegistry {
   const byKind = new Map<string, ProviderAdapter>();
   for (const a of seed) byKind.set(a.kind, a);
   return {

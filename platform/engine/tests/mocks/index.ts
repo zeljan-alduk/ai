@@ -1,26 +1,26 @@
+import { randomUUID } from 'node:crypto';
 import type {
   AgentRef,
   AgentRegistry,
   AgentSpec,
+  Attrs,
   CallContext,
   CompletionRequest,
   Delta,
   ModelGateway,
+  ReplayBundle,
+  RunId,
+  Span,
+  SpanId,
+  SpanKind,
   ToolDescriptor,
   ToolHost,
   ToolRef,
   ToolResult,
-  ValidationResult,
-  Attrs,
-  ReplayBundle,
-  RunId,
-  Span,
-  SpanKind,
   TraceId,
   Tracer,
-  SpanId,
+  ValidationResult,
 } from '@meridian/types';
-import { randomUUID } from 'node:crypto';
 
 /** Build a minimal AgentSpec, overriding only what a test cares about. */
 export function makeSpec(partial: Partial<AgentSpec> & { name: string }): AgentSpec {

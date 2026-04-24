@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
 import type { Budget, CallContext } from '@meridian/types';
 import { NoEligibleModelError } from '@meridian/types';
-import { createModelRegistry, type RegisteredModel } from '../src/model-registry.js';
+import type { RunId, TenantId, TraceId } from '@meridian/types';
+import { describe, expect, it } from 'vitest';
+import { type RegisteredModel, createModelRegistry } from '../src/model-registry.js';
 import { createRouter } from '../src/router.js';
-import type { TenantId, RunId, TraceId } from '@meridian/types';
 
 // ---------- Fixtures -------------------------------------------------------
 

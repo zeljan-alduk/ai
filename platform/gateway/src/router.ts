@@ -1,8 +1,8 @@
 import type {
   Budget,
+  CallContext,
   Capability,
   CapabilityClass,
-  CallContext,
   PrivacyTier,
 } from '@meridian/types';
 import { providerAllowsTier } from '@meridian/types';
@@ -63,9 +63,7 @@ export function createRouter(registry: ModelRegistry): Router {
           continue;
         }
 
-        const withCaps = candidates.filter((m) =>
-          hasAllCapabilities(m.provides, ctx.required),
-        );
+        const withCaps = candidates.filter((m) => hasAllCapabilities(m.provides, ctx.required));
         if (withCaps.length === 0) {
           lastReason = `class="${klass}": no model provides required caps [${ctx.required.join(',')}]`;
           continue;

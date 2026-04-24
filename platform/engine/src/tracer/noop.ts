@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   Attrs,
   ReplayBundle,
@@ -8,7 +9,6 @@ import type {
   TraceId,
   Tracer,
 } from '@meridian/types';
-import { randomUUID } from 'node:crypto';
 
 /**
  * A Tracer that drops all spans and returns empty replay bundles.

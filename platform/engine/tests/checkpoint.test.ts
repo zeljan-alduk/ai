@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import type { RunOverrides, TenantId } from '@meridian/types';
+import { describe, expect, it } from 'vitest';
 import type { InternalAgentRun } from '../src/agent-run.js';
 import { PlatformRuntime } from '../src/runtime.js';
 import {

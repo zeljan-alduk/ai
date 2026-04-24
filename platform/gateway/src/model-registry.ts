@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
+import type { ModelDescriptor } from '@meridian/types';
 import YAML from 'yaml';
 import { z } from 'zod';
-import type { ModelDescriptor } from '@meridian/types';
 import { DuplicateModelError } from './errors.js';
 import type { ProviderKind } from './provider.js';
 
@@ -31,9 +31,7 @@ export interface ModelRegistry {
   replaceAll(models: readonly RegisteredModel[]): void;
 }
 
-export function createModelRegistry(
-  seed: readonly RegisteredModel[] = [],
-): ModelRegistry {
+export function createModelRegistry(seed: readonly RegisteredModel[] = []): ModelRegistry {
   const byId = new Map<string, RegisteredModel>();
   for (const m of seed) {
     if (byId.has(m.id)) throw new DuplicateModelError(m.id);

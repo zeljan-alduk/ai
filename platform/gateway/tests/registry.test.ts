@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { createModelRegistry, parseModelsYaml } from '../src/model-registry.js';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
 import { DuplicateModelError } from '../src/errors.js';
+import { createModelRegistry, parseModelsYaml } from '../src/model-registry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturePath = resolve(here, '../fixtures/models.yaml');
