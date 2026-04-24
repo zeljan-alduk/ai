@@ -172,3 +172,21 @@ pnpm -r test (84 tests pass: registry 19, gateway 20, engine 8,
 observability 21, cli 16; types has no tests). pnpm lint clean across
 107 files; Biome auto-fixed pre-existing import-order in platform/types.
 Repo is hygienic and ready for wave 3.
+
+[2026-04-24 22:05 UTC] principal — Day-1 OSS perks: CI + security + release
+Now that the repo is public on GitHub, wired up the GitHub-native free
+tiers. .github/workflows/ci.yml runs pnpm install / lint / typecheck /
+test on every push and PR against main (Node 22, cancel-in-progress on
+PRs). .github/workflows/codeql.yml does JS/TS security-and-quality scans
+on push, PR, and weekly cron. .github/workflows/release.yml builds the
+meridian CLI binary on every v*.*.* tag for linux-x64 / darwin-arm64 /
+windows-x64 via Bun --compile and uploads to the GitHub Release; Docker
+image job is commented in, waiting on Dockerfiles in wave 3+.
+.github/dependabot.yml schedules monthly batched npm + github-actions
+updates, grouped by ecosystem (ts, vitest, biome, otel, providers) so
+bumps don't fragment into 20 PRs. docs/deploy/free-tier-dev.md gains a
+"Public-repo leverage" section summarising what flipped (unlimited
+Actions minutes, ghcr.io, CodeQL, etc.) and flags the opt-in OSS
+programs worth applying to (Vercel OSS, Sentry for OSS, Cloudflare
+Project Galileo, etc.) — noting FSL-1.1-ALv2 is not OSI-approved but
+typically accepted.
