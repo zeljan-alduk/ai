@@ -38,7 +38,10 @@ export interface LoadedConfig {
 
 export function parseRootsSpec(spec: string): Root[] {
   const out: Root[] = [];
-  for (const raw of spec.split(',').map((s) => s.trim()).filter(Boolean)) {
+  for (const raw of spec
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
     const idx = raw.lastIndexOf(':');
     if (idx <= 0 || idx === raw.length - 1) {
       throw new FsError('INTERNAL', `invalid root spec "${raw}" (expected <path>:<ro|rw>)`);
@@ -75,14 +78,21 @@ export async function loadConfigFromJson(path: string): Promise<LoadedConfig> {
     const raw = await readFile(path, 'utf8');
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw new FsError('INTERNAL', `failed to read config "${path}": ${(err as Error).message}`, err);
+    throw new FsError(
+      'INTERNAL',
+      `failed to read config "${path}": ${(err as Error).message}`,
+      err,
+    );
   }
   if (!isConfigFile(parsed)) {
     throw new FsError('INTERNAL', `config "${path}" missing valid "roots" array`);
   }
   const roots: Root[] = parsed.roots.map(({ path: p, mode }) => {
     if (typeof p !== 'string' || !isAbsolute(p)) {
-      throw new FsError('INTERNAL', `root.path must be an absolute string, got ${JSON.stringify(p)}`);
+      throw new FsError(
+        'INTERNAL',
+        `root.path must be an absolute string, got ${JSON.stringify(p)}`,
+      );
     }
     if (mode !== 'ro' && mode !== 'rw') {
       throw new FsError('INTERNAL', `root.mode must be ro|rw, got ${JSON.stringify(mode)}`);
@@ -129,7 +139,7 @@ function pickFlag(argv: readonly string[], name: string): string | undefined {
     if (a === name) {
       const v = argv[i + 1];
       if (v && !v.startsWith('--')) return v;
-    } else if (a !== undefined && a.startsWith(`${name}=`)) {
+    } else if (a?.startsWith(`${name}=`)) {
       return a.slice(name.length + 1);
     }
   }

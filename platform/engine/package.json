@@ -14,10 +14,12 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@meridian/storage": "workspace:*",
     "@meridian/types": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "~0.4.4",
     "@types/node": "^22.10.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"

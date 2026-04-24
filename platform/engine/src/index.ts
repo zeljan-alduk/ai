@@ -19,7 +19,11 @@ export { PlatformOrchestrator } from './orchestrator.js';
 export type { OrchestratorDeps } from './orchestrator.js';
 
 export type { Checkpoint, Checkpointer } from './checkpointer/index.js';
-export { InMemoryCheckpointer } from './checkpointer/index.js';
+export {
+  InMemoryCheckpointer,
+  PostgresCheckpointer,
+  type PostgresCheckpointerOptions,
+} from './checkpointer/index.js';
 
 export { InMemoryMemoryStore } from './stores/memory-store.js';
 export { InProcessEventBus } from './stores/event-bus.js';

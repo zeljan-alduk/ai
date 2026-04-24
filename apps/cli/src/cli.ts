@@ -118,15 +118,22 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
   // --- run ------------------------------------------------------------------
   program
     .command('run <agent>')
-    .description('spawn a run (stub)')
+    .description('spawn a run against a real provider')
     .option('--inputs <json>', 'run inputs as JSON string')
     .addOption(new Option('--provider <name>', 'provider override').hideHelp(false))
     .addOption(new Option('--model <name>', 'model override').hideHelp(false))
-    .option('--json', 'emit JSON output', false)
+    .option('--json', 'emit final result as JSON instead of streaming text', false)
+    .option('--dry-run', 'print the chosen model + estimate; do not call the provider', false)
     .action(
       (
         agentName: string,
-        o: { inputs?: string; provider?: string; model?: string; json?: boolean },
+        o: {
+          inputs?: string;
+          provider?: string;
+          model?: string;
+          json?: boolean;
+          dryRun?: boolean;
+        },
       ) => {
         action = () =>
           runRun(
@@ -136,6 +143,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               ...(o.provider !== undefined ? { provider: o.provider } : {}),
               ...(o.model !== undefined ? { model: o.model } : {}),
               json: o.json === true,
+              dryRun: o.dryRun === true,
             },
             io,
           );

@@ -227,3 +227,64 @@ custom engine on TS+Bun+Postgres-checkpointer; Mastra closest fit but
 still leaves gateway/privacy/eval to us. Defer Temporal adapter to ADR
 0003. Build: graph exec, checkpointer, HITL store. Buy: scheduler
 (graphile-worker/pg-boss), OTEL, Langfuse v0. Status: proposed.
+
+[2026-04-24 22:24 UTC] backend-engineer — Postgres persistence: registry + engine
+Wired durable storage end-to-end. New @meridian/storage package owns
+SqlClient (driver-agnostic wrapper over node-postgres / Neon serverless
+/ pglite), a forward-only migration runner, the canonical 001_init.sql
+(tenants, agents, agent_versions, runs, checkpoints, run_events,
+usage_records, span_events with run_id/promoted/parent indexes), and
+the Drizzle ORM schema mirroring it. Picked Drizzle over Kysely for
+Neon parity (justification in the package README). Registry gained
+PostgresStorage behind a new async RegistryStorage interface; the
+existing InMemoryStorage stays as the test default and now exposes both
+sync (legacy) and async surfaces. Engine gained PostgresCheckpointer
+beside InMemoryCheckpointer; runs replay across restarts via
+checkpoints.payload_jsonb. Tests (added 8): migrate idempotency on
+pglite, registry round-trip / promotion / unknown-rejection, checkpoint
+write-and-read fidelity. Verify: pnpm install clean, pnpm -r typecheck
+clean, pnpm -r test green for storage (2), registry (23 incl. 4 new),
+engine (11 incl. 3 new); other packages unchanged. DATABASE_URL is the
+single config knob — fromDatabaseUrl() picks pglite/Neon/pg from the
+URL, so no other package branches on driver type.
+
+[2026-04-24 22:35 UTC] backend-engineer@meridian-labs — wave 3C: meridian-fs MCP server
+Built mcp-servers/meridian-fs/ (@meridian/mcp-fs): first-party stdio MCP
+server backed by @modelcontextprotocol/sdk 1.29, zod 3.25, vitest 2.1.
+Five tools: fs.read / fs.write / fs.list / fs.stat / fs.search; fs.delete
+and fs.move flagged TODO(v1). ACL is the security core — three layers:
+lexical containment after path.resolve, per-component lstat/realpath check
+to refuse symlinks pointing outside roots, final realpath check on the
+target (or its deepest existing ancestor for new-file writes). Roots
+declared via --roots / MERIDIAN_FS_ROOTS / --config json; spec syntax
+deviated to comma-separated <abs-path>:<ro|rw> pairs (brief said colon-
+separated but that breaks Windows drive letters; documented). 32 tests
+across 3 files all green: traversal blocked, symlink escapes blocked,
+ro-root writes refused, in-process MCP client round-trips fs.read /
+fs.write via InMemoryTransport. Errors are structured {code, message}
+with codes NOT_FOUND | PERMISSION_DENIED | OUT_OF_BOUNDS | TOO_LARGE |
+INTERNAL. Caps: read 4MiB, write 8MiB, search 200 hits / 5000 lines /
+1000 files. Least-confident security check flagged in README for the
+auditor: TOCTOU between ACL realpath and the actual read/write syscall.
+Mitigation candidate: openat with O_NOFOLLOW per component plus fstat
+inode re-check. Touched only mcp-servers/meridian-fs/.
+
+[2026-04-24 22:27 UTC] backend-engineer@meridian-labs — meridian run, end-to-end
+Wired apps/cli/src/commands/run.ts from stub to real: loads .env via the
+new platform/runtime-config glue package, builds typed Config (provider
+discovery for groq/ollama/anthropic/gemini, runUsdCap, defaultPrivacy),
+and bootstraps a PlatformRuntime + GatewayEx (createOpenAICompatAdapter
+covers both Groq and Ollama; Anthropic/Google adapters opportunistically
+registered when keyed). Per-model enablement is config-driven so a
+keyless cloud descriptor never leaks into routing. Streams RunEvents to
+stdout (text deltas direct, "→ tool: <name>" / "← result" prefixes);
+--json buffers and dumps {ok,output,usage,model,elapsedMs}; --dry-run
+calls the router only, never the adapter. MERIDIAN_RUN_USD_CAP rewrites
+the spec budget before spawn. Provider-not-enabled raises a typed error
+pointing at .env.example. Added Groq llama-3.3-70b-versatile / 8b-instant
+and ollama.qwen2.5:7b plus ollama.qwen2.5-coder:32b descriptors to
+platform/gateway/fixtures/models.yaml (kept the legacy qwen2.5-coder:32b
+id so platform/gateway/tests/registry.test.ts stays green). 35 CLI tests
+pass; gateway, engine, registry, observability, runtime-config all
+typecheck clean. Touched: apps/cli/, platform/gateway/fixtures/models.yaml,
+new platform/runtime-config/.

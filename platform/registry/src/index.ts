@@ -1,6 +1,6 @@
 /**
- * @meridian/registry — agent-spec loader, validator, and in-memory version
- * store. Implements the `AgentRegistry` interface from `@meridian/types`.
+ * @meridian/registry — agent-spec loader, validator, and version store.
+ * Implements the `AgentRegistry` interface from `@meridian/types`.
  */
 
 export { agentV1YamlSchema, type AgentV1Yaml } from './schema.js';
@@ -11,8 +11,10 @@ export {
   AgentNotFoundError,
   NoPromotedVersionError,
   VersionMismatchError,
+  type RegistryStorage,
   type StoredVersion,
 } from './storage.js';
+export { PostgresStorage, type PostgresStorageOptions } from './postgres.js';
 export {
   AgentRegistry,
   RegistryLoadError,

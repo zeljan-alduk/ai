@@ -178,13 +178,6 @@ describe('meridian cli', () => {
     expect(err()).toContain('kebab-case');
   });
 
-  it('run is a stub that exits 2', async () => {
-    const { io, err } = bufferedIO();
-    const code = await main(['run', 'code-reviewer', '--inputs', '{}'], { io });
-    expect(code).toBe(2);
-    expect(err()).toContain('not yet implemented');
-  });
-
   it('dev is a stub that exits 2', async () => {
     const { io, err } = bufferedIO();
     const code = await main(['dev'], { io });

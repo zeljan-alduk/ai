@@ -20,7 +20,7 @@
  *   - INTERNAL          — anything else (wrap with cause).
  */
 
-import { realpath, lstat, stat as fsStat } from 'node:fs/promises';
+import { stat as fsStat, lstat, realpath } from 'node:fs/promises';
 import { isAbsolute, resolve, sep } from 'node:path';
 
 export type AclMode = 'ro' | 'rw';
@@ -124,7 +124,11 @@ export function createAcl(roots: readonly Root[]): Acl {
       // If absolute, normalise; else resolve against the *first* root.
       // Callers wanting per-root relative paths should pass absolute paths
       // or rely on the first-root convention documented in the README.
-      const abs = isAbsolute(callerPath) ? resolve(callerPath) : resolve(sorted[sorted.length - 1]!.path, callerPath);
+      const last = sorted[sorted.length - 1];
+      if (!last) {
+        throw new FsError('PERMISSION_DENIED', 'meridian-fs: no roots configured');
+      }
+      const abs = isAbsolute(callerPath) ? resolve(callerPath) : resolve(last.path, callerPath);
       const root = findContainingRoot(sorted, abs);
       if (!root) {
         throw new FsError('OUT_OF_BOUNDS', `path "${callerPath}" is outside all configured roots`);
@@ -218,7 +222,7 @@ export async function assertNoEscapingSymlinkOnPath(acl: Acl, abs: string): Prom
   let cur = abs.startsWith(sep) ? sep : '';
   for (const part of parts) {
     cur = cur === sep ? sep + part : cur + sep + part;
-    let st;
+    let st: Awaited<ReturnType<typeof lstat>>;
     try {
       // eslint-disable-next-line no-await-in-loop
       st = await lstat(cur);
@@ -267,10 +271,7 @@ export async function checkWrite(
     if (ls.isSymbolicLink()) {
       // realpath already verified it lands somewhere; require it's still in root.
       if (!isInside(root.path, real)) {
-        throw new FsError(
-          'OUT_OF_BOUNDS',
-          `write target "${abs}" is a symlink leaving its root`,
-        );
+        throw new FsError('OUT_OF_BOUNDS', `write target "${abs}" is a symlink leaving its root`);
       }
     }
   } catch (err) {

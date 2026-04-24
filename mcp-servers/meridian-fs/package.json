@@ -7,7 +7,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "main": "./src/index.ts",
   "bin": {
-    "meridian-mcp-fs": "./src/index.ts"
+    "meridian-mcp-fs": "./dist/index.js"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "node --import=tsx/esm src/index.ts"

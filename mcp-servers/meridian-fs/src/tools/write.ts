@@ -7,9 +7,9 @@
  * an allowed root.
  */
 
-import { mkdir, rename, stat, writeFile, unlink } from 'node:fs/promises';
-import { dirname, basename, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { Acl } from '../acl.js';
 import { FsError, checkWrite } from '../acl.js';
@@ -48,9 +48,10 @@ export const writeOutputSchema = z
 export type WriteOutput = z.infer<typeof writeOutputSchema>;
 
 export async function fsWrite(acl: Acl, input: WriteInput): Promise<WriteOutput> {
-  const buf = input.encoding === 'base64'
-    ? Buffer.from(input.content, 'base64')
-    : Buffer.from(input.content, 'utf8');
+  const buf =
+    input.encoding === 'base64'
+      ? Buffer.from(input.content, 'base64')
+      : Buffer.from(input.content, 'utf8');
   if (buf.byteLength > WRITE_MAX_BYTES) {
     throw new FsError(
       'TOO_LARGE',

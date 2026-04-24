@@ -38,3 +38,4 @@ export interface Checkpointer {
 }
 
 export { InMemoryCheckpointer } from './memory.js';
+export { PostgresCheckpointer, type PostgresCheckpointerOptions } from './postgres.js';

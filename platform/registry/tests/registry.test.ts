@@ -21,7 +21,7 @@ describe('AgentRegistry', () => {
   it('registers the fixture and loads it by explicit version', async () => {
     const reg = new AgentRegistry();
     const yaml = await loadReviewerYaml();
-    const res = reg.register(yaml);
+    const res = await reg.register(yaml);
     expect(res.ok).toBe(true);
     if (!res.ok || !res.spec) throw new Error('register failed');
 
@@ -32,7 +32,7 @@ describe('AgentRegistry', () => {
   it('throws when loading an unknown version', async () => {
     const reg = new AgentRegistry();
     const yaml = await loadReviewerYaml();
-    reg.register(yaml);
+    await reg.register(yaml);
     await expect(reg.load({ name: 'code-reviewer', version: '9.9.9' })).rejects.toBeInstanceOf(
       AgentNotFoundError,
     );
@@ -41,15 +41,15 @@ describe('AgentRegistry', () => {
   it('load() with no version returns the promoted version after promote()', async () => {
     const reg = new AgentRegistry();
     const yaml = await loadReviewerYaml();
-    const res = reg.register(yaml);
+    const res = await reg.register(yaml);
     if (!res.ok || !res.spec) throw new Error('register failed');
     const v1 = res.spec;
 
     // Add a second version
     const v2 = bump(v1, '1.5.0');
-    reg.registerSpec(v2);
+    await reg.registerSpec(v2);
     const v3 = bump(v1, '2.0.0');
-    reg.registerSpec(v3);
+    await reg.registerSpec(v3);
 
     // No promotion yet: ambiguous, must throw.
     await expect(reg.load({ name: 'code-reviewer' })).rejects.toBeInstanceOf(
@@ -70,7 +70,7 @@ describe('AgentRegistry', () => {
   it('bootstrap: load() without version works when only one version exists', async () => {
     const reg = new AgentRegistry();
     const yaml = await loadReviewerYaml();
-    reg.register(yaml);
+    await reg.register(yaml);
     const got = await reg.load({ name: 'code-reviewer' });
     expect(got.identity.version).toBe('1.4.0');
   });
@@ -78,9 +78,9 @@ describe('AgentRegistry', () => {
   it('list() filters by name and owner', async () => {
     const reg = new AgentRegistry();
     const yaml = await loadReviewerYaml();
-    const res = reg.register(yaml);
+    const res = await reg.register(yaml);
     if (!res.ok || !res.spec) throw new Error('register failed');
-    reg.registerSpec(bump(res.spec, '1.5.0'));
+    await reg.registerSpec(bump(res.spec, '1.5.0'));
 
     const byName = await reg.list({ name: 'code-reviewer' });
     expect(byName).toHaveLength(2);
@@ -95,7 +95,7 @@ describe('AgentRegistry', () => {
   it('rejects invalid YAML through the register path without storing anything', async () => {
     const reg = new AgentRegistry();
     const invalidYaml = await readFile(resolve(fixturesDir, 'invalid-missing-model.yaml'), 'utf8');
-    const res = reg.register(invalidYaml);
+    const res = await reg.register(invalidYaml);
     expect(res.ok).toBe(false);
     const list = await reg.list();
     expect(list).toHaveLength(0);
@@ -110,14 +110,14 @@ describe('AgentRegistry', () => {
         (evidence as { pass?: boolean }).pass === true,
     });
     const yaml = await loadReviewerYaml();
-    reg.register(yaml);
+    await reg.register(yaml);
 
     await expect(
       reg.promote({ name: 'code-reviewer', version: '1.4.0' }, { pass: false }),
     ).rejects.toThrow(/evidence rejected/);
 
     await reg.promote({ name: 'code-reviewer', version: '1.4.0' }, { pass: true });
-    expect(reg.promotedVersion('code-reviewer')).toBe('1.4.0');
+    expect(await reg.promotedVersion('code-reviewer')).toBe('1.4.0');
   });
 
   it('validate() exposes the same checks as parseYaml', async () => {
