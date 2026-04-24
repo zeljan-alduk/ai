@@ -1,0 +1,84 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: ml-engineer
+  version: 0.1.0
+  description: Builds and tunes models and inference paths, including local/on-prem deployments.
+  owner: delivery-team@meridian-labs
+  tags: [delivery, ml, engineering]
+
+role:
+  team: delivery
+  reports_to: tech-lead
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: reasoning-large
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 1.20
+    tokens_in_max: 180000
+    tokens_out_max: 10000
+  latency:
+    p95_ms: 120000
+  decoding:
+    mode: free
+    temperature: 0.2
+
+prompt:
+  system_file: prompts/ml-engineer.system.md
+  variables:
+    eval_datasets: project.ml.eval_datasets
+    inference_targets: project.ml.inference_targets
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-shell
+      allow: [shell.exec]
+    - server: repo-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, project]
+  write: [private, project]
+  retention:
+    private: 180d
+    project: 365d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: eval.regression_detected == true
+      to: eval-runner
+    - condition: inference.cost_per_request > budget
+      to: tech-lead
+
+inputs:
+  schema_ref: schemas/ml_work_package.json
+
+outputs:
+  model_report:
+    json_schema_ref: schemas/model_report.json
+
+eval_gate:
+  required_suites:
+    - suite: ml_eval_harness_v2
+      min_score: 0.80
+    - suite: inference_latency_v1
+      min_score: 0.85
+  must_pass_before_promote: true

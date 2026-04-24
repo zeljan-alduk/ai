@@ -1,0 +1,84 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: performance-engineer
+  version: 0.1.0
+  description: Profiles the platform, sets and defends performance budgets, and diagnoses latency regressions.
+  owner: support-team@meridian-labs
+  tags: [support, performance]
+
+role:
+  team: support
+  reports_to: architect
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.60
+    tokens_in_max: 120000
+    tokens_out_max: 6000
+  latency:
+    p95_ms: 90000
+  decoding:
+    mode: json
+    temperature: 0.1
+    json_schema_ref: "#/outputs/perf_report"
+
+prompt:
+  system_file: prompts/performance-engineer.system.md
+  variables:
+    perf_budgets: project.performance.budgets
+    trace_sources: project.observability.tracing
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-shell
+      allow: [shell.exec]
+    - server: repo-fs
+      allow: [fs.read]
+    - server: meridian-memory
+      allow: [memory.read, memory.write]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readonly
+
+memory:
+  read:  [private, project]
+  write: [private, project]
+  retention:
+    private: 90d
+    project: 180d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: budget.exceeded == true
+      to: architect
+    - condition: regression.blast_radius == "hot-path"
+      to: tech-lead
+
+inputs:
+  schema_ref: schemas/perf_target.json
+
+outputs:
+  perf_report:
+    json_schema_ref: schemas/perf_report.json
+
+eval_gate:
+  required_suites:
+    - suite: perf_diagnosis_v1
+      min_score: 0.80
+    - suite: budget_enforcement_v1
+      min_score: 0.90
+  must_pass_before_promote: true

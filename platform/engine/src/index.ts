@@ -1,0 +1,42 @@
+/**
+ * @meridian/engine — the agent runtime, orchestrator, and checkpointer.
+ *
+ * This package is LLM-agnostic: a ModelGateway, ToolHost, AgentRegistry,
+ * and Tracer are injected at construction. It never imports provider SDKs.
+ */
+
+export { LeafAgentRun } from './agent-run.js';
+export type {
+  AgentRunDeps,
+  AgentRunOptions,
+  InternalAgentRun,
+} from './agent-run.js';
+
+export { PlatformRuntime, SpawnNotAllowedError } from './runtime.js';
+export type { RuntimeDeps } from './runtime.js';
+
+export { PlatformOrchestrator } from './orchestrator.js';
+export type { OrchestratorDeps } from './orchestrator.js';
+
+export type { Checkpoint, Checkpointer } from './checkpointer/index.js';
+export { InMemoryCheckpointer } from './checkpointer/index.js';
+
+export { InMemoryMemoryStore } from './stores/memory-store.js';
+export { InProcessEventBus } from './stores/event-bus.js';
+export {
+  RuleChainPolicyEngine,
+  permissivePolicyEngine,
+} from './stores/policy-engine.js';
+export type { PolicyRule } from './stores/policy-engine.js';
+
+export { NoopTracer } from './tracer/noop.js';
+
+// Re-export node runners for direct use by tests/advanced callers.
+export { runAgentNode } from './nodes/agent.js';
+export { runPipelineNode } from './nodes/pipeline.js';
+export { runSupervisorNode } from './nodes/supervisor.js';
+export { runParallelNode } from './nodes/parallel.js';
+export { runRouterNode } from './nodes/router.js';
+export { runDebateNode } from './nodes/debate.js';
+export { runSubscriptionNode } from './nodes/subscription.js';
+export type { NodeExecContext, NodeResult } from './nodes/types.js';

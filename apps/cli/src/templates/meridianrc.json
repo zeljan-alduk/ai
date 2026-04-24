@@ -1,0 +1,15 @@
+{
+  "$schema": "https://meridian-labs.dev/schemas/meridianrc.v1.json",
+  "version": 1,
+  "agency": {
+    "root": "agency",
+    "agentsDir": "agents"
+  },
+  "defaults": {
+    "privacyTier": "internal",
+    "capabilityClass": "reasoning.mid"
+  },
+  "gateway": {
+    "endpoint": "http://127.0.0.1:8787"
+  }
+}

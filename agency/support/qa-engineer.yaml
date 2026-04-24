@@ -1,0 +1,85 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: qa-engineer
+  version: 0.1.0
+  description: Designs and runs test plans, fills coverage gaps, and certifies a change as ready to ship.
+  owner: support-team@meridian-labs
+  tags: [support, qa, testing]
+
+role:
+  team: support
+  reports_to: tech-lead
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.40
+    tokens_in_max: 100000
+    tokens_out_max: 6000
+  latency:
+    p95_ms: 45000
+  decoding:
+    mode: json
+    temperature: 0.2
+    json_schema_ref: "#/outputs/qa_report"
+
+prompt:
+  system_file: prompts/qa-engineer.system.md
+  variables:
+    acceptance_criteria: project.qa.acceptance_criteria
+    test_matrix: project.qa.test_matrix
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-shell
+      allow: [shell.exec]
+    - server: repo-fs
+      allow: [fs.read]
+    - server: meridian-memory
+      allow: [memory.read, memory.write]
+    - server: github
+      allow: [pr.read, pr.comment]
+  permissions:
+    network: none
+    filesystem: repo-readonly
+
+memory:
+  read:  [private, project]
+  write: [private]
+  retention:
+    private: 90d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: coverage.regression_detected == true
+      to: tech-lead
+    - condition: flakiness.consecutive_failures >= 3
+      to: tech-lead
+
+inputs:
+  schema_ref: schemas/qa_target.json
+
+outputs:
+  qa_report:
+    json_schema_ref: schemas/qa_report.json
+
+eval_gate:
+  required_suites:
+    - suite: qa_plan_quality_v1
+      min_score: 0.82
+    - suite: coverage_gap_detection_v1
+      min_score: 0.80
+  must_pass_before_promote: true

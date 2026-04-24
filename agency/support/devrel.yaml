@@ -1,0 +1,81 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: devrel
+  version: 0.1.0
+  description: Meets developers where they are: blog posts, examples, conference talks, community replies.
+  owner: support-team@meridian-labs
+  tags: [support, devrel, community]
+
+role:
+  team: support
+  reports_to: product-strategist
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: public
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: reasoning-small
+  budget:
+    usd_per_run: 0.40
+    tokens_in_max: 100000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 45000
+  decoding:
+    mode: free
+    temperature: 0.4
+
+prompt:
+  system_file: prompts/devrel.system.md
+  variables:
+    community_channels: org.devrel.channels
+    content_calendar: org.devrel.calendar
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write]
+    - server: github
+      allow: [issue.read, issue.write, pr.read]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org]
+  write: [private, org]
+  retention:
+    private: 90d
+    org: 365d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: issue.trending_negative == true
+      to: product-strategist
+    - condition: claim.requires_legal_review == true
+      to: legal-compliance
+
+inputs:
+  schema_ref: schemas/devrel_brief.json
+
+outputs:
+  artefact:
+    json_schema_ref: schemas/devrel_artefact.json
+
+eval_gate:
+  required_suites:
+    - suite: devrel_claim_accuracy_v1
+      min_score: 0.90
+    - suite: devrel_voice_match_v1
+      min_score: 0.80
+  must_pass_before_promote: true

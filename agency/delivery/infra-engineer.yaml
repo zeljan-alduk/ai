@@ -1,0 +1,84 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: infra-engineer
+  version: 0.1.0
+  description: Owns deployment, provisioning, and the boring plumbing that keeps the platform running.
+  owner: delivery-team@meridian-labs
+  tags: [delivery, infrastructure, engineering]
+
+role:
+  team: delivery
+  reports_to: tech-lead
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.90
+    tokens_in_max: 120000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 90000
+  decoding:
+    mode: free
+    temperature: 0.15
+
+prompt:
+  system_file: prompts/infra-engineer.system.md
+  variables:
+    cloud_accounts: project.infra.accounts
+    iac_conventions: project.infra.iac_conventions
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-shell
+      allow: [shell.exec]
+    - server: repo-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write]
+    - server: github
+      allow: [pr.read, pr.write]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, project]
+  write: [private]
+  retention:
+    private: 180d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: change.blast_radius == "production"
+      to: sre
+    - condition: cost.delta_monthly_usd > 500
+      to: finance-ops
+
+inputs:
+  schema_ref: schemas/work_package.json
+
+outputs:
+  change_set:
+    json_schema_ref: schemas/change_set.json
+
+eval_gate:
+  required_suites:
+    - suite: infra_iac_regressions_v1
+      min_score: 0.82
+    - suite: infra_cost_drift_v1
+      min_score: 0.85
+  must_pass_before_promote: true

@@ -1,0 +1,53 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: sample-agent
+  version: 0.1.0
+  description: A minimal valid agent for tests.
+  owner: test-team
+  tags: []
+
+role:
+  team: default
+  pattern: worker
+
+model_policy:
+  capability_requirements: []
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning.mid
+  fallbacks:
+    - capability_class: reasoning.small
+  budget:
+    usd_per_run: 0.25
+  decoding:
+    mode: free
+    temperature: 0.2
+
+prompt:
+  system_file: prompts/sample-agent.md
+
+tools:
+  mcp: []
+  native: []
+  permissions:
+    network: none
+    filesystem: repo-readonly
+
+memory:
+  read: [project]
+  write: [private]
+  retention:
+    private: 30d
+
+spawn:
+  allowed: []
+
+escalation: []
+
+subscriptions: []
+
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: true

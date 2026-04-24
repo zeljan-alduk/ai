@@ -1,0 +1,84 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: integration-engineer
+  version: 0.1.0
+  description: Builds connectors to third-party systems and keeps them working as upstream APIs drift.
+  owner: delivery-team@meridian-labs
+  tags: [delivery, integrations, engineering]
+
+role:
+  team: delivery
+  reports_to: tech-lead
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.60
+    tokens_in_max: 120000
+    tokens_out_max: 6000
+  latency:
+    p95_ms: 60000
+  decoding:
+    mode: free
+    temperature: 0.15
+
+prompt:
+  system_file: prompts/integration-engineer.system.md
+  variables:
+    partner_catalog: project.integrations.partners
+    auth_patterns: org.integrations.auth_patterns
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-shell
+      allow: [shell.exec]
+    - server: repo-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write]
+    - server: github
+      allow: [pr.read, pr.write]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, project]
+  write: [private]
+  retention:
+    private: 180d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: upstream.contract_breaking == true
+      to: tech-lead
+    - condition: secrets.rotation_blocked == true
+      to: security-auditor
+
+inputs:
+  schema_ref: schemas/work_package.json
+
+outputs:
+  change_set:
+    json_schema_ref: schemas/change_set.json
+
+eval_gate:
+  required_suites:
+    - suite: integration_contract_v1
+      min_score: 0.85
+    - suite: integration_fault_injection_v1
+      min_score: 0.80
+  must_pass_before_promote: true

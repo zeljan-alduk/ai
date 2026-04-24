@@ -1,0 +1,84 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: architect
+  version: 0.1.0
+  description: Owns cross-cutting technical design, ADRs, and the shape of the platform.
+  owner: direction-team@meridian-labs
+  tags: [direction, architecture, adr]
+
+role:
+  team: direction
+  reports_to: principal
+  pattern: supervisor
+
+model_policy:
+  capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-large
+  fallbacks:
+    - capability_class: reasoning-medium
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 3.00
+    tokens_in_max: 300000
+    tokens_out_max: 16000
+  latency:
+    p95_ms: 150000
+  decoding:
+    mode: free
+    temperature: 0.2
+
+prompt:
+  system_file: prompts/architect.system.md
+  variables:
+    adr_index: project.adr.index
+    invariants: project.invariants
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+    - server: meridian-agent
+      allow: [agent.spawn, agent.list, agent.inspect]
+    - server: repo-fs
+      allow: [fs.read]
+  permissions:
+    network: none
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org, project]
+  write: [private, project]
+  retention:
+    private: 365d
+    project: 730d
+
+spawn:
+  allowed: [tech-lead, security-auditor, performance-engineer]
+
+escalation:
+  on:
+    - condition: decision.crosses_teams == true
+      to: principal
+    - condition: invariant.at_risk == true
+      to: principal
+
+inputs:
+  schema_ref: schemas/design_brief.json
+
+outputs:
+  adr:
+    json_schema_ref: schemas/adr_document.json
+
+eval_gate:
+  required_suites:
+    - suite: adr_regressions_v1
+      min_score: 0.82
+    - suite: design_consistency_v1
+      min_score: 0.88
+  must_pass_before_promote: true

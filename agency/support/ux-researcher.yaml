@@ -1,0 +1,80 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: ux-researcher
+  version: 0.1.0
+  description: Gathers and synthesises evidence about how people actually use Meridian.
+  owner: support-team@meridian-labs
+  tags: [support, research, ux]
+
+role:
+  team: support
+  reports_to: product-strategist
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 200k-context, reasoning, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: reasoning-large
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.70
+    tokens_in_max: 180000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 90000
+  decoding:
+    mode: free
+    temperature: 0.3
+
+prompt:
+  system_file: prompts/ux-researcher.system.md
+  variables:
+    research_repository: org.ux.repository
+    consent_policy: org.ux.consent_policy
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org]
+  write: [private, org]
+  retention:
+    private: 180d
+    org: 365d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: finding.contradicts_roadmap == true
+      to: product-strategist
+    - condition: consent.boundary_at_risk == true
+      to: legal-compliance
+
+inputs:
+  schema_ref: schemas/research_brief.json
+
+outputs:
+  findings:
+    json_schema_ref: schemas/research_findings.json
+
+eval_gate:
+  required_suites:
+    - suite: research_synthesis_v1
+      min_score: 0.80
+    - suite: quote_attribution_v1
+      min_score: 0.95
+  must_pass_before_promote: true
