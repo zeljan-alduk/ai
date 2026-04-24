@@ -32,12 +32,7 @@ export interface ReplayBundle {
 }
 
 export interface Tracer {
-  span<T>(
-    name: string,
-    kind: SpanKind,
-    attrs: Attrs,
-    fn: (s: Span) => Promise<T>,
-  ): Promise<T>;
+  span<T>(name: string, kind: SpanKind, attrs: Attrs, fn: (s: Span) => Promise<T>): Promise<T>;
 
   export(runId: RunId): Promise<ReplayBundle>;
 }

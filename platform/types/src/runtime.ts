@@ -1,6 +1,6 @@
 import type { AgentRef, AgentSpec } from './agent.js';
-import type { Message } from './gateway.js';
 import type { CheckpointId, RunId } from './brands.js';
+import type { Message } from './gateway.js';
 
 export interface RunOverrides {
   readonly capabilityClass?: string;

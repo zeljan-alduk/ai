@@ -9,10 +9,7 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "workspaces": [
-    "platform/*",
-    "apps/*"
-  ],
+  "workspaces": ["platform/*", "apps/*"],
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",

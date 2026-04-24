@@ -1,6 +1,6 @@
+import type { UsageRecord } from './budget.js';
 import type { CallContext } from './context.js';
 import type { ModelDescriptor } from './model.js';
-import type { UsageRecord } from './budget.js';
 
 /** OpenAI-compatible message roles; providers map to their own formats. */
 export type Role = 'system' | 'user' | 'assistant' | 'tool';

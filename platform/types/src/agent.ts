@@ -1,6 +1,6 @@
+import type { Budget } from './budget.js';
 import type { Capability, CapabilityClass } from './capabilities.js';
 import type { PrivacyTier } from './privacy.js';
-import type { Budget } from './budget.js';
 
 export type AgentPattern = 'supervisor' | 'worker' | 'pipeline' | 'debate' | 'subscribe';
 

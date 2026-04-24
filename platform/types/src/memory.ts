@@ -1,5 +1,5 @@
-import type { CallContext } from './context.js';
 import type { MemoryScope } from './agent.js';
+import type { CallContext } from './context.js';
 
 export interface MemoryEntry<T = unknown> {
   readonly scope: MemoryScope;

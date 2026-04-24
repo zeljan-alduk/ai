@@ -1,7 +1,7 @@
+import type { RunId, TenantId, TraceId } from './brands.js';
 import type { Budget } from './budget.js';
 import type { Capability } from './capabilities.js';
 import type { PrivacyTier } from './privacy.js';
-import type { TenantId, TraceId, RunId } from './brands.js';
 
 /**
  * CallContext is threaded through every gateway call, tool call, and memory
@@ -18,4 +18,11 @@ export interface CallContext {
   /** Set by the runtime; agents cannot override. */
   readonly agentName: string;
   readonly agentVersion: string;
+  /**
+   * Cancellation signal propagated by the runtime. Gateway adapters,
+   * tool invocations, and long-running memory ops MUST honour this —
+   * aborting in-flight HTTP streams and rejecting pending work when
+   * it fires. Set by the runtime; agents cannot construct or widen it.
+   */
+  readonly signal?: AbortSignal;
 }

@@ -14,12 +14,18 @@ role:
   pattern: worker
 
 model_policy:
+  # agent-smith reads and writes other agents' specs — tool allowlists,
+  # budgets, escalation paths. That content is as sensitive as source
+  # code, so the tier is `sensitive`; on-prem-only tenants must be able
+  # to author specs without reaching a cloud endpoint, so a local
+  # reasoning fallback is mandatory.
   capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
-  privacy_tier: internal
+  privacy_tier: sensitive
   primary:
     capability_class: reasoning-large
   fallbacks:
     - capability_class: reasoning-medium
+    - capability_class: local-reasoning
   budget:
     usd_per_run: 1.50
     tokens_in_max: 200000

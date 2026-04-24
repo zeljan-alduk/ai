@@ -155,3 +155,20 @@ up adapters, keeping the types package free of any provider enum.
 Callers passing hydrated ModelDescriptors from other packages will need
 to carry providerKind + providerConfig alongside (or rely on the gateway's
 own registry for dispatch).
+
+[2026-04-24 21:58 UTC] principal — wave 2.5 (janitorial)
+Closed the integration gaps the wave-2 engineers flagged. Added optional
+`signal?: AbortSignal` to CallContext (engine had been threading an
+augmented context — now formal). Bumped agency/meta/agent-smith.yaml from
+internal to sensitive tier and added a local-reasoning fallback so on-prem
+tenants can author specs entirely on local models. Simplified
+apps/cli/src/registry-adapter.ts: dropped the runtime-assembled dynamic
+import and now imports `validate` directly from @meridian/registry's root
+export (which exists). Added CODE_OF_CONDUCT.md, SECURITY.md, .github
+issue templates (bug, feature, agent-ok), PR template, and a CLA Assistant
+GitHub workflow so contributor sign-off is automated. Workspace verify
+pass: pnpm install (clean), pnpm -r typecheck (all 6 packages clean),
+pnpm -r test (84 tests pass: registry 19, gateway 20, engine 8,
+observability 21, cli 16; types has no tests). pnpm lint clean across
+107 files; Biome auto-fixed pre-existing import-order in platform/types.
+Repo is hygienic and ready for wave 3.
