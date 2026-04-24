@@ -51,3 +51,17 @@ the single source of truth for cross-package contracts, drawn from
 ADR 0001. Packages to follow: registry, gateway, engine, observability,
 and apps/cli. Will spawn one engineer per package in parallel so they
 don't step on each other.
+
+[2026-04-24 21:22 UTC] backend@registry-engineer — platform/registry v0
+Shipped @meridian/registry: Zod schema for agent.v1 (strict, snake_case
+on disk), YAML loader with snake->camel transform, public validate(),
+in-memory storage with semver + promoted-version pointer, AgentRegistry
+impl of the @meridian/types interface, thin `semver` helpers. Fixtures
+cover the ADR 0001 code-reviewer example plus a missing-model_policy
+negative case. 19 vitest tests pass; tsc strict + biome clean. Two
+notable calls that affect other packages: (1) escalation accepts either
+a bare array OR the ADR-0001 `{on: [...]}` wrapper and normalises to
+an array in AgentSpec; (2) AgentRegistry.load(ref) without a version
+returns the promoted pointer, falls back to the single-version case as
+a bootstrap convenience, otherwise throws NoPromotedVersionError.
+Postgres storage and typed EvalReport gating are marked TODO(v1).

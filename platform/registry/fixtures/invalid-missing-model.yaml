@@ -1,0 +1,41 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: broken-agent
+  version: 0.1.0
+  description: Missing the entire model_policy block — should fail validation.
+  owner: qa@meridian-labs
+  tags: [qa]
+
+role:
+  team: qa
+  pattern: worker
+
+# model_policy intentionally omitted
+
+prompt:
+  system_file: prompts/broken.system.md
+
+tools:
+  mcp: []
+  native: []
+  permissions:
+    network: none
+    filesystem: none
+
+memory:
+  read: []
+  write: []
+  retention: {}
+
+spawn:
+  allowed: []
+
+escalation: []
+
+subscriptions: []
+
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: false
