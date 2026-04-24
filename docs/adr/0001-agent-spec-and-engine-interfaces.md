@@ -1,11 +1,11 @@
 # ADR 0001 — Agent Spec and Engine Interfaces
 
 Date: 2026-04-24
-Authors: architect@meridian-labs
+Authors: architect@aldo-tech-labs
 
 ## Context
 
-Meridian must run arbitrary agents authored as YAML against any LLM provider,
+ALDO AI must run arbitrary agents authored as YAML against any LLM provider,
 enforce privacy at the platform layer, and replay every run. This ADR fixes the
 agent spec schema, the capability taxonomy, and the engine interfaces. All
 subsequent ADRs build on these contracts.
@@ -26,7 +26,7 @@ identity:
   name: code-reviewer
   version: 1.4.0              # semver; registry promotes only after eval gate
   description: Reviews pull requests for correctness, style, and security smells.
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-tech-labs
   tags: [support, review]
 
 role:
@@ -92,7 +92,7 @@ escalation:
 
 subscriptions:
   - event: pr.opened
-    filter: "repo.owner == 'meridian-labs'"
+    filter: "repo.owner == 'aldo-tech-labs'"
   - event: pr.updated
 
 inputs:

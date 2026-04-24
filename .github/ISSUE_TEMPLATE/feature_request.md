@@ -11,7 +11,7 @@ labels: ["enhancement"]
 
 ## Proposal
 
-<!-- One paragraph: what should Meridian do? Be specific. -->
+<!-- One paragraph: what should ALDO AI do? Be specific. -->
 
 ## Alternatives considered
 

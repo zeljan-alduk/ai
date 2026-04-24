@@ -1,6 +1,6 @@
 # Free-tier dev/test deployment
 
-A zero-cost smoke-test environment for Meridian during development. Every
+A zero-cost smoke-test environment for ALDO AI during development. Every
 component below has a real, non-trial free tier as of 2026-04. Capacity
 numbers are indicative — validate before relying on them for a demo.
 
@@ -21,7 +21,7 @@ below. See "Deployment note" at the bottom for each affected line item.
 
 Opt-in OSS programs to apply to (out-of-band, not covered here):
 Vercel OSS, Netlify OSS, Sentry for Open Source, Cloudflare Project
-Galileo, PostHog OSS, JetBrains OSS licenses. Meridian's license is
+Galileo, PostHog OSS, JetBrains OSS licenses. ALDO AI's license is
 FSL-1.1-ALv2 (source-available, not OSI-approved); most of these
 programs approve public source-available repos — cite Sentry as a
 precedent if asked.

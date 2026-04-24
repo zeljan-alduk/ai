@@ -5,7 +5,7 @@ identity:
   name: eval-runner
   version: 0.1.0
   description: Runs the eval harness against candidate agent versions and decides whether they pass their gate.
-  owner: meta-team@meridian-labs
+  owner: meta-team@aldo-tech-labs
   tags: [meta, evaluation]
 
 role:

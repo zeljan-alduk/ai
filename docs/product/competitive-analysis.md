@@ -1,6 +1,6 @@
 # Competitive Analysis
 
-Last updated: 2026-04-24. Audience: Meridian founding team and design partners.
+Last updated: 2026-04-24. Audience: ALDO AI founding team and design partners.
 
 ## 1. Reference set
 
@@ -45,7 +45,7 @@ Last updated: 2026-04-24. Audience: Meridian founding team and design partners.
 ### Adjacent infra
 
 - **Temporal AI.** Durable execution for agent workflows; replay and retry native. Complements rather than competes.
-- **LiteLLM.** OSS proxy normalizing provider APIs with budgets and rate limits. The de facto "gateway lite." Closest to a slice of Meridian.
+- **LiteLLM.** OSS proxy normalizing provider APIs with budgets and rate limits. The de facto "gateway lite." Closest to a slice of ALDO AI.
 - **Helicone.** OSS-friendly LLM observability + gateway with caching and routing. Overlaps the gateway slice.
 - **Portkey.** Closed AI gateway with routing, guardrails, governance. Enterprise-focused.
 - **E2B.** Secure code-exec sandboxes. A likely dependency, not a competitor.
@@ -102,7 +102,7 @@ Legend: Y = yes, P = partial, N = no, ? = unknown.
 4. **Eval gates are advisory.** Promotion of an agent version is rarely blocked by a regression — evals exist but aren't policy.
 5. **Provider-locked SDKs trap you.** OpenAI/Anthropic/Vertex/Bedrock SDKs each demand a rewrite to switch; "agnostic" frameworks still leak provider quirks into agent code.
 
-## 5. Meridian's wedge
+## 5. ALDO AI's wedge
 
 Three things we must be best in the world at:
 
@@ -118,11 +118,11 @@ Everything else (MCP-native, multi-tenant, OSS-core + managed) is table stakes w
 
 **10-minute hello-world.** `pipx install meridian && meridian init`, drop in two YAML agents (a public researcher on a frontier model, a sensitive summarizer pinned to local Llama), run `meridian eval` against a seed dataset, watch the router refuse sensitive traffic to OpenAI even when you misconfigure it. The demo *is* the wedge.
 
-**Migration adapter angle.** Ship import shims from LangGraph graphs, CrewAI crews, and OpenAI Agents SDK specs into Meridian YAML. Don't ask teams to rewrite — wrap. Then sell the gateway, replay, and eval gate as the upgrade.
+**Migration adapter angle.** Ship import shims from LangGraph graphs, CrewAI crews, and OpenAI Agents SDK specs into ALDO AI YAML. Don't ask teams to rewrite — wrap. Then sell the gateway, replay, and eval gate as the upgrade.
 
 ## 7. Pricing landscape
 
-Frameworks (LangGraph Cloud, CrewAI Enterprise, Letta) price per seat plus usage, four-figure-monthly entry with custom enterprise tiers. Hyperscalers pass through tokens with thin platform margin. Vertical managed agents (Sierra, Decagon) price on outcomes — per resolved conversation, six- to seven-figure ACVs. Coders split: per-seat (Cursor, Windsurf, Aider-BYOK) vs. per-task (Devin, Factory). Gateways (LiteLLM cloud, Helicone, Portkey) price on request volume with generous free tiers. Meridian should anchor on OSS-core free + managed control plane priced per active agent and per gated eval run, with a sensitive-tier SKU that justifies itself on compliance.
+Frameworks (LangGraph Cloud, CrewAI Enterprise, Letta) price per seat plus usage, four-figure-monthly entry with custom enterprise tiers. Hyperscalers pass through tokens with thin platform margin. Vertical managed agents (Sierra, Decagon) price on outcomes — per resolved conversation, six- to seven-figure ACVs. Coders split: per-seat (Cursor, Windsurf, Aider-BYOK) vs. per-task (Devin, Factory). Gateways (LiteLLM cloud, Helicone, Portkey) price on request volume with generous free tiers. ALDO AI should anchor on OSS-core free + managed control plane priced per active agent and per gated eval run, with a sensitive-tier SKU that justifies itself on compliance.
 
 ## 8. Risks
 

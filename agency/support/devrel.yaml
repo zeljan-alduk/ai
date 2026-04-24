@@ -5,7 +5,7 @@ identity:
   name: devrel
   version: 0.1.0
   description: "Meets developers where they are: blog posts, examples, conference talks, community replies."
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-tech-labs
   tags: [support, devrel, community]
 
 role:

@@ -1,6 +1,6 @@
 # Code of Conduct
 
-Meridian is a working project. We want contributors to spend their energy
+ALDO AI is a working project. We want contributors to spend their energy
 on the code, not on managing each other's behavior. This document is short
 on purpose.
 
@@ -35,7 +35,7 @@ or remove contributors who breach these principles. We will make
 proportional decisions and explain them in writing.
 
 If you experience or witness a breach, contact the maintainers privately
-at `conduct@meridian-labs.example` (replace once the legal entity is
+at `conduct@aldo-tech-labs.example` (replace once the legal entity is
 registered). We will respond within five business days. Reports are
 confidential to the people responsible for resolution.
 

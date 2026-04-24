@@ -5,7 +5,7 @@ identity:
   name: principal
   version: 0.1.0
   description: Sets direction for the platform and owns the decisions no one else can make.
-  owner: direction-team@meridian-labs
+  owner: direction-team@aldo-tech-labs
   tags: [direction, leadership, strategy]
 
 role:

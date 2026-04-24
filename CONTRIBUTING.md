@@ -1,11 +1,11 @@
-# Contributing to Meridian
+# Contributing to ALDO AI
 
 Thanks for taking the time to contribute. This document covers what you need
 to know before opening a pull request.
 
 ## Before you start
 
-1. **Licensing.** Meridian is source-available under FSL-1.1-ALv2. Read
+1. **Licensing.** ALDO AI is source-available under FSL-1.1-ALv2. Read
    [`LICENSING.md`](./LICENSING.md) — in particular, the Competing Use
    restriction. Contributions are accepted under the project CLA (see
    below).
@@ -30,7 +30,7 @@ to know before opening a pull request.
   background agents, etc.). These have clear acceptance criteria that
   an agent can self-validate.
 - **Ship an MCP server** under `mcp-servers/` — we're happy to include
-  first-party servers that extend Meridian's capabilities.
+  first-party servers that extend ALDO AI's capabilities.
 - **Add an agent template** under `agency/community/` — share role
   definitions that worked for you.
 - **Write docs or examples** under `docs/` or `examples/`.

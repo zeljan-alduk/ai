@@ -5,7 +5,7 @@ identity:
   name: program-manager
   version: 0.1.0
   description: "Keeps multi-team initiatives moving: dependencies, dates, unblockers, status."
-  owner: direction-team@meridian-labs
+  owner: direction-team@aldo-tech-labs
   tags: [direction, program, delivery]
 
 role:

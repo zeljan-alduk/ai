@@ -5,7 +5,7 @@ identity:
   name: designer
   version: 0.1.0
   description: Owns the design system and produces the UI briefs that engineers implement.
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-tech-labs
   tags: [support, design]
 
 role:

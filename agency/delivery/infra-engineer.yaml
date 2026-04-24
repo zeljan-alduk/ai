@@ -5,7 +5,7 @@ identity:
   name: infra-engineer
   version: 0.1.0
   description: Owns deployment, provisioning, and the boring plumbing that keeps the platform running.
-  owner: delivery-team@meridian-labs
+  owner: delivery-team@aldo-tech-labs
   tags: [delivery, infrastructure, engineering]
 
 role:

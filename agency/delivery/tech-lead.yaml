@@ -5,7 +5,7 @@ identity:
   name: tech-lead
   version: 0.1.0
   description: Breaks an ADR or initiative into concrete work for the delivery team and owns the outcome.
-  owner: delivery-team@meridian-labs
+  owner: delivery-team@aldo-tech-labs
   tags: [delivery, leadership, coordination]
 
 role:

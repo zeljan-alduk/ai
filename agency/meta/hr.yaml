@@ -5,7 +5,7 @@ identity:
   name: hr
   version: 0.1.0
   description: Curates the agency itself - which agents are active, deprecated, or overlap - and proposes roster changes.
-  owner: meta-team@meridian-labs
+  owner: meta-team@aldo-tech-labs
   tags: [meta, roster, governance]
 
 role:

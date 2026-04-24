@@ -5,7 +5,7 @@ identity:
   name: performance-engineer
   version: 0.1.0
   description: Profiles the platform, sets and defends performance budgets, and diagnoses latency regressions.
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-tech-labs
   tags: [support, performance]
 
 role:

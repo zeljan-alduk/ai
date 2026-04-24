@@ -3,7 +3,7 @@
 Date: 2026-04-24
 Author: engine-researcher
 
-Scope: pick (or confirm rejection of) an off-the-shelf engine for Meridian's
+Scope: pick (or confirm rejection of) an off-the-shelf engine for ALDO AI's
 patterns — pipeline, supervisor+N-workers, debate, handoff, subscription,
 approval-gate — under the ADR 0001 interfaces and ADR 0002 stack
 (TypeScript on Bun, Postgres). Durable execution is required.
@@ -42,7 +42,7 @@ TS-native agent + workflow framework — `.then/.parallel/.branch/.suspend()`, p
 
 ## Durable execution: own checkpointer vs. Temporal-backed
 
-A Postgres event-sourced checkpointer (append `run_events`, materialize state, resume from last good event) is ~1–2 engineer-weeks for our graph shape, costs nothing for self-hosters (already running Postgres), and keeps replay semantics in our hands — critical because "any step replayable with a different model" (charter) is a *Meridian* primitive, not a Temporal one. Temporal/Restate buy industrial replay correctness and timers but force a second runtime on every deployer and constrain us to their workflow programming model. Inngest/Trigger.dev are a middle ground but lock self-hosters into their job runtime. Recommendation: own the checkpointer for v0; keep a Temporal adapter on the roadmap (ADR 0003) for hosted/scale tier where the ops cost is amortized.
+A Postgres event-sourced checkpointer (append `run_events`, materialize state, resume from last good event) is ~1–2 engineer-weeks for our graph shape, costs nothing for self-hosters (already running Postgres), and keeps replay semantics in our hands — critical because "any step replayable with a different model" (charter) is a *ALDO AI* primitive, not a Temporal one. Temporal/Restate buy industrial replay correctness and timers but force a second runtime on every deployer and constrain us to their workflow programming model. Inngest/Trigger.dev are a middle ground but lock self-hosters into their job runtime. Recommendation: own the checkpointer for v0; keep a Temporal adapter on the roadmap (ADR 0003) for hosted/scale tier where the ops cost is amortized.
 
 ## Pattern coverage matrix
 
@@ -60,7 +60,7 @@ Legend: N native, A adapter/template, H hand-roll.
 | Inngest/Trigger | N | H | H | H | N | N |
 | Pydantic-AI | A | A | H | A | H | H |
 | Mastra | N | A | H | N | A | N |
-| **Meridian (planned)** | N | N | N | N | N | N |
+| **ALDO AI (planned)** | N | N | N | N | N | N |
 
 No framework covers all six natively, and none enforce privacy-tier routing. The matrix justifies treating orchestration as a **first-party** concern.
 

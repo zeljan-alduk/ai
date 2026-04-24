@@ -5,7 +5,7 @@ identity:
   name: frontend-engineer
   version: 0.1.0
   description: Implements UI and client-side logic against a designer's brief and a backend contract.
-  owner: delivery-team@meridian-labs
+  owner: delivery-team@aldo-tech-labs
   tags: [delivery, frontend, engineering]
 
 role:

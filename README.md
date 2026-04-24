@@ -1,4 +1,4 @@
-# Meridian
+# ALDO AI
 
 > The LLM-agnostic AI sub-agent orchestrator.
 > Define agents as data, route to any model, swap cloud ↔ local without
@@ -8,7 +8,7 @@
 [![Status: Early](https://img.shields.io/badge/status-early-orange.svg)](./DEVELOPMENT_LOG.txt)
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
-Meridian is an opinionated orchestrator for AI sub-agent teams. One
+ALDO AI is an opinionated orchestrator for AI sub-agent teams. One
 agent spec — YAML — runs against frontier cloud models (Anthropic,
 OpenAI, Google, xAI, Bedrock) or fully local models (Ollama,
 llama.cpp, vLLM, MLX, TGI) with the exact same semantics. The
@@ -25,8 +25,8 @@ instead of Claude."
 
 Early scaffolding. The core packages compile, type-check, and test
 cleanly — but there's no production deployment yet. The repository is
-being built by a virtual software agency ("Meridian Labs") of
-sub-agents, dogfooding the very orchestration patterns Meridian
+being built by a virtual software agency ("ALDO TECH LABS") of
+sub-agents, dogfooding the very orchestration patterns ALDO AI
 provides. See [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) for the
 running narrative.
 
@@ -103,7 +103,7 @@ Tech stack and rationale in
 
 ## Supported LLM providers
 
-Meridian is LLM-agnostic. Adapters in `platform/gateway/src/providers/`:
+ALDO AI is LLM-agnostic. Adapters in `platform/gateway/src/providers/`:
 
 | Provider / runtime | Adapter | Notes |
 |---|---|---|
@@ -134,7 +134,7 @@ platform/
   observability/ OTEL GenAI tracer + replay bundles
 apps/
   cli/           the `meridian` command-line tool
-agency/          reference agency ("Meridian Labs") — 26 agent YAMLs
+agency/          reference agency ("ALDO TECH LABS") — 26 agent YAMLs
                  + prompts across direction / delivery / support / meta
 mcp-servers/     first-party MCP tool servers (in progress)
 docs/
@@ -211,16 +211,16 @@ code will live in a separate private module. Details:
 
 Source-available under the **Functional Source License
 (FSL-1.1-ALv2)**. Read, fork, modify, self-host, and contribute
-freely; you **cannot** offer Meridian (or a substantially similar
+freely; you **cannot** offer ALDO AI (or a substantially similar
 product) as a commercial service to third parties. Each version
 auto-converts to Apache-2.0 two years after its publication.
 
 See [`LICENSE`](./LICENSE) for the full text and
 [`LICENSING.md`](./LICENSING.md) for a plain-English explanation. For
-a commercial license before the Apache conversion, contact Meridian
+a commercial license before the Apache conversion, contact ALDO AI
 Labs.
 
-"Meridian" and "Meridian Labs" are trademarks of Meridian Labs. Forks
+"ALDO AI" and "ALDO TECH LABS" are trademarks of ALDO TECH LABS. Forks
 must be renamed.
 
 ## Contributing
@@ -235,7 +235,7 @@ Security issues: see [`SECURITY.md`](./SECURITY.md).
 
 ## Acknowledgments
 
-Meridian borrows ideas (with gratitude) from LangGraph (graph +
+ALDO AI borrows ideas (with gratitude) from LangGraph (graph +
 checkpoints + interrupts), CrewAI (role-based crews), Temporal
 (durable execution), Claude Code (sub-agents, hooks, slash commands),
 Sentry (FSL), the Model Context Protocol working group, and the

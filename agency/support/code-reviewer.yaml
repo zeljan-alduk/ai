@@ -5,7 +5,7 @@ identity:
   name: code-reviewer
   version: 0.1.0
   description: Reviews pull requests for correctness, style, and security smells.
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-tech-labs
   tags: [support, review]
 
 role:
@@ -68,7 +68,7 @@ escalation:
 
 subscriptions:
   - event: pr.opened
-    filter: "repo.owner == 'meridian-labs'"
+    filter: "repo.owner == 'aldo-tech-labs'"
   - event: pr.updated
 
 inputs:

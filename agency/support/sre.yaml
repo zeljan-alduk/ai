@@ -5,7 +5,7 @@ identity:
   name: sre
   version: 0.1.0
   description: Keeps production up, owns incident response, and pushes reliability work back into the delivery teams.
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-tech-labs
   tags: [support, sre, reliability]
 
 role:

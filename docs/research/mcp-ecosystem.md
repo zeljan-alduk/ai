@@ -1,6 +1,6 @@
-# MCP Ecosystem Research — Meridian
+# MCP Ecosystem Research — ALDO AI
 
-_Author: mcp-researcher, Meridian Labs — 2026-04-24_
+_Author: mcp-researcher, ALDO TECH LABS — 2026-04-24_
 
 ## 1. MCP protocol status (as of 2026-04)
 
@@ -17,7 +17,7 @@ The most recent ratified spec is **2025-06-18**; a **2026-06** spec release is s
 
 **Versioning.** Dated (`YYYY-MM-DD`). Breaking changes every 4-6 months: transport swap, OAuth mandate, elicitation were all breaking. Expect another mid-2026 (discovery metadata, stateless sessions). Pin a spec version; upgrade deliberately.
 
-**Clients widely deployed.** Claude Desktop (largest install base), Claude Code, Cursor (dominant IDE client), VS Code / Copilot agent mode, Windsurf, Cline, Continue, Zed, Replit, JetBrains AI Assistant. ChatGPT added remote-only MCP in late 2025. Meridian's host will be a full client — interop with this set matters for dogfooding and for users wiring our agents into existing IDEs.
+**Clients widely deployed.** Claude Desktop (largest install base), Claude Code, Cursor (dominant IDE client), VS Code / Copilot agent mode, Windsurf, Cline, Continue, Zed, Replit, JetBrains AI Assistant. ChatGPT added remote-only MCP in late 2025. ALDO AI's host will be a full client — interop with this set matters for dogfooding and for users wiring our agents into existing IDEs.
 
 ## 2. Ecosystem snapshot
 
@@ -32,7 +32,7 @@ The public registry (`registry.modelcontextprotocol.io`) indexes ~12k servers (M
 - **Observability.** Grafana (strongest), Datadog (metrics+logs+traces+incidents), Sentry (`mcp.sentry.dev`, textbook OAuth), PagerDuty, Honeycomb, New Relic — all first-party.
 - **Reasoning / memory (Anthropic reference).** `memory` (knowledge-graph), `sequentialthinking`, `time`. Educational, not production — prior art for our own.
 
-## 3. First-party servers Meridian must ship
+## 3. First-party servers ALDO AI must ship
 
 Each server here is one whose guarantees we refuse to delegate.
 
@@ -46,7 +46,7 @@ _Surface._ `exec(cmd, args, cwd, timeout, stdin)`, streamed `stdout`/`stderr`, `
 _Scopes._ Command allowlist per agent; network egress allowlist (domains/CIDRs) enforced via netns or a filtering proxy; CPU/mem/time ceilings; filesystem confined by `meridian-fs` roots.
 _Auth._ stdio, host-injected identity. Runs in a container/firejail — never the host namespace.
 
-**`meridian-memory` — scoped memory, thin wrapper over Meridian's MemoryStore.**
+**`meridian-memory` — scoped memory, thin wrapper over ALDO AI's MemoryStore.**
 _Surface._ `remember`, `recall(query)`, `forget`, `list(scope)`. Returns typed records, not free text.
 _Scopes._ Three visibilities: `private` (this agent only), `project` (all agents in a run), `org` (tenant). Writes to a higher scope require explicit capability grant.
 _Auth._ stdio in-process; if remote, OAuth with tenant-scoped tokens.
@@ -68,11 +68,11 @@ _Auth._ OAuth for remote; stdio locally.
 
 ## 4. Host features we need
 
-- **Dynamic discovery + hot reload.** Pull from the MCP registry plus a Meridian-private registry. Re-read server manifests on config change without agent restart; propagate capability deltas through the schema translator.
+- **Dynamic discovery + hot reload.** Pull from the MCP registry plus a ALDO AI-private registry. Re-read server manifests on config change without agent restart; propagate capability deltas through the schema translator.
 - **Per-agent tool allowlist.** Lives in the agent role definition. Enforced at prompt-construction (don't advertise tools the agent can't call) **and** at call-dispatch (refuse anyway). Deny beats allow.
 - **Schema translation.** One canonical shape (MCP `tools/call` with JSON Schema), translated per model: OpenAI function-calling, Anthropic `tool_use`, Gemini `functionCall`, or local-model **constrained JSON** (grammar/regex-guided decoding). Tables generated from the MCP schema — no hand-maintained per-model adapters.
 - **Streaming tool outputs.** Tool stdout chunks surface as incremental tool-result deltas mid-generation. Requires MCP-client SSE and model-side streaming wired through the same channel.
-- **Sampling bridge.** `sampling/createMessage` must route **back through Meridian's LLM gateway**, never direct to a provider. Third-party servers then inherit our routing, rate limits, audit trail, model choice. Without this, the sampling capability silently exfiltrates model traffic.
+- **Sampling bridge.** `sampling/createMessage` must route **back through ALDO AI's LLM gateway**, never direct to a provider. Third-party servers then inherit our routing, rate limits, audit trail, model choice. Without this, the sampling capability silently exfiltrates model traffic.
 
 ## 5. Trust tiers
 
@@ -85,7 +85,7 @@ _Auth._ OAuth for remote; stdio locally.
 
 Signing: we adopt **Sigstore/cosign** image signing + SLSA build provenance for container-packaged servers, mirroring the approach ToolHive has demonstrated. For stdio/npm servers we pin to a lockfile-level digest. The MCP spec itself still lacks binary-to-name attestation as of 2026-04 — we do not wait for it.
 
-Registry source-of-truth: the official MCP registry for discovery; a Meridian-internal registry for trust-tier assignments and policy. A server's tier is ours to set, not the ecosystem's.
+Registry source-of-truth: the official MCP registry for discovery; a ALDO AI-internal registry for trust-tier assignments and policy. A server's tier is ours to set, not the ecosystem's.
 
 ## 6. Recommendation
 

@@ -66,7 +66,7 @@
 - **SGLang:** Proprietary compressed FSM; supports regex, select, tools; strong for regex-constrained; tool support in development.
 - **vLLM guided_choice / guided_regex / guided_json / guided_grammar:** Abstraction over backends; easy to swap (xgrammar → llguidance).
 
-**Recommendation for Meridian:**
+**Recommendation for ALDO AI:**
 - **Cloud models (OpenAI, Anthropic, Gemini, Grok):** Use native tool definitions; they handle serialization.
 - **Local models < 30B parameters:** Auto-enable constrained decoding on ALL tool calls.
 - **Backend priority:** llguidance (0.12% error) → xgrammar (vLLM default) → GBNF (llama.cpp fallback).
@@ -90,11 +90,11 @@ Rationale: Portkey already handles the multi-cloud boilerplate and has productio
 
 3. **Latency & cost tradeoff tuning:** The router must balance latency (route to a fast draft model locally) vs. cost (route to a cheaper cloud model) vs. quality (route to the best model). What's the decision tree? User-specified weights? Online learning from failure rates?
 
-4. **Context-length degradation:** Many models claim 128k context but degrade past 32k. Should Meridian empirically measure max-useful context per model and advertise actual effective lengths, or trust provider specs?
+4. **Context-length degradation:** Many models claim 128k context but degrade past 32k. Should ALDO AI empirically measure max-useful context per model and advertise actual effective lengths, or trust provider specs?
 
 5. **Streaming interruption & retries:** If a stream fails mid-generation (e.g., tool call starts but provider cuts off), can we replay to another provider? Or is streaming a one-shot bet?
 
-6. **Tool-use JSON serialization across model APIs:** OpenAI uses `tool_calls` array with `name` + `arguments` JSON string; Claude uses XML `<tool_use>` blocks; Gemini uses `functionCall`. Should Meridian normalize to one wire format internally and translate per-provider, or pass through native formats and handle serialization at the application layer?
+6. **Tool-use JSON serialization across model APIs:** OpenAI uses `tool_calls` array with `name` + `arguments` JSON string; Claude uses XML `<tool_use>` blocks; Gemini uses `functionCall`. Should ALDO AI normalize to one wire format internally and translate per-provider, or pass through native formats and handle serialization at the application layer?
 
 ---
 

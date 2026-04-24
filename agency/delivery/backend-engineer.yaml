@@ -5,7 +5,7 @@ identity:
   name: backend-engineer
   version: 0.1.0
   description: Implements backend services, APIs, and persistence layers to a tech lead's spec.
-  owner: delivery-team@meridian-labs
+  owner: delivery-team@aldo-tech-labs
   tags: [delivery, backend, engineering]
 
 role:

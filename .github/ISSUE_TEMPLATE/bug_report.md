@@ -25,7 +25,7 @@ $ meridian agent validate ...
 
 ## Environment
 
-- Meridian commit / version:
+- ALDO AI commit / version:
 - Node version (`node -v`):
 - pnpm version (`pnpm -v`):
 - OS:

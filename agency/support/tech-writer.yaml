@@ -4,8 +4,8 @@ kind: Agent
 identity:
   name: tech-writer
   version: 0.1.0
-  description: Writes and maintains the public-facing docs, reference, and examples for Meridian.
-  owner: support-team@meridian-labs
+  description: Writes and maintains the public-facing docs, reference, and examples for ALDO AI.
+  owner: support-team@aldo-tech-labs
   tags: [support, docs, writing]
 
 role:

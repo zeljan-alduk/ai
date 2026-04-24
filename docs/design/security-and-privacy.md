@@ -1,10 +1,10 @@
 # Security & Privacy Design
 
-Owner: security-auditor (Meridian Labs)
+Owner: security-auditor (ALDO TECH LABS)
 Status: proposed
 Date: 2026-04-24
 
-Meridian routes work across heterogeneous LLMs with privacy tiers as a
+ALDO AI routes work across heterogeneous LLMs with privacy tiers as a
 platform property. This doc defines threat model, enforcement, and the
 red-team backlog before GA.
 
@@ -18,7 +18,7 @@ red-team backlog before GA.
 | A2 | Malicious end-user / customer tenant | Exfil other tenants' data, break quotas | I, E, T |
 | A3 | Prompt-injection payload (web pages, emails, docs ingested by agents) | Hijack agent, exfil secrets, run rogue tools | T, E, I |
 | A4 | Compromised MCP server (supply-chain) | Lateral movement, persistent backdoor | T, E, I, R |
-| A5 | Insider (Meridian engineer) with prod access | Read sensitive customer prompts/outputs | I, R |
+| A5 | Insider (ALDO AI engineer) with prod access | Read sensitive customer prompts/outputs | I, R |
 | A6 | Cloud LLM provider as adversary (data retention, training-on-input) | Learn sensitive customer content | I |
 | A7 | Curious/buggy agent in the same org | Cross-agent data leakage via shared memory | I, E |
 | A8 | Dependency author (PyPI/NPM/Docker) | Typosquat, post-install hooks | T, E |

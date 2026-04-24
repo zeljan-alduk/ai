@@ -5,7 +5,7 @@ identity:
   name: agent-smith
   version: 0.1.0
   description: Authors and revises other agents' specs and prompts, given a role brief.
-  owner: meta-team@meridian-labs
+  owner: meta-team@aldo-tech-labs
   tags: [meta, authoring]
 
 role:

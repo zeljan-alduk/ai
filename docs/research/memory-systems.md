@@ -1,4 +1,4 @@
-# Memory Systems for Meridian
+# Memory Systems for ALDO AI
 
 ## 1. Survey
 
@@ -36,7 +36,7 @@ HNSW + IVF, hybrid search via tsvector); Qdrant (best filtering DSL, Rust,
 payload indices); Weaviate (modules, hybrid BM25+vector built-in); Chroma
 (dev ergonomics, weak at scale); LanceDB (embedded, columnar, great for
 local/edge agents); Turbopuffer (cheap object-storage-backed, excellent for
-cold/archival tiers, slower p99). For Meridian, pgvector + Turbopuffer
+cold/archival tiers, slower p99). For ALDO AI, pgvector + Turbopuffer
 covers hot and cold without a second service in v0.1.
 
 ## 2. Scope model

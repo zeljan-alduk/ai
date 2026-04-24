@@ -1,4 +1,4 @@
-# Observability Research — Meridian
+# Observability Research — ALDO AI
 
 Author: observability-researcher · Date: 2026-04-24
 Scope: tracing, evals, cost, replay, debugger UX for an LLM-agnostic sub-agent orchestrator.
@@ -29,7 +29,7 @@ Scope: tracing, evals, cost, replay, debugger UX for an LLM-agnostic sub-agent o
 | **Honeycomb + OTEL** | Pure OTEL | SaaS | None LLM-specific | DIY | Generic trace view | Yes | Event-based | Proprietary |
 | **Roll-your-own OTEL + ClickHouse** | OTEL + custom tables | Fully | DIY | DIY | Whatever we build | Yes | Infra only | Our choice |
 
-## 3. Meridian trace contents
+## 3. ALDO AI trace contents
 
 Span hierarchy (parent → child):
 
@@ -71,7 +71,7 @@ Per checkpoint (emitted at every node boundary and before every tool call), a bu
 - `provider_request_ids` for cross-ref with native logs.
 - `hashes` per ref + merkle root for tamper detection.
 
-Replay contract: given bundle + target model, Meridian re-runs from `parent_checkpoint_id`, swapping the model, replaying tool outputs + memory reads, producing a new trace branch linked via `meridian.replay.source_run_id`.
+Replay contract: given bundle + target model, ALDO AI re-runs from `parent_checkpoint_id`, swapping the model, replaying tool outputs + memory reads, producing a new trace branch linked via `meridian.replay.source_run_id`.
 
 ## 5. Cost tracking
 
@@ -94,7 +94,7 @@ Backend requirements:
 
 ## 7. Recommendation
 
-**Stack for v0.1**: OTEL-native instrumentation via **OpenLLMetry + OpenInference** emitting `gen_ai.*` + `meridian.*` spans; OTLP → OTel Collector → **Langfuse (self-hosted, MIT)** as the primary trace/eval/cost UI, with the Collector also fanning out to **ClickHouse** directly for long-term analytics and our own replay/budget services. Replay bundles live in S3-compatible object storage, keyed by checkpoint id and referenced from spans. A Meridian-owned **control plane** service (Go/Rust, Redis pub/sub + gRPC) provides breakpoints, pause-before-call, and edit-and-rerun — because no vendor offers this. Phoenix is the fallback if Langfuse's ClickHouse-acquisition direction ever hurts self-hosters; Braintrust is the answer if evals become the bottleneck, but it's SaaS-only. Datadog/LangSmith are rejected for v0.1 on lock-in and cost.
+**Stack for v0.1**: OTEL-native instrumentation via **OpenLLMetry + OpenInference** emitting `gen_ai.*` + `meridian.*` spans; OTLP → OTel Collector → **Langfuse (self-hosted, MIT)** as the primary trace/eval/cost UI, with the Collector also fanning out to **ClickHouse** directly for long-term analytics and our own replay/budget services. Replay bundles live in S3-compatible object storage, keyed by checkpoint id and referenced from spans. A ALDO AI-owned **control plane** service (Go/Rust, Redis pub/sub + gRPC) provides breakpoints, pause-before-call, and edit-and-rerun — because no vendor offers this. Phoenix is the fallback if Langfuse's ClickHouse-acquisition direction ever hurts self-hosters; Braintrust is the answer if evals become the bottleneck, but it's SaaS-only. Datadog/LangSmith are rejected for v0.1 on lock-in and cost.
 
 ## 8. Open questions
 

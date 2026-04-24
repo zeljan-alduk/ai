@@ -5,7 +5,7 @@ identity:
   name: ml-engineer
   version: 0.1.0
   description: Builds and tunes models and inference paths, including local/on-prem deployments.
-  owner: delivery-team@meridian-labs
+  owner: delivery-team@aldo-tech-labs
   tags: [delivery, ml, engineering]
 
 role:

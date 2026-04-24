@@ -5,7 +5,7 @@ identity:
   name: historian
   version: 0.1.0
   description: Summarises runs, incidents, and decisions into durable institutional memory.
-  owner: meta-team@meridian-labs
+  owner: meta-team@aldo-tech-labs
   tags: [meta, memory, summarisation]
 
 role:

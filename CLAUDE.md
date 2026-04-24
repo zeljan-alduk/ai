@@ -1,4 +1,4 @@
-# Meridian — working notes for agents
+# ALDO AI — working notes for agents
 
 ## Non-negotiable constraints
 
@@ -38,4 +38,4 @@ or reorder prior entries.
 
 `agency/` contains the dogfood organization (principal, architect,
 engineers, reviewers, …). Use it as the test case for every platform
-feature: if the feature doesn't help Meridian Labs ship, we don't need it.
+feature: if the feature doesn't help ALDO TECH LABS ship, we don't need it.

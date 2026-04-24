@@ -10,7 +10,7 @@ these channels:
 
 1. **GitHub private vulnerability reporting** (preferred):
    <https://github.com/zeljan-alduk/ai/security/advisories/new>
-2. **Email**: `security@meridian-labs.example`
+2. **Email**: `security@aldo-tech-labs.example`
    (replace once the legal entity is registered).
 
 Please include:
@@ -39,7 +39,7 @@ We will credit you in the release notes unless you ask us not to.
 
 In scope:
 
-- The Meridian core packages under `platform/**` and `apps/**`.
+- The ALDO AI core packages under `platform/**` and `apps/**`.
 - The reference agency under `agency/**` (privacy-tier or escalation
   misconfiguration that defeats platform invariants).
 - Any deployment artifacts in `docs/deploy/**` that ship as recommended
@@ -59,7 +59,7 @@ Out of scope:
 
 ## Reward
 
-Meridian is an early-stage project; we do not currently run a paid bug
+ALDO AI is an early-stage project; we do not currently run a paid bug
 bounty. We will publicly thank reporters and provide reference letters.
 
 ## Coordinated disclosure

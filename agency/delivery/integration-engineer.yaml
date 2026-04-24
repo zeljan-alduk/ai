@@ -5,7 +5,7 @@ identity:
   name: integration-engineer
   version: 0.1.0
   description: Builds connectors to third-party systems and keeps them working as upstream APIs drift.
-  owner: delivery-team@meridian-labs
+  owner: delivery-team@aldo-tech-labs
   tags: [delivery, integrations, engineering]
 
 role:

@@ -2,7 +2,7 @@
 
 Status: Draft v0.1 — finance-ops, 2026-04-24
 
-Cost is a first-class platform concern in Meridian. Every span a sub-agent emits is priced; every run, project, tenant, and agent-version carries a budget; every completion call passes through a gateway that can refuse on budget breach. This document specifies the cost model, the pricing registry, enforcement, reporting, and the self-host escape hatch.
+Cost is a first-class platform concern in ALDO AI. Every span a sub-agent emits is priced; every run, project, tenant, and agent-version carries a budget; every completion call passes through a gateway that can refuse on budget breach. This document specifies the cost model, the pricing registry, enforcement, reporting, and the self-host escape hatch.
 
 ---
 

@@ -1,8 +1,8 @@
-# Meridian Control Plane UX
+# ALDO AI Control Plane UX
 
-v0.1 spec. ux-designer, Meridian Labs. 2026-04-24.
+v0.1 spec. ux-designer, ALDO TECH LABS. 2026-04-24.
 
-Meridian is an LLM-agnostic sub-agent orchestrator. UX job: make multi-agent systems as debuggable as a single function; make model/provider/privacy a first-class visible knob.
+ALDO AI is an LLM-agnostic sub-agent orchestrator. UX job: make multi-agent systems as debuggable as a single function; make model/provider/privacy a first-class visible knob.
 
 ---
 

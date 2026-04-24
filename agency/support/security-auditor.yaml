@@ -5,7 +5,7 @@ identity:
   name: security-auditor
   version: 0.1.0
   description: Audits changes and systems for security defects, threat-models features, and owns the bar for critical findings.
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-tech-labs
   tags: [support, security, audit]
 
 role:

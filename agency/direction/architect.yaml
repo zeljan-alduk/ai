@@ -5,7 +5,7 @@ identity:
   name: architect
   version: 0.1.0
   description: Owns cross-cutting technical design, ADRs, and the shape of the platform.
-  owner: direction-team@meridian-labs
+  owner: direction-team@aldo-tech-labs
   tags: [direction, architecture, adr]
 
 role:

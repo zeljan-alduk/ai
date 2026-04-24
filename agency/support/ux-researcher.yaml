@@ -4,8 +4,8 @@ kind: Agent
 identity:
   name: ux-researcher
   version: 0.1.0
-  description: Gathers and synthesises evidence about how people actually use Meridian.
-  owner: support-team@meridian-labs
+  description: Gathers and synthesises evidence about how people actually use ALDO AI.
+  owner: support-team@aldo-tech-labs
   tags: [support, research, ux]
 
 role:

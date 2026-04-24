@@ -4,8 +4,8 @@ kind: Agent
 identity:
   name: product-strategist
   version: 0.1.0
-  description: Turns market signals and user research into proposals for what Meridian should build next.
-  owner: direction-team@meridian-labs
+  description: Turns market signals and user research into proposals for what ALDO AI should build next.
+  owner: direction-team@aldo-tech-labs
   tags: [direction, product, strategy]
 
 role:

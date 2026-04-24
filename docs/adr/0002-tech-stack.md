@@ -1,7 +1,7 @@
 # ADR 0002 — Tech Stack
 
 Date: 2026-04-24
-Authors: principal@meridian-labs
+Authors: principal@aldo-tech-labs
 
 ## Context
 
@@ -63,7 +63,7 @@ Rationale over Python:
 - **LangGraph / CrewAI as the engine** — locks us into their graph model and
   Python. We build our own orchestrator against the ADR 0001 interfaces.
 - **Temporal as v0 durability** — great for v1 at scale; too heavy to require
-  for self-hosters who just want to try Meridian.
+  for self-hosters who just want to try ALDO AI.
 - **LiteLLM as the gateway core** — its TS port is immature; we use native
   provider SDKs and adopt LiteLLM's cost/capability data files.
 - **Deno** — compelling, but Bun's Node compatibility wins for ecosystem.

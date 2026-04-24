@@ -5,7 +5,7 @@ identity:
   name: data-engineer
   version: 0.1.0
   description: Owns pipelines, schemas, and the trustworthiness of data the rest of the org reads.
-  owner: delivery-team@meridian-labs
+  owner: delivery-team@aldo-tech-labs
   tags: [delivery, data, engineering]
 
 role:

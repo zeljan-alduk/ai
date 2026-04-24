@@ -1,6 +1,6 @@
 # Eval Harnesses — Research & Recommendation
 
-*eval-researcher, Meridian Labs — 2026-04-24*
+*eval-researcher, ALDO TECH LABS — 2026-04-24*
 
 Eval is a promotion gate. Every agent-spec change must pass a cross-provider suite before the registry promotes it. Users need hard numbers to answer "can I downgrade this sub-agent to Qwen?" Sensitive-tier suites must execute against local models only.
 
@@ -44,7 +44,7 @@ A promotion gate runs the union; individual changes can run the relevant subset.
 
 ---
 
-## 3. Meridian eval model
+## 3. ALDO AI eval model
 
 **Eval spec.** Every agent ships a sibling `evals/*.yaml` alongside `agent.yaml`. Fields:
 
@@ -94,7 +94,7 @@ Standing red-team suite, run nightly and on promotion for any agent with tool ac
 - **promptfoo red-team** — 67+ plugins, OWASP LLM Top-10 coverage; native to our harness choice.
 - **DeepTeam** (Nov 2025) — jailbreak + injection pipelines.
 - **Public datasets**: Gandalf prompts, TensorTrust injection corpus, AdvBench, HarmBench, UK AISI/Gray Swan challenge set.
-- **Meridian-authored suite**: exfiltration via tool args, privilege-escalation via sub-agent spawn, cross-agent context poisoning (tier-bridging), secrets-egress probes.
+- **ALDO AI-authored suite**: exfiltration via tool args, privilege-escalation via sub-agent spawn, cross-agent context poisoning (tier-bridging), secrets-egress probes.
 
 Corpus is a versioned dataset like any other (`dataset/redteam-core@2.3.0`), refreshed quarterly.
 
@@ -125,7 +125,7 @@ Exit codes are CI-friendly. `--baseline` defaults to the currently-promoted vers
 
 ## 7. Recommendation
 
-**Adopt Inspect (UK AISI) as the harness foundation** — OSS, Python-native, provider-agnostic, first-class trajectory support, already bridges external agents (Claude Code / Codex / Gemini CLI) which matches Meridian's sub-agent model. **Wrap with promptfoo** for YAML-declarative prompt matrices and its red-team plugins. **Adversarial corpus = Garak + PyRIT + promptfoo red-team + Meridian-authored**. **Store results and traces in self-hosted Langfuse** (MIT, datasets + scores + traces in one place) so sensitive-tier runs never leave our infra. Skip LangSmith/Braintrust as foundations (lock-in, SaaS-first); watch-list Braintrust for merge-blocking analytics. Vendor DeepEval metrics (PlanQuality, PlanAdherence) where Inspect lacks.
+**Adopt Inspect (UK AISI) as the harness foundation** — OSS, Python-native, provider-agnostic, first-class trajectory support, already bridges external agents (Claude Code / Codex / Gemini CLI) which matches ALDO AI's sub-agent model. **Wrap with promptfoo** for YAML-declarative prompt matrices and its red-team plugins. **Adversarial corpus = Garak + PyRIT + promptfoo red-team + ALDO AI-authored**. **Store results and traces in self-hosted Langfuse** (MIT, datasets + scores + traces in one place) so sensitive-tier runs never leave our infra. Skip LangSmith/Braintrust as foundations (lock-in, SaaS-first); watch-list Braintrust for merge-blocking analytics. Vendor DeepEval metrics (PlanQuality, PlanAdherence) where Inspect lacks.
 
 ---
 

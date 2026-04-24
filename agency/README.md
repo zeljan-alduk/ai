@@ -1,7 +1,7 @@
-# Meridian Labs Reference Agency
+# ALDO TECH LABS Reference Agency
 
 This directory holds the reference set of agent specifications shipped with
-Meridian. Every file under `direction/`, `delivery/`, `support/`, and `meta/`
+ALDO AI. Every file under `direction/`, `delivery/`, `support/`, and `meta/`
 conforms to the `meridian/agent.v1` schema defined in
 [`docs/adr/0001-agent-spec-and-engine-interfaces.md`](../docs/adr/0001-agent-spec-and-engine-interfaces.md).
 
