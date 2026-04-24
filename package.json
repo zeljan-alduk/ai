@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Meridian — LLM-agnostic AI sub-agent orchestrator",
-  "license": "Apache-2.0",
+  "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@9.12.0",
   "engines": {
     "node": ">=22.0.0"

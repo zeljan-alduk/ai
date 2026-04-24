@@ -190,3 +190,18 @@ Actions minutes, ghcr.io, CodeQL, etc.) and flags the opt-in OSS
 programs worth applying to (Vercel OSS, Sentry for OSS, Cloudflare
 Project Galileo, etc.) — noting FSL-1.1-ALv2 is not OSI-approved but
 typically accepted.
+
+[2026-04-24 22:10 UTC] principal — wave 3 launching
+Goal of wave 3: first end-to-end run. Specifically — `meridian run agent
+<spec> --inputs ...` invokes the engine, which calls the gateway, which
+hits a real provider (Groq for free + Ollama for local), with Postgres
+persistence so the run can be replayed, and at least one first-party
+MCP server (meridian-fs) so the agent can actually do something useful.
+Spawning three engineers in parallel — A (CLI run wiring), B (Postgres
+registry+checkpointer+migrations), C (meridian-fs MCP). Plus five
+researchers in the background to finish the wave-1 backlog: security
+threat model, sandboxing landscape, memory systems, engine landscape,
+competitive analysis. Tighter prompts this time to avoid the timeouts.
+Prep landed: package.json license -> SEE LICENSE IN LICENSE (FSL is
+not SPDX-recognised), .env.example added documenting all provider
+keys + local backends + Postgres + S3 + OTEL knobs.
