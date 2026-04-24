@@ -1,0 +1,85 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: finance-ops
+  version: 0.1.0
+  description: Tracks spend across providers, enforces budgets, and raises cost signals before they become bills.
+  owner: support-team@meridian-labs
+  tags: [support, finance, cost]
+
+role:
+  team: support
+  reports_to: principal
+  pattern: subscribe
+
+model_policy:
+  capability_requirements: [tool-use, 32k-context, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: fast-draft
+  fallbacks:
+    - capability_class: reasoning-small
+  budget:
+    usd_per_run: 0.05
+    tokens_in_max: 32000
+    tokens_out_max: 2000
+  latency:
+    p95_ms: 15000
+  decoding:
+    mode: json
+    temperature: 0.0
+    json_schema_ref: "#/outputs/cost_report"
+
+prompt:
+  system_file: prompts/finance-ops.system.md
+  variables:
+    budgets: org.finance.budgets
+    provider_rates: org.finance.provider_rates
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readonly
+
+memory:
+  read:  [private, org]
+  write: [private, org]
+  retention:
+    private: 365d
+    org: 730d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: burn.projected_monthly > budget * 1.1
+      to: principal
+    - condition: provider.anomaly_detected == true
+      to: infra-engineer
+
+subscriptions:
+  - event: billing.usage_tick
+  - event: run.completed
+    filter: "cost_usd > 1.0"
+
+inputs:
+  schema_ref: schemas/cost_event.json
+
+outputs:
+  cost_report:
+    json_schema_ref: schemas/cost_report.json
+
+eval_gate:
+  required_suites:
+    - suite: cost_accounting_v2
+      min_score: 0.95
+    - suite: anomaly_detection_v1
+      min_score: 0.85
+  must_pass_before_promote: true

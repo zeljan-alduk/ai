@@ -23,17 +23,14 @@ describe('pipeline node', () => {
 
     // Each agent echoes its input back with its own name appended.
     const order: string[] = [];
-    const gateway = new MockGateway((req) => {
+    const gateway = new MockGateway((req, ctx) => {
       const last = req.messages[req.messages.length - 1];
       const text =
         last && last.content[0] && 'text' in last.content[0]
           ? (last.content[0] as { text: string }).text
           : '';
-      const agent = req.messages[0]?.content[0];
-      const sys =
-        agent && 'text' in agent ? (agent as { text: string }).text.slice(10, 11) : '?';
-      order.push(sys);
-      return textCompletion(`${text}->${sys}`);
+      order.push(ctx.agentName);
+      return textCompletion(`${text}->${ctx.agentName}`);
     });
 
     const rt = new PlatformRuntime({
@@ -69,18 +66,19 @@ describe('parallel node — first', () => {
     registry.add(makeSpec({ name: 'fast' }));
     registry.add(makeSpec({ name: 'slow' }));
 
-    const gateway = new MockGateway((req) => {
-      const sys = req.messages[0]?.content[0];
-      const name = sys && 'text' in sys ? (sys as { text: string }).text : '';
-      if (name.includes('fast')) return textCompletion('fast-done');
+    const gateway = new MockGateway((_req, ctx) => {
+      if (ctx.agentName === 'fast') return textCompletion('fast-done');
       // 'slow' never completes on its own; must be cancelled.
+      const signal = (ctx as unknown as { signal?: AbortSignal }).signal;
       return (async function* () {
         await new Promise<void>((resolve, reject) => {
-          const signal = (req as unknown as { signal?: AbortSignal }).signal;
-          void signal;
-          // long wait; relies on cancel from the orchestrator
           const t = setTimeout(resolve, 2_000);
           t.unref?.();
+          signal?.addEventListener(
+            'abort',
+            () => reject(signal.reason ?? new Error('aborted')),
+            { once: true },
+          );
         });
         yield* textCompletion('slow-done');
       })();

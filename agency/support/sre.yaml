@@ -1,0 +1,90 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: sre
+  version: 0.1.0
+  description: Keeps production up, owns incident response, and pushes reliability work back into the delivery teams.
+  owner: support-team@meridian-labs
+  tags: [support, sre, reliability]
+
+role:
+  team: support
+  reports_to: infra-engineer
+  pattern: subscribe
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.80
+    tokens_in_max: 150000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 30000
+  decoding:
+    mode: json
+    temperature: 0.1
+    json_schema_ref: "#/outputs/incident_update"
+
+prompt:
+  system_file: prompts/sre.system.md
+  variables:
+    runbooks: project.sre.runbooks
+    error_budget: project.sre.error_budget
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-shell
+      allow: [shell.exec]
+    - server: meridian-memory
+      allow: [memory.read, memory.write, memory.scan]
+    - server: github
+      allow: [issue.read, issue.write, pr.read]
+  permissions:
+    network: egress-allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, project]
+  write: [private, project]
+  retention:
+    private: 180d
+    project: 730d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: incident.severity == "sev1"
+      to: principal
+    - condition: error_budget.exhausted == true
+      to: architect
+
+subscriptions:
+  - event: incident.opened
+  - event: incident.updated
+  - event: alert.firing
+    filter: "severity >= warn"
+
+inputs:
+  schema_ref: schemas/incident_event.json
+
+outputs:
+  incident_update:
+    json_schema_ref: schemas/incident_update.json
+
+eval_gate:
+  required_suites:
+    - suite: incident_triage_v2
+      min_score: 0.85
+    - suite: postmortem_quality_v1
+      min_score: 0.80
+  must_pass_before_promote: true

@@ -1,0 +1,83 @@
+apiVersion: meridian/agent.v1
+kind: Agent
+
+identity:
+  name: legal-compliance
+  version: 0.1.0
+  description: Reviews changes, contracts, and data flows against the compliance regime and flags risk to humans.
+  owner: support-team@meridian-labs
+  tags: [support, legal, compliance]
+
+role:
+  team: support
+  reports_to: principal
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-large
+  fallbacks:
+    - capability_class: reasoning-medium
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 1.00
+    tokens_in_max: 200000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 120000
+  decoding:
+    mode: json
+    temperature: 0.1
+    json_schema_ref: "#/outputs/compliance_review"
+
+prompt:
+  system_file: prompts/legal-compliance.system.md
+  variables:
+    regime: org.compliance.regime
+    data_residency: org.compliance.data_residency
+
+tools:
+  mcp:
+    - server: meridian-fs
+      allow: [fs.read, fs.write]
+    - server: meridian-memory
+      allow: [memory.read, memory.write]
+    - server: repo-fs
+      allow: [fs.read]
+  permissions:
+    network: none
+    filesystem: repo-readonly
+
+memory:
+  read:  [private, org, project]
+  write: [private, org]
+  retention:
+    private: 730d
+    org: 2555d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: risk.category == "regulatory"
+      to: principal
+    - condition: human_review.required == true
+      to: principal
+
+inputs:
+  schema_ref: schemas/compliance_target.json
+
+outputs:
+  compliance_review:
+    json_schema_ref: schemas/compliance_review.json
+
+eval_gate:
+  required_suites:
+    - suite: compliance_recall_v1
+      min_score: 0.92
+    - suite: jurisdiction_accuracy_v1
+      min_score: 0.90
+  must_pass_before_promote: true

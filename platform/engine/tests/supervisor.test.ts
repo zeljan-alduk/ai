@@ -26,16 +26,14 @@ describe('supervisor node', () => {
 
     let inflight = 0;
     let peak = 0;
-    const gateway = new MockGateway(async function* (req) {
+    const gateway = new MockGateway(async function* (_req, ctx) {
       inflight++;
       peak = Math.max(peak, inflight);
       // Tiny delay so we can observe parallelism.
       await new Promise((r) => setTimeout(r, 15));
       inflight--;
-      const sys = req.messages[0]?.content[0];
-      const name = sys && 'text' in sys ? (sys as { text: string }).text : '';
       // Return a tag that identifies the worker.
-      const tag = name.includes('w1') ? 'r1' : name.includes('w2') ? 'r2' : name.includes('w3') ? 'r3' : 'lead';
+      const tag = ctx.agentName === 'w1' ? 'r1' : ctx.agentName === 'w2' ? 'r2' : ctx.agentName === 'w3' ? 'r3' : 'lead';
       yield* textCompletion(tag);
     });
 

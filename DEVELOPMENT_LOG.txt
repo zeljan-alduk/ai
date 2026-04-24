@@ -80,3 +80,20 @@ value of gen_ai.system. Gap for next engineer: PostgresSpanExporter is
 a shape-only stub — needs a real writer (Neon serverless preferred)
 plus an OTEL SpanProcessor bridge so finished spans flow into the
 table defined in exporter-postgres.ts. Langfuse exporter deferred.
+
+[2026-04-24 21:15 UTC] backend@cli-engineer — apps/cli v0 scaffold
+Shipped @meridian/cli (the `meridian` binary) with commander-driven argv
+parsing and an injectable CliIO so tests can drive `main(argv)` and
+capture stdout/stderr. Real commands: `init`, `agent new`, `agent
+validate`, `agent ls`. Stubs that exit 2 and point to
+docs/deploy/free-tier-dev.md: `run`, `runs ls`, `runs view`, `models ls`,
+`mcp ls`, `dev`. `--json` is wired on validate / ls / init / run / dev.
+SIGINT prints `(interrupted)` and exits 130. 23 files, 16 vitest tests
+pass; tsc strict + biome clean. `bun build --compile` script wired but
+not run. Registry integration goes through `src/registry-adapter.ts`:
+the registry has no root `index.ts` yet, so the adapter dynamic-imports
+`@meridian/registry/src/validator.js` via a runtime-assembled specifier
+and falls back to a bootable stub. Tests inject a fake RegistryLike via
+`setRegistry`. Assumed public surface: `validate(yaml: string):
+ValidationResult` — matches @meridian/types. When the registry ships a
+root export, swap the specifier; no call sites change.
