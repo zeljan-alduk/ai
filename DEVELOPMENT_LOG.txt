@@ -124,3 +124,34 @@ systemFile from disk (synthesises a minimal prompt from identity only);
 TODO(v1) once the registry exposes a resolved-prompt field. (3) The
 ModelDescriptor's id+provider is round-trip-stable enough that a
 resume-with-override can re-request the same model deterministically.
+
+[2026-04-24 21:40 UTC] tech-writer — reference agency committed
+Wrote the initial 26-agent reference set under agency/: 4 direction, 7
+delivery, 11 support, 4 meta, each with a meridian/agent.v1 YAML and a
+companion prompts/<name>.system.md. All specs parse, all required top-
+level keys present, every prompt file referenced exists on disk. Kept
+the specs LLM-agnostic via capability_class (reasoning-large / medium /
+small / local-reasoning / fast-draft); every sensitive-tier agent carries
+a local-reasoning fallback so on-prem tenants can stay on-prem. Eval
+gates and budgets drafted per role — numbers are first-pass and will
+tighten once the harness lands. Reporting lines form a single tree with
+principal at the root; only supervisors (principal, architect, tech-lead,
+hr) spawn; reviewers and auditors never spawn.
+
+[2026-04-24 21:18 UTC] backend@gateway-engineer — platform/gateway v0
+Shipped @meridian/gateway: capability-class router + adapter registry +
+provider-agnostic ModelGateway. 21 files, 20 vitest tests (router,
+pricing, registry, end-to-end via mock adapter); tsc strict + biome
+clean. Real adapter code for openai-compat (covers OpenAI/Ollama/vLLM/
+llama.cpp/LM Studio/Groq/OpenRouter/TGI), native Anthropic (tool_use
+SSE), native Gemini (functionCall SSE); xai piggy-backs on openai-compat;
+bedrock is a typed stub. Chose hand-rolled fetch over provider SDKs —
+ADR 0002 agrees. Constrained-decoding helpers emit response_format +
+guided_json/guided_grammar; JSON-Schema→GBNF compiler is a TODO(v1).
+One cross-package design call worth flagging: RegisteredModel extends
+ModelDescriptor with a `providerKind` tag that lives in this package
+only, not in @meridian/types. Router dispatch uses this string to look
+up adapters, keeping the types package free of any provider enum.
+Callers passing hydrated ModelDescriptors from other packages will need
+to carry providerKind + providerConfig alongside (or rely on the gateway's
+own registry for dispatch).
