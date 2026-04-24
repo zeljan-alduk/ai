@@ -1,0 +1,105 @@
+import type { Capability, CapabilityClass } from './capabilities.js';
+import type { PrivacyTier } from './privacy.js';
+import type { Budget } from './budget.js';
+
+export type AgentPattern = 'supervisor' | 'worker' | 'pipeline' | 'debate' | 'subscribe';
+
+export interface AgentIdentity {
+  readonly name: string;
+  readonly version: string; // semver
+  readonly description: string;
+  readonly owner: string;
+  readonly tags: readonly string[];
+}
+
+export interface AgentRole {
+  readonly team: string;
+  readonly reportsTo?: string;
+  readonly pattern: AgentPattern;
+}
+
+export interface ModelPolicy {
+  readonly capabilityRequirements: readonly Capability[];
+  readonly privacyTier: PrivacyTier;
+  readonly primary: { readonly capabilityClass: CapabilityClass };
+  readonly fallbacks: readonly { readonly capabilityClass: CapabilityClass }[];
+  readonly budget: Budget;
+  readonly decoding: {
+    readonly mode: 'free' | 'json' | 'constrained';
+    readonly temperature?: number;
+    readonly jsonSchemaRef?: string;
+  };
+}
+
+export interface PromptConfig {
+  readonly systemFile: string;
+  readonly templates?: Readonly<Record<string, string>>;
+  readonly variables?: Readonly<Record<string, string>>;
+}
+
+export type ToolPermission = 'none' | 'repo-readonly' | 'repo-readwrite' | 'full';
+
+export interface ToolsConfig {
+  readonly mcp: readonly {
+    readonly server: string;
+    readonly allow: readonly string[];
+  }[];
+  readonly native: readonly { readonly ref: string }[];
+  readonly permissions: {
+    readonly network: 'none' | 'allowlist' | 'full';
+    readonly filesystem: ToolPermission;
+  };
+}
+
+export type MemoryScope = 'private' | 'project' | 'org' | 'session';
+
+export interface MemoryPolicy {
+  readonly read: readonly MemoryScope[];
+  readonly write: readonly MemoryScope[];
+  readonly retention: Readonly<Partial<Record<MemoryScope, string>>>;
+}
+
+export interface SpawnPolicy {
+  readonly allowed: readonly string[];
+}
+
+export interface EscalationRule {
+  readonly condition: string;
+  readonly to: string;
+}
+
+export interface Subscription {
+  readonly event: string;
+  readonly filter?: string;
+}
+
+export interface EvalGate {
+  readonly requiredSuites: readonly {
+    readonly suite: string;
+    readonly minScore: number;
+  }[];
+  readonly mustPassBeforePromote: boolean;
+}
+
+/** A fully-parsed agent spec (agent.v1). */
+export interface AgentSpec {
+  readonly apiVersion: 'meridian/agent.v1';
+  readonly kind: 'Agent';
+  readonly identity: AgentIdentity;
+  readonly role: AgentRole;
+  readonly modelPolicy: ModelPolicy;
+  readonly prompt: PromptConfig;
+  readonly tools: ToolsConfig;
+  readonly memory: MemoryPolicy;
+  readonly spawn: SpawnPolicy;
+  readonly escalation: readonly EscalationRule[];
+  readonly subscriptions: readonly Subscription[];
+  readonly inputs?: { readonly schemaRef: string };
+  readonly outputs?: Readonly<Record<string, { readonly jsonSchema: unknown }>>;
+  readonly evalGate: EvalGate;
+}
+
+export interface AgentRef {
+  readonly name: string;
+  readonly version?: string; // undefined = latest promoted
+}

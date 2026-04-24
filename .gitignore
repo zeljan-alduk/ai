@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+.cache/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+.vercel
+.fly/
+*.tsbuildinfo
+.vitest-cache/

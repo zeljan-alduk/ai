@@ -1,0 +1,53 @@
+Meridian — development log
+==========================
+
+A chronological, append-only stream of decisions, hand-offs, and "why we
+did it this way" notes. Every agent (human or sub-agent) that does real
+work on the repo appends a short entry. One log, many voices. Newest at
+the bottom.
+
+Format for each entry:
+  [YYYY-MM-DD HH:MM TZ] <role@agent-name> — <one-line summary>
+  <1-6 lines of context / decision / hand-off>
+
+----------------------------------------------------------------------
+
+[2026-04-24 20:40 UTC] principal@meridian-labs — repo scaffolding + ADRs 0001, 0002
+Branched claude/ai-agent-orchestrator-hAmzy. Laid down CLAUDE.md with the
+non-negotiables (LLM-agnostic, local-first, privacy tiers, agents-as-data,
+replay). Wrote ADR 0001 (agent.v1 spec + engine interfaces) and ADR 0002
+(tech stack: TypeScript on Bun, Postgres+pgvector, OTEL→Langfuse, native
+provider SDKs, not LiteLLM). Wrote docs/deploy/free-tier-dev.md so the
+whole stack boots on free tiers (Vercel + Fly.io + Neon + R2 + Upstash
++ E2B + Gemini/Groq/Ollama).
+
+[2026-04-24 20:53 UTC] wave1 — delegated research across 3 agents
+Spawned architect (Plan), gateway-researcher (Explore), engine-researcher.
+Architect returned inline (read-only). Gateway-researcher delivered
+gateway-landscape.md. Engine-researcher timed out mid-web-search — no
+file. To be re-run with a tighter prompt, but ADR 0002 already commits
+the engine direction so this is lower priority.
+
+[2026-04-24 20:55 UTC] wave1b — spawned 10 parallel employees
+Product, security, infra, memory, mcp, observability, eval, ux, finance-ops,
+devrel. Six landed docs (product/vision, research/mcp-ecosystem,
+research/eval-harnesses, research/observability, design/control-plane-ux,
+design/cost-and-budgets). Four timed out on long web-research runs
+(security, infra, memory, devrel). Partials only.
+
+[2026-04-24 21:10 UTC] principal — tech stack call + free-tier playbook
+User pushed back that tech-stack should be my decision, not delegated.
+Committed ADR 0002 directly: TS on Bun end-to-end, Python only for the
+eval harness (wrapped as an MCP server). Free-tier playbook committed.
+
+[2026-04-24 21:14 UTC] principal — first push to origin
+Commits a31e748 and 8a1c410 on claude/ai-agent-orchestrator-hAmzy.
+11 + 2 files, ~1500 lines of design.
+
+[2026-04-24 21:18 UTC] principal — starting wave 2 (engineering)
+Scaffolded monorepo root (package.json, pnpm-workspace.yaml,
+tsconfig.base.json, biome.json, .gitignore). Began platform/types —
+the single source of truth for cross-package contracts, drawn from
+ADR 0001. Packages to follow: registry, gateway, engine, observability,
+and apps/cli. Will spawn one engineer per package in parallel so they
+don't step on each other.

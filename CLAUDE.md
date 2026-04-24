@@ -27,6 +27,13 @@
 
 See README.md.
 
+## Append to DEVELOPMENT_LOG.txt
+
+Every agent doing work on the repo appends a short entry to
+`DEVELOPMENT_LOG.txt` at the end of its turn: timestamp, role, one-line
+summary, and 1–6 lines of context. Newest at the bottom. Do not rewrite
+or reorder prior entries.
+
 ## Reference agency
 
 `agency/` contains the dogfood organization (principal, architect,
