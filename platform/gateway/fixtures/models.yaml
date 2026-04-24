@@ -126,6 +126,53 @@ models:
     providerConfig:
       apiKeyEnv: GOOGLE_API_KEY
 
+  # --- Groq (free-tier-friendly, OpenAI-compatible) ---------------------
+  - id: groq.llama-3.3-70b-versatile
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - parallel-tool-calls
+      - streaming
+      - reasoning
+      - structured-output
+      - json-mode
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 1500
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://api.groq.com/openai/v1
+      apiKeyEnv: GROQ_API_KEY
+
+  - id: groq.llama-3.1-8b-instant
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: fast-draft
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+      - json-mode
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 800
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://api.groq.com/openai/v1
+      apiKeyEnv: GROQ_API_KEY
+
   # --- Local (Ollama) ---------------------------------------------------
   - id: qwen2.5-coder:32b
     provider: ollama
@@ -150,6 +197,48 @@ models:
       baseUrl: http://localhost:11434/v1
       extra:
         note: "Ollama forwards grammar/response_format to llama.cpp"
+
+  - id: ollama.qwen2.5-coder:32b
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - code-fim
+      - constrained-decoding
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 12000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1
+
+  - id: ollama.qwen2.5:7b
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: fast-draft
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 5000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1
 
   # --- Local (vLLM) -----------------------------------------------------
   - id: llama-3.3-70b

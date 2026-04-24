@@ -207,3 +207,23 @@ not SPDX-recognised), .env.example added documenting all provider
 keys + local backends + Postgres + S3 + OTEL knobs.
 2026-04-24T22:15:56Z | security-auditor | wrote security-and-privacy.md design doc
   Covered threat model, privacy-tier enforcement, prompt-injection defenses, secrets, multi-tenancy, supply chain, top-10 red-team list, open ADR questions.
+2026-04-24T22:16:09Z memory-researcher: drafted docs/research/memory-systems.md (v0.1: pgvector in Neon, four scopes, blackboard via LISTEN/NOTIFY, capability-routed embeddings).
+
+2026-04-24 | infra-researcher | sandboxing landscape doc
+Wrote docs/research/sandboxing.md comparing Docker/Podman/gVisor/Firecracker/Kata/nsjail/WASM/V8/E2B/Daytona/Modal/Cloudflare Sandbox.
+v0.1 stack: Podman + wasmtime (T1) + Firecracker/gVisor (T2) + Kata (T3) + Cilium/Tetragon + mitmproxy egress.
+Replay = Firecracker UFFD snapshots for VMs, wizer for WASM.
+Local dev = rootless Podman + optional Firecracker jailer, no k8s.
+Status: proposed; 6 open questions logged.
+
+2026-04-24T00:00:00Z devrel: wrote docs/product/competitive-analysis.md (competitive landscape across frameworks, coders, low-code, managed platforms, infra; feature matrix, wedge, risks, open questions; status proposed).
+
+[2026-04-24 UTC] engine-researcher — wrote docs/research/engine-landscape.md
+Compared LangGraph, CrewAI, AutoGen v0.4, OpenAI Agents SDK, Semantic
+Kernel, smolagents, Temporal/Restate, Inngest/Trigger.dev, Pydantic-AI,
+Mastra. Pattern matrix shows no framework natively covers all six
+patterns and none enforce privacy tiers. Confirmed ADR 0002: build
+custom engine on TS+Bun+Postgres-checkpointer; Mastra closest fit but
+still leaves gateway/privacy/eval to us. Defer Temporal adapter to ADR
+0003. Build: graph exec, checkpointer, HITL store. Buy: scheduler
+(graphile-worker/pg-boss), OTEL, Langfuse v0. Status: proposed.

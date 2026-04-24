@@ -19,8 +19,12 @@
     "build:bin": "bun build ./src/index.ts --compile --target=bun --outfile dist/meridian"
   },
   "dependencies": {
-    "@meridian/types": "workspace:*",
+    "@meridian/engine": "workspace:*",
+    "@meridian/gateway": "workspace:*",
+    "@meridian/observability": "workspace:*",
     "@meridian/registry": "workspace:*",
+    "@meridian/runtime-config": "workspace:*",
+    "@meridian/types": "workspace:*",
     "commander": "^12.1.0",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"

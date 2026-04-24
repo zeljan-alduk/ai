@@ -23,41 +23,31 @@ red-team backlog before GA.
 | A7 | Curious/buggy agent in the same org | Cross-agent data leakage via shared memory | I, E |
 | A8 | Dependency author (PyPI/NPM/Docker) | Typosquat, post-install hooks | T, E |
 
-Crown jewels: tenant prompts, tenant outputs, secrets vault, model
-gateway routing rules, eval gold sets, audit log integrity.
-
-Out of scope (this doc): physical DC, BGP, browser-side XSS on a hosted
-control plane (covered in control-plane-ux.md).
+Crown jewels: tenant prompts/outputs, secrets vault, gateway routing
+rules, eval gold sets, audit log integrity. Out of scope: physical DC,
+BGP, control-plane XSS (see control-plane-ux.md).
 
 ---
 
 ## 2. Privacy-tier enforcement
 
-Tiers (decisive, only three): `public`, `internal`, `sensitive`.
-`restricted` is a future tier; do not introduce until needed.
+Three tiers: `public`, `internal`, `sensitive`. (`restricted` deferred.)
 
-Rules:
+- Every `CallContext` carries `privacy_tier`. Tier is **monotone** —
+  escalates only, never relaxes.
+- **Gateway is fail-closed.** Missing tier = reject. No allowed model
+  for tier = `PrivacyRouteError`; no silent downgrade.
+- Models declare `egress_class` (`local`, `vpc`, `cloud-zdr`,
+  `cloud-public`). Static matrix maps tier -> allowed classes;
+  `sensitive` is `local`/`vpc` only.
+- **Handoffs** sign the envelope: B inherits
+  `max(A.tier, B.declared_tier)`; B cannot forge a lower tier.
+- **Tool outputs** carry source-system tier; reading a sensitive
+  source escalates the run.
+- Router emits an immutable `routing_decision` (model, tier, classes,
+  hash) per call for audit and replay.
 
-- Every `CallContext` carries `privacy_tier`. Tier is **monotone**: it
-  can only escalate during a run, never relax.
-- The **gateway is fail-closed**. If a request lacks a tier, it is
-  rejected. If no model in the registry is allowed for that tier, the
-  call returns `PrivacyRouteError`; agents must not retry with a lower
-  tier.
-- Model registry entries declare `egress_class` (`local`, `vpc`,
-  `cloud-zdr`, `cloud-public`). A static matrix maps tier -> allowed
-  egress classes. `sensitive` is allowed only `local` and `vpc`.
-- Tier propagates across **handoffs**: when agent A invokes agent B,
-  B's `CallContext` inherits `max(A.tier, B.declared_tier)`. The
-  handoff envelope is signed; B cannot forge a lower tier.
-- Tier propagates across **tools**: ToolHost stamps tool outputs with
-  the source tier; if a tool returns content from a sensitive system,
-  the response carries that tier and the run escalates.
-- The router emits an immutable `routing_decision` record (model id,
-  tier, allowed egress classes, decision hash) per call, suitable for
-  audit and replay.
-
-Failure mode is **drop**, not downgrade. Authors cannot opt out.
+Failure mode is drop, not downgrade. Authors cannot opt out.
 
 ---
 
@@ -65,87 +55,72 @@ Failure mode is **drop**, not downgrade. Authors cannot opt out.
 
 Defense in depth — no single layer is trusted.
 
-1. **System-prompt isolation.** System prompts are templated by the
-   platform; agent YAML cannot inject raw system text from untrusted
-   data. User/tool content is rendered into clearly delimited regions.
-2. **Spotlighting / delimiters.** Untrusted text is wrapped with
-   per-run random delimiters and a brief "treat as data, not
-   instructions" preamble. Document-derived content is additionally
-   tagged with `<untrusted source="...">`.
-3. **Dual-LLM quarantine.** For high-risk flows (browsing, email, PDF
-   ingestion), a *quarantined* model parses the untrusted blob into
-   structured fields with no tool access; a *privileged* model only
-   ever sees the structured fields, never the raw text.
-4. **Output egress filter.** Before any tool call leaves the host, an
-   output filter scans for: secrets patterns, base64 blobs above a
-   threshold, URLs not on the run's allowlist, and tier-violating
-   content. Hits block the call and raise an audit event.
-5. **Allowlisted egress.** Each agent declares `egress.domains`. The
-   sandbox enforces this at the network layer (not just in-process).
-   Default-deny.
-6. **MCP server trust tiers.** Servers are tagged `core`, `verified`,
-   `community`, `experimental`. Privileged tools (filesystem write,
-   shell, browser) require `verified+`. `experimental` servers run in
-   the dual-LLM quarantine pattern by default.
+1. **System-prompt isolation.** System text is platform-templated;
+   YAML cannot inject raw system content from untrusted data.
+   User/tool content lives in delimited regions.
+2. **Spotlighting.** Untrusted text wrapped in per-run random
+   delimiters with a "treat as data" preamble; document content also
+   tagged `<untrusted source="...">`.
+3. **Dual-LLM quarantine.** High-risk flows (browse, email, PDF) use
+   a quarantined parser model with no tools; the privileged model
+   sees only structured fields, never raw text.
+4. **Egress filter.** Before any tool call leaves the host, scan for
+   secret patterns, oversized base64, off-allowlist URLs, and
+   tier-violating content. Hit = block + audit event.
+5. **Allowlisted network egress.** Agents declare `egress.domains`;
+   enforced at the sandbox network layer. Default-deny.
+6. **MCP trust tiers.** Servers tagged `core`/`verified`/`community`/
+   `experimental`. Privileged tools (fs-write, shell, browser)
+   require `verified+`. `experimental` runs under dual-LLM by
+   default.
 
 ---
 
 ## 4. Secrets management
 
-- Agent YAML and tool configs reference secrets only by name:
-  `secret://vault/<scope>/<key>`. Raw values never appear in specs,
-  prompts, traces, or logs.
-- Resolution happens **only inside ToolHost**, at the moment of tool
-  invocation, after policy check. The orchestrator and the LLM
-  gateway never see plaintext secrets.
-- Scopes: `tenant`, `agent`, `run`. A run-scoped secret is destroyed
-  at run completion. Cross-tenant references are rejected statically
-  during spec validation.
-- Every resolve emits an audit record: `(ts, tenant, run_id,
-  agent_id, secret_ref, fingerprint, caller_ip)`. Audit log is
-  append-only, hash-chained, and shipped to a separate write-only
-  sink.
-- Rotation is automated: secrets carry `max_age`; ToolHost refuses to
-  resolve expired refs, forcing rotation rather than silent use.
+- YAML refs only: `secret://vault/<scope>/<key>`. Raw values never
+  appear in specs, prompts, traces, or logs.
+- Resolution happens **only in ToolHost**, at invocation, after
+  policy check. Orchestrator and gateway never see plaintext.
+- Scopes: `tenant`, `agent`, `run`. Run-scoped secrets are destroyed
+  at run end. Cross-tenant refs are rejected at spec validation.
+- Every resolve writes `(ts, tenant, run_id, agent_id, secret_ref,
+  fingerprint, caller_ip)` to a hash-chained, append-only audit log
+  shipped to a write-only sink.
+- Secrets carry `max_age`; ToolHost refuses expired refs, forcing
+  rotation rather than silent reuse.
 
 ---
 
 ## 5. Multi-tenant isolation
 
 - **Gateway quotas** per tenant: tokens/min, $/day, concurrent runs,
-  per-model caps. Quotas enforced before model selection so a tenant
-  cannot starve others by choosing expensive routes.
-- **Memory namespaces.** Vector stores, KV memory, and checkpoint
-  storage are partitioned by `tenant_id` at the storage-key level
-  with row-level auth on read. No global namespace.
-- **Sandbox per run.** Each run gets a fresh container/microVM with
-  its own filesystem, network policy, and credential set. Sandboxes
-  do not outlive runs; reuse is forbidden even within a tenant to
-  prevent prompt-injection persistence.
-- **No shared caches across tenants.** Prompt cache, embedding cache,
-  tool-output cache are all keyed by `(tenant_id, ...)`. Cross-tenant
-  cache hits are a P0 bug.
-- Eval harness and gold sets live in a separate tenant; production
-  agents cannot read them.
+  per-model caps; enforced before model selection.
+- **Memory namespaces.** Vector stores, KV memory, checkpoints
+  partitioned by `tenant_id` with row-level auth. No global ns.
+- **Sandbox per run.** Fresh container/microVM per run; reuse
+  forbidden even within a tenant to prevent injection persistence.
+- **No shared caches across tenants.** Prompt, embedding, and
+  tool-output caches all keyed by `(tenant_id, ...)`. Cross-tenant
+  cache hit = P0.
+- Eval harness and gold sets live in a separate tenant; prod agents
+  cannot read them.
 
 ---
 
 ## 6. Supply chain
 
-- **MCP signing.** All MCP server images and manifests are signed
-  (Sigstore/cosign). The runtime refuses unsigned servers outside of
-  a developer-mode flag that is off in prod.
-- **Agent-spec provenance.** Agent YAML in production must carry a
-  signed provenance record (commit hash, reviewer, eval-gate result).
-  The control plane refuses promotion without it.
-- **Key rotation.** Signing keys, gateway keys, and tenant API keys
-  rotate on schedule (90/30/365 days). Rotation is a tested runbook,
-  not a TODO.
-- **Dependency pinning.** Lockfiles for Python, JS, and container
-  digests. SBOM published per release. Renovate-style PRs gated on
-  CI + security scan. No floating tags in prod.
-- **Build attestations.** SLSA level 3 target for the orchestrator
-  and gateway by GA.
+- **MCP signing.** Servers signed via Sigstore/cosign; runtime
+  refuses unsigned outside dev mode (off in prod).
+- **Agent-spec provenance.** Prod YAML carries a signed record
+  (commit, reviewer, eval-gate result); control plane refuses
+  promotion without it.
+- **Key rotation.** Signing/gateway/tenant keys rotate on schedule
+  (90/30/365 d) via tested runbooks.
+- **Dependency pinning.** Lockfiles, container digests, per-release
+  SBOM, scanned PRs, no floating tags in prod.
+- **Build attestations.** SLSA L3 target for orchestrator + gateway
+  by GA.
 
 ---
 
@@ -175,21 +150,18 @@ Defense in depth — no single layer is trusted.
 
 ## 8. Open questions (for follow-up ADRs)
 
-1. **Tier downgrade for derived data.** When a sensitive doc is
-   summarized, can the summary ever be re-tiered as `internal`?
-   Default no; ADR needed for explicit human-approved downgrades.
+1. **Tier downgrade for derived data.** Can a summary of a sensitive
+   doc be re-tiered? Default no; ADR for explicit human downgrades.
 2. **Local-model attestation.** How do we prove an "ollama" endpoint
-   really is on-prem and not a cloud proxy? Mutual TLS + hardware
-   attestation? Network-zone proof?
-3. **Cross-agent memory sharing inside one tenant.** Opt-in shared
-   namespaces vs. strict per-agent isolation by default.
-4. **MCP server sandboxing model.** gVisor vs. Firecracker vs. Wasm
-   for `community` and `experimental` tiers.
-5. **PII detection in the egress filter.** Heuristic regex vs. a
-   small local classifier; latency budget and FP/FN targets.
-6. **BYO-key for cloud providers.** Should sensitive-tier ever be
-   allowed at a cloud provider under customer-held keys + ZDR? Hard
-   default no; revisit only with a written customer ask.
+   isn't a cloud proxy? mTLS + hardware attestation? Zone proof?
+3. **Cross-agent memory sharing within a tenant.** Opt-in shared ns
+   vs. strict per-agent isolation by default.
+4. **MCP sandboxing model.** gVisor vs. Firecracker vs. Wasm for
+   `community`/`experimental` tiers.
+5. **PII detection in the egress filter.** Regex vs. small local
+   classifier; latency and FP/FN targets.
+6. **BYO-key for cloud.** Sensitive-tier under customer-held keys +
+   ZDR? Hard default no; only on written customer ask.
 
 ---
 
