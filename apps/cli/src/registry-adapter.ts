@@ -1,13 +1,13 @@
 /**
- * Thin adapter over `@meridian/registry` so commands can depend on a stable
+ * Thin adapter over `@aldo-ai/registry` so commands can depend on a stable
  * surface and tests can inject a mock via `setRegistry`.
  */
 
-import { validate as registryValidate } from '@meridian/registry';
-import type { ValidationResult } from '@meridian/types';
+import { validate as registryValidate } from '@aldo-ai/registry';
+import type { ValidationResult } from '@aldo-ai/types';
 
 export interface RegistryLike {
-  /** Validate YAML text. Returns a ValidationResult (see @meridian/types). */
+  /** Validate YAML text. Returns a ValidationResult (see @aldo-ai/types). */
   validate(yamlText: string): ValidationResult;
 }
 

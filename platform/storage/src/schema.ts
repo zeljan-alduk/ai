@@ -1,5 +1,5 @@
 /**
- * Drizzle ORM schema for the Meridian persistence layer.
+ * Drizzle ORM schema for the ALDO AI persistence layer.
  *
  * NOTE: the SQL of record lives in `migrations/001_init.sql`. This file
  * exists so callers (and future Drizzle-Kit codegen) can build typed

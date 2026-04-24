@@ -1,5 +1,5 @@
 /**
- * `meridian dev` — stub. Will boot the local gateway + engine + observability
+ * `aldo dev` — stub. Will boot the local gateway + engine + observability
  * for a fast inner loop. Today it just describes what it would start.
  */
 

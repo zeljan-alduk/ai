@@ -15,7 +15,7 @@ labels: ["bug"]
 exact invocation and the output. -->
 
 ```sh
-$ meridian agent validate ...
+$ aldo agent validate ...
 ```
 
 ## Expected vs. actual
@@ -29,7 +29,7 @@ $ meridian agent validate ...
 - Node version (`node -v`):
 - pnpm version (`pnpm -v`):
 - OS:
-- Affected package(s) (e.g. `@meridian/gateway`, `@meridian/engine`):
+- Affected package(s) (e.g. `@aldo-ai/gateway`, `@aldo-ai/engine`):
 - LLM provider, if any (e.g. Ollama 0.4 / Anthropic API / Groq):
 
 ## Logs / trace IDs

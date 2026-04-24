@@ -14,7 +14,7 @@
  *  - look up by (name, version) and by (name, latest-promoted).
  */
 
-import type { AgentSpec } from '@meridian/types';
+import type { AgentSpec } from '@aldo-ai/types';
 import { assertValid, compare, latest } from './semver.js';
 
 export interface StoredVersion {

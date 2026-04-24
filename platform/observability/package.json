@@ -1,5 +1,5 @@
 {
-  "name": "@meridian/observability",
+  "name": "@aldo-ai/observability",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@meridian/types": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/resources": "^1.26.0",
     "@opentelemetry/sdk-trace-node": "^1.26.0",

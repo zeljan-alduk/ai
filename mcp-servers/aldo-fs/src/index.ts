@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * meridian-mcp-fs — entry point.
+ * aldo-mcp-fs — entry point.
  *
- * Wires the meridian-fs MCP server up to a stdio transport, after
- * resolving the ACL roots from --roots / MERIDIAN_FS_ROOTS / --config.
+ * Wires the aldo-fs MCP server up to a stdio transport, after
+ * resolving the ACL roots from --roots / ALDO_FS_ROOTS / --config.
  *
  * No memory of prior sessions: this process loads the ACL once at
  * startup and never persists state across invocations.
@@ -33,11 +33,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
 function fatal(err: unknown): never {
   if (err instanceof FsError) {
-    process.stderr.write(`meridian-mcp-fs: ${err.code} ${err.message}\n`);
+    process.stderr.write(`aldo-mcp-fs: ${err.code} ${err.message}\n`);
   } else if (err instanceof Error) {
-    process.stderr.write(`meridian-mcp-fs: ${err.message}\n`);
+    process.stderr.write(`aldo-mcp-fs: ${err.message}\n`);
   } else {
-    process.stderr.write(`meridian-mcp-fs: ${String(err)}\n`);
+    process.stderr.write(`aldo-mcp-fs: ${String(err)}\n`);
   }
   process.exit(2);
 }

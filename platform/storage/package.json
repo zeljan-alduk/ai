@@ -1,5 +1,5 @@
 {
-  "name": "@meridian/storage",
+  "name": "@aldo-ai/storage",
   "version": "0.0.0",
   "private": true,
   "type": "module",

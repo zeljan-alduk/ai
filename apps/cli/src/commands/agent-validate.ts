@@ -1,7 +1,7 @@
 /**
- * `meridian agent validate <file>` — zod-validate an agent spec YAML.
+ * `aldo agent validate <file>` — zod-validate an agent spec YAML.
  *
- * Delegates to `@meridian/registry`'s `validate` via a small adapter so we
+ * Delegates to `@aldo-ai/registry`'s `validate` via a small adapter so we
  * can inject a mock during testing. Exit code: 0 on ok, 1 on any error.
  */
 

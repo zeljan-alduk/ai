@@ -13,7 +13,7 @@ Scope: tracing, evals, cost, replay, debugger UX for an LLM-agnostic sub-agent o
 
 **Anthropic / OpenAI native logs** — Per-account dashboards, `x-request-id` correlation. Fine for provider audit, useless as orchestration trace (no parents, no tool linkage, no cross-provider correlation).
 
-**Recommendation**: adopt **OTEL GenAI as the wire format** plus a `meridian.*` extension namespace for what OTEL doesn't cover (`meridian.run.id`, `meridian.node.id`, `meridian.checkpoint.id`, `meridian.replay.bundle_ref`, `meridian.policy.decision`, `meridian.memory.op`, `meridian.tenant.id`, `meridian.cost.usd`). Rationale: (a) any OTEL backend renders model calls for free; (b) we inherit OpenLLMetry/OpenInference instrumentation instead of writing provider hooks; (c) extensions are additive — a stable `gen_ai.*` doesn't break us; (d) bodies live in an object store, spans carry refs.
+**Recommendation**: adopt **OTEL GenAI as the wire format** plus a `aldo.*` extension namespace for what OTEL doesn't cover (`aldo.run.id`, `aldo.node.id`, `aldo.checkpoint.id`, `aldo.replay.bundle_ref`, `aldo.policy.decision`, `aldo.memory.op`, `aldo.tenant.id`, `aldo.cost.usd`). Rationale: (a) any OTEL backend renders model calls for free; (b) we inherit OpenLLMetry/OpenInference instrumentation instead of writing provider hooks; (c) extensions are additive — a stable `gen_ai.*` doesn't break us; (d) bodies live in an object store, spans carry refs.
 
 ## 2. Platform comparison
 
@@ -34,21 +34,21 @@ Scope: tracing, evals, cost, replay, debugger UX for an LLM-agnostic sub-agent o
 Span hierarchy (parent → child):
 
 ```
-run (meridian.run)
- └─ node (meridian.node — a graph/DAG node invocation)
+run (aldo.run)
+ └─ node (aldo.node — a graph/DAG node invocation)
      └─ agent.turn (gen_ai.operation.name=invoke_agent)
          ├─ model.call   (gen_ai.operation.name=chat | text_completion)
          ├─ tool.call    (gen_ai.operation.name=execute_tool)
-         ├─ memory.op    (meridian.memory.op = read | write | search)
-         └─ policy.check (meridian.policy.decision = allow | deny | mutate)
+         ├─ memory.op    (aldo.memory.op = read | write | search)
+         └─ policy.check (aldo.policy.decision = allow | deny | mutate)
 ```
 
 Attributes per span:
 
-- **run**: `meridian.run.id`, `tenant.id`, `project.id`, `agent.version`, `user.id_hash`, `env`, `entrypoint`, `privacy_tier`.
+- **run**: `aldo.run.id`, `tenant.id`, `project.id`, `agent.version`, `user.id_hash`, `env`, `entrypoint`, `privacy_tier`.
 - **node**: `node.id`, `node.type`, `input_ref`, `output_ref`, `checkpoint.id`.
 - **agent.turn**: `gen_ai.agent.name/id`, turn index, parent turn, delegation chain.
-- **model.call**: `gen_ai.system`, `request.model`, `response.model`, temperature/top_p/seed, token usage, finish reason, `response.id`, provider `x-request-id`, `meridian.cost.usd`, `prompt.ref`, `completion.ref` (object-store pointers; bodies are log events only when tier allows).
+- **model.call**: `gen_ai.system`, `request.model`, `response.model`, temperature/top_p/seed, token usage, finish reason, `response.id`, provider `x-request-id`, `aldo.cost.usd`, `prompt.ref`, `completion.ref` (object-store pointers; bodies are log events only when tier allows).
 - **tool.call**: `gen_ai.tool.name`, `tool.call.id`, `tool.version`, `args_ref`, `result_ref`, `deterministic` bool, latency, error.
 - **memory.op**: store, op, key hash, hit/miss, bytes, vector backend, k.
 - **policy.check**: rule id, decision, rationale ref, override actor.
@@ -71,7 +71,7 @@ Per checkpoint (emitted at every node boundary and before every tool call), a bu
 - `provider_request_ids` for cross-ref with native logs.
 - `hashes` per ref + merkle root for tamper detection.
 
-Replay contract: given bundle + target model, ALDO AI re-runs from `parent_checkpoint_id`, swapping the model, replaying tool outputs + memory reads, producing a new trace branch linked via `meridian.replay.source_run_id`.
+Replay contract: given bundle + target model, ALDO AI re-runs from `parent_checkpoint_id`, swapping the model, replaying tool outputs + memory reads, producing a new trace branch linked via `aldo.replay.source_run_id`.
 
 ## 5. Cost tracking
 
@@ -88,13 +88,13 @@ Backend requirements:
 1. **Durable resumable state** — checkpoint before every model/tool/memory call; resume from any checkpoint id; trace store indexes checkpoints and links to spans.
 2. **Pre-call suspension** — pause-before-tool-call / pause-before-model-call first-class: gateway blocks on a signal (Redis pub/sub or control-plane RPC); UI approves/modifies/rejects. Breakpoints = persisted predicates (`tool.name == "shell" && args.cmd ~= "rm "`).
 3. **Step-over / step-into** — step-over = run until next sibling closes; step-into = pause at first child. Requires live span streaming, not batch-at-end.
-4. **Edit-and-rerun** — load bundle at checkpoint, mutate messages, branch the run as a child with `meridian.replay.source_run_id` + diff.
+4. **Edit-and-rerun** — load bundle at checkpoint, mutate messages, branch the run as a child with `aldo.replay.source_run_id` + diff.
 5. **Live tail** — sub-second visibility. Most OTEL backends batch 5–30s. We need streaming ingest (OTLP → Kafka/Redpanda → ClickHouse Buffer, or Phoenix WS).
 6. **Bidirectional control channel** — UI sends signals *into* the run. **No OSS viewer supports this** (Langfuse, Phoenix, Helicone, LangSmith are read-only). Biggest gap — we build it.
 
 ## 7. Recommendation
 
-**Stack for v0.1**: OTEL-native instrumentation via **OpenLLMetry + OpenInference** emitting `gen_ai.*` + `meridian.*` spans; OTLP → OTel Collector → **Langfuse (self-hosted, MIT)** as the primary trace/eval/cost UI, with the Collector also fanning out to **ClickHouse** directly for long-term analytics and our own replay/budget services. Replay bundles live in S3-compatible object storage, keyed by checkpoint id and referenced from spans. A ALDO AI-owned **control plane** service (Go/Rust, Redis pub/sub + gRPC) provides breakpoints, pause-before-call, and edit-and-rerun — because no vendor offers this. Phoenix is the fallback if Langfuse's ClickHouse-acquisition direction ever hurts self-hosters; Braintrust is the answer if evals become the bottleneck, but it's SaaS-only. Datadog/LangSmith are rejected for v0.1 on lock-in and cost.
+**Stack for v0.1**: OTEL-native instrumentation via **OpenLLMetry + OpenInference** emitting `gen_ai.*` + `aldo.*` spans; OTLP → OTel Collector → **Langfuse (self-hosted, MIT)** as the primary trace/eval/cost UI, with the Collector also fanning out to **ClickHouse** directly for long-term analytics and our own replay/budget services. Replay bundles live in S3-compatible object storage, keyed by checkpoint id and referenced from spans. A ALDO AI-owned **control plane** service (Go/Rust, Redis pub/sub + gRPC) provides breakpoints, pause-before-call, and edit-and-rerun — because no vendor offers this. Phoenix is the fallback if Langfuse's ClickHouse-acquisition direction ever hurts self-hosters; Braintrust is the answer if evals become the bottleneck, but it's SaaS-only. Datadog/LangSmith are rejected for v0.1 on lock-in and cost.
 
 ## 8. Open questions
 

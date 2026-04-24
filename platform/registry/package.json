@@ -1,5 +1,5 @@
 {
-  "name": "@meridian/registry",
+  "name": "@aldo-ai/registry",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@meridian/storage": "workspace:*",
-    "@meridian/types": "workspace:*",
+    "@aldo-ai/storage": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
     "semver": "^7.6.3",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"

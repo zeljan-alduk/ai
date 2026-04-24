@@ -9,7 +9,7 @@ import type {
   TenantId,
   ToolHost,
   Tracer,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 import { type InternalAgentRun, LeafAgentRun } from './agent-run.js';
 import { type Checkpointer, InMemoryCheckpointer } from './checkpointer/index.js';
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { EventBus, Graph, GraphRun, Node, Orchestrator, RunId } from '@meridian/types';
+import type { EventBus, Graph, GraphRun, Node, Orchestrator, RunId } from '@aldo-ai/types';
 import type { InternalAgentRun } from './agent-run.js';
 import { runAgentNode } from './nodes/agent.js';
 import { runDebateNode } from './nodes/debate.js';

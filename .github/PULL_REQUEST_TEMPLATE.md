@@ -27,11 +27,11 @@ Closes #
 
 ## Affected packages
 
-- [ ] `@meridian/types`
-- [ ] `@meridian/registry`
-- [ ] `@meridian/gateway`
-- [ ] `@meridian/engine`
-- [ ] `@meridian/observability`
+- [ ] `@aldo-ai/types`
+- [ ] `@aldo-ai/registry`
+- [ ] `@aldo-ai/gateway`
+- [ ] `@aldo-ai/engine`
+- [ ] `@aldo-ai/observability`
 - [ ] `apps/cli`
 - [ ] `agency/`
 - [ ] `docs/`

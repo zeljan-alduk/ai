@@ -1,5 +1,5 @@
 /**
- * @meridian/gateway — LLM-agnostic model gateway.
+ * @aldo-ai/gateway — LLM-agnostic model gateway.
  *
  * Public surface:
  *   - createGateway(): returns a ModelGateway bound to a registry + adapters.

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { ModelDescriptor } from '@meridian/types';
+import type { ModelDescriptor } from '@aldo-ai/types';
 import YAML from 'yaml';
 import { z } from 'zod';
 import { DuplicateModelError } from './errors.js';
@@ -8,7 +8,7 @@ import type { ProviderKind } from './provider.js';
 /**
  * Descriptor in the registry extends `ModelDescriptor` with a `providerKind`
  * tag that points at which adapter should serve it. This extra field lives
- * here (not in `@meridian/types`) because `providerKind` is a gateway
+ * here (not in `@aldo-ai/types`) because `providerKind` is a gateway
  * implementation concern, not a cross-package contract.
  */
 export interface RegisteredModel extends ModelDescriptor {
@@ -87,7 +87,7 @@ const RegisteredModelSchema = z.object({
 });
 
 const ModelsFileSchema = z.object({
-  apiVersion: z.literal('meridian/models.v1'),
+  apiVersion: z.literal('aldo/models.v1'),
   kind: z.literal('ModelCatalog'),
   models: z.array(RegisteredModelSchema),
 });

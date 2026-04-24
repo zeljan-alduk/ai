@@ -1,4 +1,4 @@
-import type { CheckpointId, Message, RunId, RunOverrides } from '@meridian/types';
+import type { CheckpointId, Message, RunId, RunOverrides } from '@aldo-ai/types';
 
 /**
  * A checkpoint captures the complete state needed to resume a run

@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   cli-binary:
-    name: Build meridian CLI binary (${{ matrix.target }})
+    name: Build aldo CLI binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -60,13 +60,13 @@ jobs:
           bun build ./src/index.ts \
             --compile \
             --target=${{ matrix.bun_target }} \
-            --outfile "dist/meridian-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}"
+            --outfile "dist/aldo-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}"
 
       - name: Upload binary to release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: apps/cli/dist/meridian-${{ matrix.target }}*
+          files: apps/cli/dist/aldo-${{ matrix.target }}*
           fail_on_unmatched_files: false
 
   # Docker image publishing stub. Activate when we ship a Dockerfile for the
@@ -91,5 +91,5 @@ jobs:
   #         file: platform/engine/Dockerfile
   #         push: true
   #         tags: |
-  #           ghcr.io/${{ github.repository_owner }}/meridian-engine:${{ github.ref_name }}
-  #           ghcr.io/${{ github.repository_owner }}/meridian-engine:latest
+  #           ghcr.io/${{ github.repository_owner }}/aldo-engine:${{ github.ref_name }}
+  #           ghcr.io/${{ github.repository_owner }}/aldo-engine:latest

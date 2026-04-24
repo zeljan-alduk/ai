@@ -74,12 +74,12 @@ precedent if asked.
 
 ## Bring-up steps (rough)
 
-1. Create Neon project `meridian-dev`; branch per feature.
+1. Create Neon project `aldo-dev`; branch per feature.
 2. Create Vercel project pointing at `apps/web/`; env vars from Neon +
    gateway URL.
-3. Create Fly.io app `meridian-engine-dev`; machine size `shared-cpu-1x`,
+3. Create Fly.io app `aldo-engine-dev`; machine size `shared-cpu-1x`,
    1 GB RAM; deploy via `fly deploy` from CI.
-4. R2 bucket `meridian-artifacts-dev`; issue scoped token.
+4. R2 bucket `aldo-artifacts-dev`; issue scoped token.
 5. Upstash Redis DB; env var `REDIS_URL`.
 6. E2B API key (optional — local Docker is the default).
 7. Provider API keys:
@@ -93,7 +93,7 @@ precedent if asked.
 
 - Vercel auto-generates a preview URL per PR.
 - CI creates a Neon branch named after the PR number; auto-dropped on merge.
-- Fly.io deploys to `meridian-engine-dev-pr-<N>.fly.dev` via a small CD
+- Fly.io deploys to `aldo-engine-dev-pr-<N>.fly.dev` via a small CD
   workflow; auto-destroyed on merge.
 
 ## Budget guardrails

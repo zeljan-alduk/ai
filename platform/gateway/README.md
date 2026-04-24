@@ -1,4 +1,4 @@
-# @meridian/gateway
+# @aldo-ai/gateway
 
 The LLM-agnostic model gateway. Agents declare capabilities, privacy tier,
 and budget. This package chooses a concrete model, dispatches to the right
@@ -109,7 +109,7 @@ import {
   createAnthropicAdapter,
   createGoogleAdapter,
   loadModelsYaml,
-} from '@meridian/gateway';
+} from '@aldo-ai/gateway';
 
 const models = createModelRegistry(loadModelsYaml('./fixtures/models.yaml'));
 const adapters = createAdapterRegistry([
@@ -136,17 +136,17 @@ for await (const delta of gateway.completeWith(req, ctx, {
 
 - `providerKind` extends `ModelDescriptor` *in this package only*. It is a
   gateway implementation detail, not a cross-package contract.
-- Token counting (true, not char-heuristic) belongs in `@meridian/engine`
-  or a future `@meridian/tokens` package. We accept the char ÷ 4 estimate
+- Token counting (true, not char-heuristic) belongs in `@aldo-ai/engine`
+  or a future `@aldo-ai/tokens` package. We accept the char ÷ 4 estimate
   in `gateway.ts` for pre-flight budget checks.
-- Persistence of `UsageRecord`s belongs in `@meridian/observability`.
+- Persistence of `UsageRecord`s belongs in `@aldo-ai/observability`.
 - Rate-limit/retry policy belongs in a wrapper above the adapter layer —
-  probably `@meridian/engine`.
+  probably `@aldo-ai/engine`.
 
 ## Tests
 
 ```
-pnpm --filter @meridian/gateway test
+pnpm --filter @aldo-ai/gateway test
 ```
 
 Covers: router feasibility (caps/privacy/budget/latency/locality), pricing

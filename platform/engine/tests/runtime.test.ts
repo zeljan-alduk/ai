@@ -1,4 +1,4 @@
-import type { AgentRef, TenantId } from '@meridian/types';
+import type { AgentRef, TenantId } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import { PlatformRuntime, SpawnNotAllowedError } from '../src/runtime.js';
 import {

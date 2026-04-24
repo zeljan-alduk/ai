@@ -83,7 +83,7 @@ export interface EvalGate {
 
 /** A fully-parsed agent spec (agent.v1). */
 export interface AgentSpec {
-  readonly apiVersion: 'meridian/agent.v1';
+  readonly apiVersion: 'aldo-ai/agent.v1';
   readonly kind: 'Agent';
   readonly identity: AgentIdentity;
   readonly role: AgentRole;

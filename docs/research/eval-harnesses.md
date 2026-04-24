@@ -59,9 +59,9 @@ A promotion gate runs the union; individual changes can run the relevant subset.
 
 **Judge-model selection.** Judges are LLM-agnostic, resolved through the same provider abstraction as any other agent. Default policy: `judge: strong-reasoner` alias → configurable per org (e.g. `claude-opus-4-7`, `gpt-5.1`, or local `qwen3-72b-instruct` for sensitive tier). Judge must never be the candidate model (self-preference bias). Pairwise runs bias-swap positions.
 
-**Cross-model sweep.** `meridian eval sweep agent/code-reviewer --models claude-sonnet-4.5,gpt-5.1-mini,qwen2.5-coder:32b,llama-4-70b` runs the suite against each, emits a comparison report: pass rate, rubric mean, p95 latency, $/case, Δ-vs-current-baseline. Answers the downgrade question directly.
+**Cross-model sweep.** `aldo eval sweep agent/code-reviewer --models claude-sonnet-4.5,gpt-5.1-mini,qwen2.5-coder:32b,llama-4-70b` runs the suite against each, emits a comparison report: pass rate, rubric mean, p95 latency, $/case, Δ-vs-current-baseline. Answers the downgrade question directly.
 
-**Promotion gate.** `meridian promote agent/code-reviewer@1.5.0` resolves `required_for_promotion: true` suites, runs them against the new spec, blocks on any failure or threshold miss. Gate writes a signed `promotion-report.json` into the registry; rollback restores prior spec + report.
+**Promotion gate.** `aldo promote agent/code-reviewer@1.5.0` resolves `required_for_promotion: true` suites, runs them against the new spec, blocks on any failure or threshold miss. Gate writes a signed `promotion-report.json` into the registry; rollback restores prior spec + report.
 
 **Privacy tier.** Suites declare `tier: sensitive`. The eval runner refuses remote providers for sensitive suites and routes judge calls to local models only.
 
@@ -103,7 +103,7 @@ Corpus is a versioned dataset like any other (`dataset/redteam-core@2.3.0`), ref
 ## 6. Developer loop
 
 ```
-$ meridian eval run agent/code-reviewer --model qwen2.5-coder:32b
+$ aldo eval run agent/code-reviewer --model qwen2.5-coder:32b
 
 Resolving agent/code-reviewer@1.5.0-dev  ok
 Dataset dataset/code-review-golden@3.1.0 (142 cases)

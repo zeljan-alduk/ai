@@ -1,18 +1,10 @@
 /**
- * Integration tests for `meridian run`. We stub out the model gateway with
+ * Integration tests for `aldo run`. We stub out the model gateway with
  * a canned-delta script, drive `runRun` directly, and assert against
  * stdout, stderr, and the exit code. No network.
  */
 
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  type GatewayEx,
-  createAdapterRegistry,
-  createGateway,
-  createModelRegistry,
-  createRouter,
-} from '@meridian/gateway';
 import {
   InMemoryCheckpointer,
   InMemoryMemoryStore,
@@ -20,8 +12,15 @@ import {
   NoopTracer,
   PlatformRuntime,
   RuleChainPolicyEngine,
-} from '@meridian/engine';
-import { AgentRegistry } from '@meridian/registry';
+} from '@aldo-ai/engine';
+import {
+  type GatewayEx,
+  createAdapterRegistry,
+  createGateway,
+  createModelRegistry,
+  createRouter,
+} from '@aldo-ai/gateway';
+import { AgentRegistry } from '@aldo-ai/registry';
 import type {
   CallContext,
   CompletionRequest,
@@ -29,12 +28,13 @@ import type {
   ModelGateway,
   TenantId,
   ToolHost,
-} from '@meridian/types';
-import type { CliIO } from '../src/io.js';
-import { runRun, setRunHooks } from '../src/commands/run.js';
+} from '@aldo-ai/types';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { RuntimeBundle } from '../src/bootstrap.js';
+import { runRun, setRunHooks } from '../src/commands/run.js';
 import type { Config } from '../src/config.js';
 import { loadConfig } from '../src/config.js';
+import type { CliIO } from '../src/io.js';
 
 const FIXTURES_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
@@ -62,9 +62,7 @@ function bufferedIO(): { io: CliIO; out: () => string; err: () => string } {
  */
 class StubGateway implements ModelGateway {
   public calls = 0;
-  constructor(
-    private readonly script: (req: CompletionRequest, ctx: CallContext) => Delta[],
-  ) {}
+  constructor(private readonly script: (req: CompletionRequest, ctx: CallContext) => Delta[]) {}
 
   async *complete(req: CompletionRequest, ctx: CallContext): AsyncIterable<Delta> {
     this.calls += 1;
@@ -166,7 +164,7 @@ function helloScript(text = 'hello from stub'): Delta[] {
   ];
 }
 
-describe('meridian run', () => {
+describe('aldo run', () => {
   beforeEach(() => {
     setRunHooks(null);
   });
@@ -178,17 +176,12 @@ describe('meridian run', () => {
     const stub = new StubGateway(() => helloScript('hello from stub'));
     const { io, out } = bufferedIO();
 
-    const code = await runRun(
-      'code-reviewer',
-      { inputs: '{"diff":""}' },
-      io,
-      {
-        loadConfig: () =>
-          loadConfig({ env: { GROQ_API_KEY: 'k' }, dotenvFiles: [] }) satisfies Config,
-        bootstrap: () => bundleWithSharedRegistry(stub),
-        agentsDir: FIXTURES_DIR,
-      },
-    );
+    const code = await runRun('code-reviewer', { inputs: '{"diff":""}' }, io, {
+      loadConfig: () =>
+        loadConfig({ env: { GROQ_API_KEY: 'k' }, dotenvFiles: [] }) satisfies Config,
+      bootstrap: () => bundleWithSharedRegistry(stub),
+      agentsDir: FIXTURES_DIR,
+    });
 
     expect(code).toBe(0);
     const text = out();
@@ -201,17 +194,12 @@ describe('meridian run', () => {
     const stub = new StubGateway(() => helloScript('json-mode body'));
     const { io, out } = bufferedIO();
 
-    const code = await runRun(
-      'code-reviewer',
-      { inputs: '{}', json: true },
-      io,
-      {
-        loadConfig: () =>
-          loadConfig({ env: { GROQ_API_KEY: 'k' }, dotenvFiles: [] }) satisfies Config,
-        bootstrap: () => bundleWithSharedRegistry(stub),
-        agentsDir: FIXTURES_DIR,
-      },
-    );
+    const code = await runRun('code-reviewer', { inputs: '{}', json: true }, io, {
+      loadConfig: () =>
+        loadConfig({ env: { GROQ_API_KEY: 'k' }, dotenvFiles: [] }) satisfies Config,
+      bootstrap: () => bundleWithSharedRegistry(stub),
+      agentsDir: FIXTURES_DIR,
+    });
 
     expect(code).toBe(0);
     const parsed = JSON.parse(out()) as {
@@ -228,16 +216,11 @@ describe('meridian run', () => {
     const stub = new StubGateway(() => helloScript());
     const { io, err } = bufferedIO();
 
-    const code = await runRun(
-      'code-reviewer',
-      { provider: 'groq' },
-      io,
-      {
-        loadConfig: () => loadConfig({ env: {}, dotenvFiles: [] }),
-        bootstrap: () => bundleWithSharedRegistry(stub),
-        agentsDir: FIXTURES_DIR,
-      },
-    );
+    const code = await runRun('code-reviewer', { provider: 'groq' }, io, {
+      loadConfig: () => loadConfig({ env: {}, dotenvFiles: [] }),
+      bootstrap: () => bundleWithSharedRegistry(stub),
+      agentsDir: FIXTURES_DIR,
+    });
 
     expect(code).toBe(1);
     expect(err()).toContain('GROQ_API_KEY');
@@ -249,16 +232,11 @@ describe('meridian run', () => {
     const stub = new StubGateway(() => helloScript());
     const { io, err } = bufferedIO();
 
-    const code = await runRun(
-      'code-reviewer',
-      { inputs: 'not-json' },
-      io,
-      {
-        loadConfig: () => loadConfig({ env: { GROQ_API_KEY: 'k' }, dotenvFiles: [] }),
-        bootstrap: () => bundleWithSharedRegistry(stub),
-        agentsDir: FIXTURES_DIR,
-      },
-    );
+    const code = await runRun('code-reviewer', { inputs: 'not-json' }, io, {
+      loadConfig: () => loadConfig({ env: { GROQ_API_KEY: 'k' }, dotenvFiles: [] }),
+      bootstrap: () => bundleWithSharedRegistry(stub),
+      agentsDir: FIXTURES_DIR,
+    });
 
     expect(code).toBe(1);
     expect(err()).toContain('--inputs');
@@ -282,35 +260,30 @@ describe('meridian run', () => {
     );
     const { bootstrap: realBootstrap } = await import('../src/bootstrap.js');
     const cfg = loadConfig({ env: {}, dotenvFiles: [] });
-    const code = await runRun(
-      'code-reviewer',
-      { dryRun: true },
-      io,
-      {
-        loadConfig: () => cfg,
-        bootstrap: () => {
-          const b = realBootstrap({
-            config: cfg,
-            modelsYamlPath: fixtureModelsPath,
-            tenant,
-            gatewayOverride: {
-              complete: (req, ctx) => stub.complete(req, ctx),
-              completeWith: (req, ctx) => stub.complete(req, ctx),
-              embed: async () => [],
-            },
-          });
-          return b;
-        },
-        agentsDir: FIXTURES_DIR,
+    const code = await runRun('code-reviewer', { dryRun: true }, io, {
+      loadConfig: () => cfg,
+      bootstrap: () => {
+        const b = realBootstrap({
+          config: cfg,
+          modelsYamlPath: fixtureModelsPath,
+          tenant,
+          gatewayOverride: {
+            complete: (req, ctx) => stub.complete(req, ctx),
+            completeWith: (req, ctx) => stub.complete(req, ctx),
+            embed: async () => [],
+          },
+        });
+        return b;
       },
-    );
+      agentsDir: FIXTURES_DIR,
+    });
 
     expect(code).toBe(0);
     expect(out()).toContain('dry-run: would use');
     expect(stub.calls).toBe(0);
   });
 
-  it('honours MERIDIAN_RUN_USD_CAP by lowering the spec budget', async () => {
+  it('honours ALDO_RUN_USD_CAP by lowering the spec budget', async () => {
     // Capture the CompletionRequest's CallContext.budget by inspecting the
     // stub's last invocation.
     let capturedBudgetUsdMax = -1;
@@ -320,24 +293,18 @@ describe('meridian run', () => {
     });
     const { io } = bufferedIO();
 
-    const code = await runRun(
-      'code-reviewer',
-      { inputs: '{}' },
-      io,
-      {
-        loadConfig: () =>
-          loadConfig({
-            env: { GROQ_API_KEY: 'k', MERIDIAN_RUN_USD_CAP: '0.01' },
-            dotenvFiles: [],
-          }),
-        bootstrap: () => bundleWithSharedRegistry(stub),
-        agentsDir: FIXTURES_DIR,
-      },
-    );
+    const code = await runRun('code-reviewer', { inputs: '{}' }, io, {
+      loadConfig: () =>
+        loadConfig({
+          env: { GROQ_API_KEY: 'k', ALDO_RUN_USD_CAP: '0.01' },
+          dotenvFiles: [],
+        }),
+      bootstrap: () => bundleWithSharedRegistry(stub),
+      agentsDir: FIXTURES_DIR,
+    });
 
     expect(code).toBe(0);
     // The fixture spec's usdMax is 0.50; the cap should have brought it down.
     expect(capturedBudgetUsdMax).toBe(0.01);
   });
 });
-

@@ -1,4 +1,4 @@
-import type { Node, RunId } from '@meridian/types';
+import type { Node, RunId } from '@aldo-ai/types';
 import type { NodeExecContext, NodeResult } from './types.js';
 
 /**

@@ -1,4 +1,4 @@
-apiVersion: meridian/agent.v1
+apiVersion: aldo-ai/agent.v1
 kind: Agent
 
 identity:
@@ -43,7 +43,7 @@ tools:
       allow: [pr.read, pr.comment, checks.read]
     - server: repo-fs
       allow: [fs.read]
-    - server: meridian-memory
+    - server: aldo-memory
       allow: [memory.read, memory.write]
   permissions:
     network: none

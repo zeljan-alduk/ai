@@ -1,4 +1,4 @@
-import type { RunOverrides, TenantId } from '@meridian/types';
+import type { RunOverrides, TenantId } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import type { InternalAgentRun } from '../src/agent-run.js';
 import { PlatformRuntime } from '../src/runtime.js';

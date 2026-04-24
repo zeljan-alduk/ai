@@ -1,5 +1,5 @@
 /**
- * meridian-fs — MCP server wiring.
+ * aldo-fs — MCP server wiring.
  *
  * Registers the five v0 tools (read / write / list / stat / search) on
  * an McpServer instance. The server is transport-agnostic here; index.ts
@@ -23,7 +23,7 @@ import { fsSearch, searchInputSchema, searchOutputSchema } from './tools/search.
 import { fsStatTool, statInputSchema, statOutputSchema } from './tools/stat.js';
 import { fsWrite, writeInputSchema, writeOutputSchema } from './tools/write.js';
 
-export const SERVER_NAME = '@meridian/mcp-fs';
+export const SERVER_NAME = '@aldo-ai/mcp-fs';
 export const SERVER_VERSION = '0.0.0';
 
 export interface CreateServerOpts {

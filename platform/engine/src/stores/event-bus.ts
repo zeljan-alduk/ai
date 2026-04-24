@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { Event, EventBus, Unsubscribe } from '@meridian/types';
+import type { Event, EventBus, Unsubscribe } from '@aldo-ai/types';
 
 /**
  * In-process EventBus backed by Node's EventEmitter. Supports simple

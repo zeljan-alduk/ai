@@ -1,4 +1,4 @@
-import type { CheckpointId, RunId, TraceId } from '@meridian/types';
+import type { CheckpointId, RunId, TraceId } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import { InMemoryReplayStore, decodeBundle, encodeBundle, replay } from '../src/replay.js';
 

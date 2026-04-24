@@ -1,12 +1,12 @@
 /**
- * @meridian/observability — OTEL instrumentation + replay bundle writer.
+ * @aldo-ai/observability — OTEL instrumentation + replay bundle writer.
  *
  * Public surface:
- *   - createTracer(opts)   → Tracer (from @meridian/types)
- *   - attrs                → typed GenAI/Meridian attribute builders
+ *   - createTracer(opts)   → Tracer (from @aldo-ai/types)
+ *   - attrs                → typed GenAI/Aldo attribute builders
  *   - replay.record / replay.export / replay.bind
  *   - PostgresSpanExporter (stub; no SQL in v0)
- *   - GenAI, Meridian      → attribute key constants
+ *   - GenAI, Aldo      → attribute key constants
  *
  * See README.md for conventions.
  */
@@ -17,7 +17,7 @@ export type { CreateTracerOpts } from './tracer.js';
 export {
   attrs,
   GenAI,
-  Meridian,
+  Aldo,
   genAiOperationName,
 } from './attrs.js';
 export type {

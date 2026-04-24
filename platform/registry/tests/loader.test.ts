@@ -52,7 +52,7 @@ describe('loader.parseYaml', () => {
 
   it('rejects unknown top-level keys with a helpful path', () => {
     const yaml = `
-apiVersion: meridian/agent.v1
+apiVersion: aldo-ai/agent.v1
 kind: Agent
 mystery: true
 identity:
@@ -89,7 +89,7 @@ eval_gate: { required_suites: [], must_pass_before_promote: false }
 
   it('accepts a bare-array escalation shape as well as the `on` wrapper', () => {
     const yaml = `
-apiVersion: meridian/agent.v1
+apiVersion: aldo-ai/agent.v1
 kind: Agent
 identity:
   name: x

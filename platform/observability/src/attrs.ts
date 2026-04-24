@@ -7,7 +7,7 @@
  *    stable keys shared by any OTEL-aware backend (Langfuse, Tempo, Honeycomb,
  *    etc.) and must not encode provider-specific semantics.
  *
- * 2. `meridian.*` — Meridian-specific extensions used for replay bundles and
+ * 2. `aldo.*` — Aldo-specific extensions used for replay bundles and
  *    orchestrator-internal data (run_id, node_id, capability envelopes, policy
  *    decisions). These are opaque to generic OTEL tooling but are the
  *    load-bearing payload for replay.
@@ -15,7 +15,7 @@
  * Do NOT put provider names ("anthropic", "openai", "gemini") in keys. The
  * provider identity lives in the VALUE of `gen_ai.system`.
  */
-import type { Attrs, SpanKind } from '@meridian/types';
+import type { Attrs, SpanKind } from '@aldo-ai/types';
 
 // ---------------------------------------------------------------------------
 // OTEL GenAI semantic convention keys
@@ -38,24 +38,24 @@ export const GenAI = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Meridian-specific extensions
+// Aldo-specific extensions
 // ---------------------------------------------------------------------------
 
-export const Meridian = {
-  TENANT_ID: 'meridian.tenant.id',
-  RUN_ID: 'meridian.run.id',
-  TRACE_ID: 'meridian.trace.id',
-  NODE_ID: 'meridian.node.id',
-  AGENT_NAME: 'meridian.agent.name',
-  CHECKPOINT_ID: 'meridian.checkpoint.id',
-  KIND: 'meridian.span.kind',
-  POLICY_DECISION: 'meridian.policy.decision',
-  POLICY_RULE: 'meridian.policy.rule',
-  MEMORY_SCOPE: 'meridian.memory.scope',
-  MEMORY_OP: 'meridian.memory.op',
-  COST_USD: 'meridian.cost.usd',
-  BUDGET_REMAINING_USD: 'meridian.budget.remaining_usd',
-  RNG_SEED: 'meridian.rng.seed',
+export const Aldo = {
+  TENANT_ID: 'aldo.tenant.id',
+  RUN_ID: 'aldo.run.id',
+  TRACE_ID: 'aldo.trace.id',
+  NODE_ID: 'aldo.node.id',
+  AGENT_NAME: 'aldo.agent.name',
+  CHECKPOINT_ID: 'aldo.checkpoint.id',
+  KIND: 'aldo.span.kind',
+  POLICY_DECISION: 'aldo.policy.decision',
+  POLICY_RULE: 'aldo.policy.rule',
+  MEMORY_SCOPE: 'aldo.memory.scope',
+  MEMORY_OP: 'aldo.memory.op',
+  COST_USD: 'aldo.cost.usd',
+  BUDGET_REMAINING_USD: 'aldo.budget.remaining_usd',
+  RNG_SEED: 'aldo.rng.seed',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -125,15 +125,15 @@ export const attrs = {
 
   memoryOp(a: MemoryOpAttrs): Attrs {
     return compact({
-      [Meridian.MEMORY_SCOPE]: a.scope,
-      [Meridian.MEMORY_OP]: a.op,
+      [Aldo.MEMORY_SCOPE]: a.scope,
+      [Aldo.MEMORY_OP]: a.op,
     });
   },
 
   policyCheck(a: PolicyCheckAttrs): Attrs {
     return compact({
-      [Meridian.POLICY_RULE]: a.rule,
-      [Meridian.POLICY_DECISION]: a.decision,
+      [Aldo.POLICY_RULE]: a.rule,
+      [Aldo.POLICY_DECISION]: a.decision,
     });
   },
 };

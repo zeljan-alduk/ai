@@ -1,6 +1,6 @@
-# @meridian/mcp-fs
+# @aldo-ai/mcp-fs
 
-First-party MCP tool server for Meridian. Exposes a sandboxed filesystem
+First-party MCP tool server for ALDO AI. Exposes a sandboxed filesystem
 with per-agent path ACLs over stdio. Built on
 [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk).
 
@@ -15,7 +15,7 @@ pnpm install --ignore-workspace
 pnpm build
 ```
 
-The compiled binary lives at `dist/index.js`; the `meridian-mcp-fs` bin
+The compiled binary lives at `dist/index.js`; the `aldo-mcp-fs` bin
 shim points at it.
 
 ## Configure (ACL)
@@ -23,8 +23,8 @@ shim points at it.
 Roots are declared in one of three places, in priority order:
 
 1. CLI flag: `--roots '<spec>'`
-2. Env var: `MERIDIAN_FS_ROOTS='<spec>'`
-3. CLI flag `--config <path>` (or env `MERIDIAN_FS_CONFIG`) pointing
+2. Env var: `ALDO_FS_ROOTS='<spec>'`
+3. CLI flag `--config <path>` (or env `ALDO_FS_CONFIG`) pointing
    at a JSON file shaped `{ "roots": [{ "path": "/abs", "mode": "rw" }] }`
 
 ### Spec syntax
@@ -43,10 +43,10 @@ Examples:
 
 ```bash
 # one read-write workspace
-export MERIDIAN_FS_ROOTS=/var/agent/workspace:rw
+export ALDO_FS_ROOTS=/var/agent/workspace:rw
 
 # add a read-only docs root
-export MERIDIAN_FS_ROOTS=/var/agent/workspace:rw,/usr/share/agent-docs:ro
+export ALDO_FS_ROOTS=/var/agent/workspace:rw,/usr/share/agent-docs:ro
 
 # JSON config equivalent
 cat > acl.json <<EOF
@@ -55,7 +55,7 @@ cat > acl.json <<EOF
     { "path": "/usr/share/agent-docs", "mode": "ro" }
 ] }
 EOF
-meridian-mcp-fs --config ./acl.json
+aldo-mcp-fs --config ./acl.json
 ```
 
 ## Tools (v0)
@@ -137,5 +137,5 @@ Three suites:
 
 This is a tool server. It contains **no provider code** — it's
 LLM-agnostic by construction (and trivially so, since it never talks to
-an LLM). Meridian's gateway / engine spawn it as a stdio child for
-agents that declare `meridian-fs` in their MCP tool list.
+an LLM). ALDO AI's gateway / engine spawn it as a stdio child for
+agents that declare `aldo-fs` in their MCP tool list.

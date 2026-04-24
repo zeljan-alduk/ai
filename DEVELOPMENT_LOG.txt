@@ -288,3 +288,27 @@ id so platform/gateway/tests/registry.test.ts stays green). 35 CLI tests
 pass; gateway, engine, registry, observability, runtime-config all
 typecheck clean. Touched: apps/cli/, platform/gateway/fixtures/models.yaml,
 new platform/runtime-config/.
+
+[2026-04-24 22:35 UTC] principal — rebrand to ALDO AI / ALDO TECH LABS
+Two-phase rename to dodge "Meridian" trademark exposure. Phase 1 (commit
+5b22fe3): brand surface only — README, LICENSE, NOTICE, LICENSING.md,
+CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, all docs/, agency YAML
+owner fields, agency prompt files, .github templates. 86 files. Sed
+substitutions in order: "Meridian Labs" -> "ALDO TECH LABS",
+"meridian-labs" -> "aldo-tech-labs", "\<Meridian\>" -> "ALDO AI".
+Phase 2 (this commit): code-level — package scope @meridian/* ->
+@aldo-ai/*, MCP server name meridian-fs -> aldo-fs (directory renamed
+via git mv), env vars MERIDIAN_* -> ALDO_*, schema apiVersion
+"meridian/agent.v1" -> "aldo-ai/agent.v1", CLI command "meridian" ->
+"aldo", and all standalone "meridian" lowercase references in source/
+config/docs (246 files touched). One identifier breakage in
+platform/observability — the OTEL-attrs `Meridian` namespace const
+turned into `ALDO AI` (with space, invalid TS) — fixed by renaming to
+`Aldo` in observability source + tests. mcp-servers/* added to
+pnpm-workspace.yaml so aldo-fs is now a real workspace member.
+DEVELOPMENT_LOG history preserved per CLAUDE.md rule (no rewrite).
+Workspace verify: pnpm install clean, pnpm -r typecheck clean across 9
+packages, pnpm lint clean across 142 files (Biome auto-fixes for
+useLiteralKeys + noUnusedTemplateLiteral), pnpm -r test 144 passing
+(registry 23, gateway 20, engine 11, observability 21, cli 35, storage
+2, aldo-fs 32; types + runtime-config have no tests).

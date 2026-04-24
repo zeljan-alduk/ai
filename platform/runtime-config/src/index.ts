@@ -1,5 +1,5 @@
 /**
- * @meridian/runtime-config — load `.env` files into the running process.
+ * @aldo-ai/runtime-config — load `.env` files into the running process.
  *
  * Deliberately minimal: a tiny dotenv parser (no external dependency) that
  * reads `KEY=VALUE` lines and merges them into a returned record without
@@ -78,11 +78,7 @@ export function parseDotenv(text: string): Record<string, string> {
     let value = line.slice(eq + 1).trim();
 
     if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-      value = value
-        .slice(1, -1)
-        .replace(/\\n/g, '\n')
-        .replace(/\\t/g, '\t')
-        .replace(/\\\\/g, '\\');
+      value = value.slice(1, -1).replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
     } else if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) {
       value = value.slice(1, -1);
     } else {

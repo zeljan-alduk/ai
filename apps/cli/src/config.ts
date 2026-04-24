@@ -2,21 +2,21 @@
  * Typed runtime configuration for the CLI.
  *
  * Responsibilities (LLM-agnostic):
- *   - load `.env` from CWD and `~/.config/meridian/env` via `@meridian/runtime-config`,
+ *   - load `.env` from CWD and `~/.config/aldo/env` via `@aldo-ai/runtime-config`,
  *   - discover which providers have credentials available (Groq, Ollama,
  *     Anthropic, Gemini), without taking a hard dependency on any one,
- *   - parse the `MERIDIAN_RUN_USD_CAP` and `MERIDIAN_DEFAULT_PRIVACY` knobs,
+ *   - parse the `ALDO_RUN_USD_CAP` and `ALDO_DEFAULT_PRIVACY` knobs,
  *   - surface a `Config` object the bootstrap layer can read deterministically.
  *
  * Missing keys are NOT errors — they yield a `disabled` provider state. The
- * `meridian run` command may still error if the user explicitly asked for a
+ * `aldo run` command may still error if the user explicitly asked for a
  * disabled provider; that error is surfaced in `commands/run.ts`, not here.
  */
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { loadDotenv } from '@meridian/runtime-config';
-import type { PrivacyTier } from '@meridian/types';
+import { loadDotenv } from '@aldo-ai/runtime-config';
+import type { PrivacyTier } from '@aldo-ai/types';
 
 /** Per-provider state derived from environment. */
 export interface ProviderState {
@@ -53,14 +53,14 @@ export interface LoadConfigOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   /**
    * Files to read for dotenv. Defaults to `<cwd>/.env` and
-   * `~/.config/meridian/env`. Pass `[]` to skip dotenv entirely.
+   * `~/.config/aldo/env`. Pass `[]` to skip dotenv entirely.
    */
   readonly dotenvFiles?: readonly string[];
 }
 
 const DEFAULT_DOTENV_FILES = (): string[] => [
   join(process.cwd(), '.env'),
-  join(homedir(), '.config', 'meridian', 'env'),
+  join(homedir(), '.config', 'aldo', 'env'),
 ];
 
 const PRIVACY_TIERS = new Set<PrivacyTier>(['public', 'internal', 'sensitive']);
@@ -86,21 +86,21 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
 
   const providers: ProviderState[] = [
     providerState('groq', env, 'GROQ_API_KEY'),
-    providerState('ollama', env, undefined, env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434'),
+    providerState('ollama', env, undefined, env.OLLAMA_BASE_URL ?? 'http://localhost:11434'),
     providerState('anthropic', env, 'ANTHROPIC_API_KEY'),
     providerState('gemini', env, 'GEMINI_API_KEY'),
   ];
 
-  const privacyRaw = env['MERIDIAN_DEFAULT_PRIVACY'];
+  const privacyRaw = env.ALDO_DEFAULT_PRIVACY;
   const defaultPrivacy: PrivacyTier =
     privacyRaw !== undefined && PRIVACY_TIERS.has(privacyRaw as PrivacyTier)
       ? (privacyRaw as PrivacyTier)
       : 'internal';
 
-  const capRaw = env['MERIDIAN_RUN_USD_CAP'];
+  const capRaw = env.ALDO_RUN_USD_CAP;
   const runUsdCap = parseNumber(capRaw);
 
-  const databaseUrl = nonEmpty(env['DATABASE_URL']);
+  const databaseUrl = nonEmpty(env.DATABASE_URL);
 
   return {
     providers,
@@ -121,7 +121,7 @@ export function providerState(
   const key = apiKeyEnv !== undefined ? nonEmpty(env[apiKeyEnv]) : undefined;
   const base =
     id === 'ollama'
-      ? nonEmpty(env['OLLAMA_BASE_URL']) ?? defaultBaseUrl
+      ? (nonEmpty(env.OLLAMA_BASE_URL) ?? defaultBaseUrl)
       : nonEmpty(env[`${id.toUpperCase()}_BASE_URL`]);
 
   // Ollama is enabled whenever a base URL is reachable; it doesn't need a key.
@@ -150,7 +150,7 @@ export class ProviderNotEnabledError extends Error {
     const hint =
       apiKeyEnv !== undefined
         ? `${apiKeyEnv} is unset — copy .env.example to .env and fill it in`
-        : `provider unavailable — see .env.example`;
+        : 'provider unavailable — see .env.example';
     super(`provider '${providerId}' is not enabled: ${hint}`);
     this.name = 'ProviderNotEnabledError';
     this.providerId = providerId;

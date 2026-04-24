@@ -5,7 +5,7 @@
  *  - parse YAML text into a JS object,
  *  - run the Zod schema (`agent.v1` snake_case),
  *  - transform snake_case -> camelCase so the result matches the
- *    `AgentSpec` interface in `@meridian/types`.
+ *    `AgentSpec` interface in `@aldo-ai/types`.
  *
  * Errors are reported with the original snake_case path so authors can find
  * the offending key in their YAML file without translation.
@@ -24,7 +24,7 @@ import type {
   Subscription,
   ToolsConfig,
   ValidationResult,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 import YAML from 'yaml';
 import { type AgentV1Yaml, agentV1YamlSchema } from './schema.js';
 
@@ -165,7 +165,7 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
       : undefined;
 
   const spec: AgentSpec = {
-    apiVersion: 'meridian/agent.v1',
+    apiVersion: 'aldo-ai/agent.v1',
     kind: 'Agent',
     identity: {
       name: y.identity.name,

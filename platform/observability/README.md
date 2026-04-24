@@ -1,6 +1,6 @@
-# @meridian/observability
+# @aldo-ai/observability
 
-OpenTelemetry-backed tracer and replay-bundle writer for Meridian.
+OpenTelemetry-backed tracer and replay-bundle writer for ALDO AI.
 
 This package is **LLM-agnostic**: no attribute key encodes a provider name.
 The provider identity is always carried as a VALUE under `gen_ai.system`.
@@ -13,11 +13,11 @@ import {
   attrs,
   replay,
   GenAI,
-  Meridian,
-} from '@meridian/observability';
+  ALDO AI,
+} from '@aldo-ai/observability';
 ```
 
-- `createTracer(opts)` — returns a `Tracer` (from `@meridian/types`). If no
+- `createTracer(opts)` — returns a `Tracer` (from `@aldo-ai/types`). If no
   OTEL provider is registered globally, the tracer degrades to a safe no-op.
 - `attrs.modelCall({...})`, `attrs.toolCall({...})`, `attrs.memoryOp({...})`,
   `attrs.policyCheck({...})` — typed builders that produce attribute maps
@@ -53,40 +53,40 @@ tools.
 | `gen_ai.tool.name`               | Tool name on a tool_call span.                  |
 | `gen_ai.tool.call.id`            | Tool call id (provider-assigned).               |
 
-### `meridian.*` — Meridian-specific extensions
+### `aldo.*` — ALDO AI-specific extensions
 
 Used for orchestrator-internal data and the replay payload. Opaque to
 generic OTEL tools but the load-bearing fields for replay.
 
 | Key                              | Meaning                                         |
 | -------------------------------- | ----------------------------------------------- |
-| `meridian.span.kind`             | One of `run`, `node`, `agent_turn`,             |
+| `aldo.span.kind`             | One of `run`, `node`, `agent_turn`,             |
 |                                  | `model_call`, `tool_call`, `memory_op`,         |
 |                                  | `policy_check`.                                 |
-| `meridian.tenant.id`             | Tenant identifier.                              |
-| `meridian.run.id`                | Run id.                                         |
-| `meridian.trace.id`              | Trace id (mirror for correlation).              |
-| `meridian.node.id`               | DAG node id.                                    |
-| `meridian.agent.name`            | Sub-agent name.                                 |
-| `meridian.checkpoint.id`         | Checkpoint id (ties spans to replay payload).   |
-| `meridian.policy.rule`           | Policy rule name.                               |
-| `meridian.policy.decision`       | `allow` / `deny` / `redact`.                    |
-| `meridian.memory.scope`          | Memory scope (e.g. `session`, `tenant`).        |
-| `meridian.memory.op`             | `read` / `write` / `forget` / `search`.         |
-| `meridian.cost.usd`              | Cost in USD for this span.                      |
-| `meridian.budget.remaining_usd`  | Remaining budget after this span.               |
-| `meridian.rng.seed`              | RNG seed used (for deterministic replay).       |
+| `aldo.tenant.id`             | Tenant identifier.                              |
+| `aldo.run.id`                | Run id.                                         |
+| `aldo.trace.id`              | Trace id (mirror for correlation).              |
+| `aldo.node.id`               | DAG node id.                                    |
+| `aldo.agent.name`            | Sub-agent name.                                 |
+| `aldo.checkpoint.id`         | Checkpoint id (ties spans to replay payload).   |
+| `aldo.policy.rule`           | Policy rule name.                               |
+| `aldo.policy.decision`       | `allow` / `deny` / `redact`.                    |
+| `aldo.memory.scope`          | Memory scope (e.g. `session`, `tenant`).        |
+| `aldo.memory.op`             | `read` / `write` / `forget` / `search`.         |
+| `aldo.cost.usd`              | Cost in USD for this span.                      |
+| `aldo.budget.remaining_usd`  | Remaining budget after this span.               |
+| `aldo.rng.seed`              | RNG seed used (for deterministic replay).       |
 
 ### Extending
 
-New attributes MUST go in `meridian.*` unless OTEL has a convention for
+New attributes MUST go in `aldo.*` unless OTEL has a convention for
 them. Never invent `gen_ai.*` keys that are not in the spec.
 
 ## Span kinds and OTEL mapping
 
-All Meridian kinds map to OTEL `SpanKind.INTERNAL` — none of them are
+All ALDO AI kinds map to OTEL `SpanKind.INTERNAL` — none of them are
 RPC/server spans. The finer-grained distinction is carried on the
-`meridian.span.kind` attribute. `model_call` and `tool_call` additionally
+`aldo.span.kind` attribute. `model_call` and `tool_call` additionally
 stamp `gen_ai.operation.name`.
 
 ## Replay bundles

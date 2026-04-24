@@ -1,4 +1,4 @@
-import type { AgentRef, Node, RunId } from '@meridian/types';
+import type { AgentRef, Node, RunId } from '@aldo-ai/types';
 import type { InternalAgentRun } from '../agent-run.js';
 import type { NodeExecContext, NodeResult } from './types.js';
 

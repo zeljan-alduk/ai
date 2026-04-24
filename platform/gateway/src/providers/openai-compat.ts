@@ -6,7 +6,7 @@ import type {
   ModelDescriptor,
   ToolCallPart,
   ToolSchema,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 import { type GrammarHint, applyGrammarHint } from '../decode/constrained.js';
 import { ProviderError } from '../errors.js';
 import { buildUsageRecord } from '../pricing.js';

@@ -9,7 +9,7 @@
  * For v0 this is an in-process store. A later engineer swaps the backing
  * to Postgres/Neon via `exporter-postgres.ts`.
  */
-import type { CheckpointId, ReplayBundle, RunId, TraceId } from '@meridian/types';
+import type { CheckpointId, ReplayBundle, RunId, TraceId } from '@aldo-ai/types';
 
 export interface Checkpoint {
   readonly id: CheckpointId;

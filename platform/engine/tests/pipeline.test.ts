@@ -1,4 +1,4 @@
-import type { Graph, TenantId } from '@meridian/types';
+import type { Graph, TenantId } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import { PlatformOrchestrator } from '../src/orchestrator.js';
 import { PlatformRuntime } from '../src/runtime.js';

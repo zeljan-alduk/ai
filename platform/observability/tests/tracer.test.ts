@@ -5,7 +5,7 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { GenAI, Meridian, attrs } from '../src/attrs.js';
+import { Aldo, GenAI, attrs } from '../src/attrs.js';
 import { createTracer } from '../src/tracer.js';
 
 const exporter = new InMemorySpanExporter();
@@ -53,7 +53,7 @@ describe('tracer.span', () => {
     expect(span.attributes[GenAI.USAGE_OUTPUT_TOKENS]).toBe(50);
     expect(span.attributes[GenAI.RESPONSE_MODEL]).toBe('claude-opus-4-20260101');
     expect(span.attributes[GenAI.OPERATION_NAME]).toBe('chat');
-    expect(span.attributes[Meridian.KIND]).toBe('model_call');
+    expect(span.attributes[Aldo.KIND]).toBe('model_call');
   });
 
   it('tool_call stamps gen_ai.operation.name = execute_tool', async () => {

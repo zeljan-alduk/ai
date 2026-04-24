@@ -1,5 +1,5 @@
 /**
- * `meridian runs view <id>` — stub. Will print the event log + message
+ * `aldo runs view <id>` — stub. Will print the event log + message
  * history for a given RunId.
  */
 

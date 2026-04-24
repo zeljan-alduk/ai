@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CheckpointId, RunId } from '@meridian/types';
+import type { CheckpointId, RunId } from '@aldo-ai/types';
 import type { Checkpoint, Checkpointer } from './index.js';
 
 /**

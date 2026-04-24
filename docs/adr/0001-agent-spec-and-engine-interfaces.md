@@ -19,7 +19,7 @@ against a JSON Schema shipped with the registry. Unknown top-level keys are
 rejected (no silent drift).
 
 ```yaml
-apiVersion: meridian/agent.v1
+apiVersion: aldo-ai/agent.v1
 kind: Agent
 
 identity:

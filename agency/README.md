@@ -2,7 +2,7 @@
 
 This directory holds the reference set of agent specifications shipped with
 ALDO AI. Every file under `direction/`, `delivery/`, `support/`, and `meta/`
-conforms to the `meridian/agent.v1` schema defined in
+conforms to the `aldo-ai/agent.v1` schema defined in
 [`docs/adr/0001-agent-spec-and-engine-interfaces.md`](../docs/adr/0001-agent-spec-and-engine-interfaces.md).
 
 These are the agents the platform itself uses to build, review, and operate

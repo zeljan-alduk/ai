@@ -1,4 +1,4 @@
-import type { ModelDescriptor } from '@meridian/types';
+import type { ModelDescriptor } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import { buildUsageRecord, estimateCallCeilingUsd, estimateUsd } from '../src/pricing.js';
 

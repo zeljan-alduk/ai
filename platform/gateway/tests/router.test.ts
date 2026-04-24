@@ -1,6 +1,6 @@
-import type { Budget, CallContext } from '@meridian/types';
-import { NoEligibleModelError } from '@meridian/types';
-import type { RunId, TenantId, TraceId } from '@meridian/types';
+import type { Budget, CallContext } from '@aldo-ai/types';
+import { NoEligibleModelError } from '@aldo-ai/types';
+import type { RunId, TenantId, TraceId } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import { type RegisteredModel, createModelRegistry } from '../src/model-registry.js';
 import { createRouter } from '../src/router.js';

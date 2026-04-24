@@ -1,5 +1,5 @@
 {
-  "name": "@meridian/gateway",
+  "name": "@aldo-ai/gateway",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@meridian/types": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"
   },

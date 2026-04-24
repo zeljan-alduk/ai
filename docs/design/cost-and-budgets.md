@@ -96,7 +96,7 @@ PricingEntry:
     tool_use_flat: 0.0
   metadata:
     source: "anthropic-price-list-2026-03"
-    approved_by: "finance@meridian"
+    approved_by: "finance@aldo"
 
 PricingEntry:
   id: pr_local_h100

@@ -1,11 +1,11 @@
 /**
- * meridian-fs — config loader.
+ * aldo-fs — config loader.
  *
  * Two ways to declare ACL roots, in priority order:
  *
  *   1. `--roots <spec>` CLI flag, OR
- *   2. `MERIDIAN_FS_ROOTS` env var, OR
- *   3. `--config <path-to-json>` CLI flag (or MERIDIAN_FS_CONFIG env var)
+ *   2. `ALDO_FS_ROOTS` env var, OR
+ *   3. `--config <path-to-json>` CLI flag (or ALDO_FS_CONFIG env var)
  *
  * Roots spec syntax (used by both CLI flag and env var):
  *
@@ -118,10 +118,10 @@ export async function resolveRoots(opts: ResolveOpts = {}): Promise<Root[]> {
   const cliRoots = pickFlag(argv, '--roots');
   if (cliRoots) return parseRootsSpec(cliRoots);
 
-  const envRoots = env.MERIDIAN_FS_ROOTS;
+  const envRoots = env.ALDO_FS_ROOTS;
   if (envRoots && envRoots.trim().length > 0) return parseRootsSpec(envRoots);
 
-  const cfgPath = pickFlag(argv, '--config') ?? env.MERIDIAN_FS_CONFIG;
+  const cfgPath = pickFlag(argv, '--config') ?? env.ALDO_FS_CONFIG;
   if (cfgPath) {
     const cfg = await loadConfigFromJson(cfgPath);
     return cfg.roots;
@@ -129,7 +129,7 @@ export async function resolveRoots(opts: ResolveOpts = {}): Promise<Root[]> {
 
   throw new FsError(
     'PERMISSION_DENIED',
-    'meridian-fs: no roots configured. Pass --roots <spec>, set MERIDIAN_FS_ROOTS, or supply --config <path>.',
+    'aldo-fs: no roots configured. Pass --roots <spec>, set ALDO_FS_ROOTS, or supply --config <path>.',
   );
 }
 

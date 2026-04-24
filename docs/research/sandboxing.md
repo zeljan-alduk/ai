@@ -80,7 +80,7 @@ Decision: replay store keys a `(snapshot-id, tool-call-id)` tuple. T1 →
 WASM snapshot. T2/T3 → Firecracker snapshot. Anything else degrades to
 "re-execute from inputs" replay.
 
-## Local dev story (`meridian dev`)
+## Local dev story (`aldo dev`)
 
 No Kubernetes. The CLI brings up:
 
@@ -94,7 +94,7 @@ No Kubernetes. The CLI brings up:
 5. The model gateway, eval harness, and replay store all run as plain
    Podman containers wired through a single compose file.
 
-Goal: `meridian dev up` on a fresh laptop in <60 s, no root, no daemon.
+Goal: `aldo dev up` on a fresh laptop in <60 s, no root, no daemon.
 
 ## v0.1 stack (exact)
 
@@ -120,7 +120,7 @@ both behind the gateway so swapping them is config.**
    T2?
 4. Where does the egress proxy terminate TLS for local-model traffic
    (Ollama, vLLM)? mTLS to in-cluster endpoints feels mandatory but
-   complicates `meridian dev`.
+   complicates `aldo dev`.
 5. Replay fan-out cost: how many concurrent FC forks per host before
    memory dedup (KSM/UFFD) stops paying off?
 6. Do we expose Cloudflare Sandbox as an edge tier for ultra-low-latency

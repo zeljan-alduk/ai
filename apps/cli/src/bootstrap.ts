@@ -21,7 +21,7 @@ import {
   NoopTracer,
   PlatformRuntime,
   RuleChainPolicyEngine,
-} from '@meridian/engine';
+} from '@aldo-ai/engine';
 import {
   type AdapterRegistry,
   type GatewayEx,
@@ -37,9 +37,9 @@ import {
   createOpenAICompatAdapter,
   createRouter,
   parseModelsYaml,
-} from '@meridian/gateway';
-import { AgentRegistry } from '@meridian/registry';
-import type { TenantId, ToolHost } from '@meridian/types';
+} from '@aldo-ai/gateway';
+import { AgentRegistry } from '@aldo-ai/registry';
+import type { TenantId, ToolHost } from '@aldo-ai/types';
 import type { Config } from './config.js';
 
 /** Dependencies handed back to the CLI commands. Stable surface. */

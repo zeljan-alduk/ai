@@ -1,4 +1,4 @@
-apiVersion: meridian/models.v1
+apiVersion: aldo/models.v1
 kind: ModelCatalog
 
 # Seed catalogue used by the router during development and tests.

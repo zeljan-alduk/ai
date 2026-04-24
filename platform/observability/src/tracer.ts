@@ -7,7 +7,7 @@ import type {
   SpanKind,
   TraceId,
   Tracer,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 /**
  * OTEL-backed Tracer implementation.
  *
@@ -26,13 +26,13 @@ import {
   context,
   trace,
 } from '@opentelemetry/api';
-import { Meridian, genAiOperationName } from './attrs.js';
+import { Aldo, genAiOperationName } from './attrs.js';
 import { InMemoryReplayStore, type ReplayStore } from './replay.js';
 
 export interface CreateTracerOpts {
   /**
    * Service name used as the OTEL tracer name. Defaults to
-   * `@meridian/observability`.
+   * `@aldo-ai/observability`.
    */
   readonly serviceName?: string;
 
@@ -50,8 +50,8 @@ export interface CreateTracerOpts {
 }
 
 function mapKind(kind: SpanKind): OtelSpanKind {
-  // All Meridian kinds are in-process work — they are not RPC/server spans.
-  // We model them all as INTERNAL; the `meridian.span.kind` attribute carries
+  // All Aldo kinds are in-process work — they are not RPC/server spans.
+  // We model them all as INTERNAL; the `aldo.span.kind` attribute carries
   // the finer-grained semantic.
   void kind;
   return OtelSpanKind.INTERNAL;
@@ -137,7 +137,7 @@ class MeridianTracer implements Tracer {
 
     const initialAttrs: Record<string, string | number | boolean> = {
       ...attrs,
-      [Meridian.KIND]: kind,
+      [Aldo.KIND]: kind,
     };
     const op = genAiOperationName(kind);
     if (op !== undefined) {
@@ -191,7 +191,7 @@ class MeridianTracer implements Tracer {
  * nest logically but nothing is exported.
  */
 export function createTracer(opts: CreateTracerOpts = {}): Tracer {
-  const serviceName = opts.serviceName ?? '@meridian/observability';
+  const serviceName = opts.serviceName ?? '@aldo-ai/observability';
   const otel = trace.getTracer(serviceName);
   const store = opts.replayStore ?? new InMemoryReplayStore();
   return new MeridianTracer(otel, store, opts.noop ?? false);

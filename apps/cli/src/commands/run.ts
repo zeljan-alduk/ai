@@ -1,5 +1,5 @@
 /**
- * `meridian run <agent>` — invoke an agent against a real provider.
+ * `aldo run <agent>` — invoke an agent against a real provider.
  *
  * Wiring:
  *   1. load Config from env + dotenv,
@@ -22,16 +22,7 @@
 
 import { existsSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
-import { type RuntimeBundle, bootstrap } from '../bootstrap.js';
-import {
-  type Config,
-  ProviderNotEnabledError,
-  findProvider,
-  loadConfig,
-} from '../config.js';
-import type { CliIO } from '../io.js';
-import { writeErr, writeJson, writeLine } from '../io.js';
-import { estimateCallCeilingUsd } from '@meridian/gateway';
+import { estimateCallCeilingUsd } from '@aldo-ai/gateway';
 import type {
   AgentRef,
   AgentSpec,
@@ -40,7 +31,11 @@ import type {
   ToolCallPart,
   ToolResultPart,
   UsageRecord,
-} from '@meridian/types';
+} from '@aldo-ai/types';
+import { type RuntimeBundle, bootstrap } from '../bootstrap.js';
+import { type Config, ProviderNotEnabledError, findProvider, loadConfig } from '../config.js';
+import type { CliIO } from '../io.js';
+import { writeErr, writeJson, writeLine } from '../io.js';
 
 export interface RunOptions {
   readonly inputs?: string;
@@ -132,7 +127,7 @@ export async function runRun(
     return 1;
   }
 
-  // Step 5: apply MERIDIAN_RUN_USD_CAP as a hard ceiling on the spec budget.
+  // Step 5: apply ALDO_RUN_USD_CAP as a hard ceiling on the spec budget.
   if (cfg.runUsdCap !== undefined && cfg.runUsdCap < spec.modelPolicy.budget.usdMax) {
     spec = withCappedBudget(spec, cfg.runUsdCap);
   }
@@ -241,7 +236,7 @@ async function loadAgentSpec(
   }
 }
 
-/** Apply `MERIDIAN_RUN_USD_CAP` as a hard ceiling on `usdMax`. */
+/** Apply `ALDO_RUN_USD_CAP` as a hard ceiling on `usdMax`. */
 function withCappedBudget(spec: AgentSpec, cap: number): AgentSpec {
   return {
     ...spec,

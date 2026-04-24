@@ -1,5 +1,5 @@
 /**
- * `meridian agent new <name>` — create a new agent YAML from the template.
+ * `aldo agent new <name>` — create a new agent YAML from the template.
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';

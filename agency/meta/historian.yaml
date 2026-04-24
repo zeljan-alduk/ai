@@ -1,4 +1,4 @@
-apiVersion: meridian/agent.v1
+apiVersion: aldo-ai/agent.v1
 kind: Agent
 
 identity:
@@ -40,9 +40,9 @@ prompt:
 
 tools:
   mcp:
-    - server: meridian-fs
+    - server: aldo-fs
       allow: [fs.read, fs.write]
-    - server: meridian-memory
+    - server: aldo-memory
       allow: [memory.read, memory.write, memory.scan]
   permissions:
     network: none

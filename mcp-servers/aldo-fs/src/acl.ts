@@ -1,5 +1,5 @@
 /**
- * meridian-fs — ACL.
+ * aldo-fs — ACL.
  *
  * The ACL pins each tool call to one of a set of pre-declared filesystem
  * roots. Every path the tools touch (the user-supplied path, every
@@ -101,7 +101,7 @@ export function findContainingRoot(roots: readonly Root[], abs: string): Root | 
  */
 export function createAcl(roots: readonly Root[]): Acl {
   if (roots.length === 0) {
-    throw new FsError('PERMISSION_DENIED', 'meridian-fs: no roots configured');
+    throw new FsError('PERMISSION_DENIED', 'aldo-fs: no roots configured');
   }
   const normalised: Root[] = roots.map((r) => ({ path: resolve(r.path), mode: r.mode }));
 
@@ -126,7 +126,7 @@ export function createAcl(roots: readonly Root[]): Acl {
       // or rely on the first-root convention documented in the README.
       const last = sorted[sorted.length - 1];
       if (!last) {
-        throw new FsError('PERMISSION_DENIED', 'meridian-fs: no roots configured');
+        throw new FsError('PERMISSION_DENIED', 'aldo-fs: no roots configured');
       }
       const abs = isAbsolute(callerPath) ? resolve(callerPath) : resolve(last.path, callerPath);
       const root = findContainingRoot(sorted, abs);

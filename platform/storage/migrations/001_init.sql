@@ -1,4 +1,4 @@
--- Meridian initial schema.
+-- ALDO AI initial schema.
 --
 -- Tables are intentionally narrow and append-mostly so the run history
 -- and replay bundles can be reconstructed from raw rows. JSONB columns

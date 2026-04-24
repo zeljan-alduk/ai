@@ -1,6 +1,6 @@
 /**
- * @meridian/registry — agent-spec loader, validator, and version store.
- * Implements the `AgentRegistry` interface from `@meridian/types`.
+ * @aldo-ai/registry — agent-spec loader, validator, and version store.
+ * Implements the `AgentRegistry` interface from `@aldo-ai/types`.
  */
 
 export { agentV1YamlSchema, type AgentV1Yaml } from './schema.js';

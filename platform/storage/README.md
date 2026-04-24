@@ -1,7 +1,7 @@
-# @meridian/storage
+# @aldo-ai/storage
 
-Postgres helpers, schema, and migrations shared by `@meridian/registry`
-and `@meridian/engine` (and, in a later wave, `@meridian/observability`).
+Postgres helpers, schema, and migrations shared by `@aldo-ai/registry`
+and `@aldo-ai/engine` (and, in a later wave, `@aldo-ai/observability`).
 
 ## Why this package exists
 
@@ -17,7 +17,7 @@ or schema. This package owns:
    order and is idempotent on rerun.
 4. **Drizzle schema** definitions for typed queries.
 
-It does **not** import from `@meridian/types`. JSONB columns carry
+It does **not** import from `@aldo-ai/types`. JSONB columns carry
 cross-package payloads (`AgentSpec`, `RunOverrides`, …) as opaque
 values; the registry + engine supply typed wrappers.
 

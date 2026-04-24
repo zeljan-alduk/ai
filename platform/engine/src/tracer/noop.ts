@@ -8,7 +8,7 @@ import type {
   SpanKind,
   TraceId,
   Tracer,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 
 /**
  * A Tracer that drops all spans and returns empty replay bundles.

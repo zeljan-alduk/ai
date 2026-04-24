@@ -1,4 +1,4 @@
-apiVersion: meridian/agent.v1
+apiVersion: aldo-ai/agent.v1
 kind: Agent
 
 # Trimmed copy of agency/support/code-reviewer.yaml: no MCP entries, no
@@ -8,7 +8,7 @@ identity:
   name: code-reviewer
   version: 0.1.0
   description: Reviews diffs for correctness, style, and security smells.
-  owner: support-team@meridian-labs
+  owner: support-team@aldo-labs
   tags: [support, review]
 
 role:

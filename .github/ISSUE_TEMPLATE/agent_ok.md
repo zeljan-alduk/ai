@@ -36,7 +36,7 @@ this short — the agent should not have to navigate a maze. -->
 - [ ] `pnpm lint` clean.
 - [ ] No new dependencies (or, if needed, justified in the PR
       description).
-- [ ] No changes to `@meridian/types` (request a separate issue if
+- [ ] No changes to `@aldo-ai/types` (request a separate issue if
       needed).
 
 ## Constraints

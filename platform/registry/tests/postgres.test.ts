@@ -6,12 +6,12 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fromDatabaseUrl, migrate } from '@meridian/storage';
+import { fromDatabaseUrl, migrate } from '@aldo-ai/storage';
+import type { AgentSpec } from '@aldo-ai/types';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { AgentRegistry } from '../src/registry.js';
 import { PostgresStorage } from '../src/postgres.js';
+import { AgentRegistry } from '../src/registry.js';
 import { AgentNotFoundError, NoPromotedVersionError } from '../src/storage.js';
-import type { AgentSpec } from '@meridian/types';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const fixturesDir = resolve(here, '..', 'fixtures');
@@ -52,7 +52,7 @@ describe('PostgresStorage', () => {
     const got = await reg.load({ name: 'code-reviewer', version: '1.4.0' });
     expect(got.identity.name).toBe('code-reviewer');
     expect(got.identity.version).toBe('1.4.0');
-    expect(got.identity.owner).toBe('support-team@meridian-labs');
+    expect(got.identity.owner).toBe('support-team@aldo-labs');
     // JSONB round-trip preserves nested structure.
     expect(got.modelPolicy.primary.capabilityClass).toBe('reasoning-large');
     expect(got.tools.mcp[0]?.server).toBe('github');
@@ -67,7 +67,10 @@ describe('PostgresStorage', () => {
     const yaml = await loadReviewerYaml();
     const baseRes = await reg.register(yaml);
     if (!baseRes.ok || !baseRes.spec) throw new Error('register failed');
-    const v1 = { ...baseRes.spec, identity: { ...baseRes.spec.identity, name: 'reviewer-promote' } };
+    const v1 = {
+      ...baseRes.spec,
+      identity: { ...baseRes.spec.identity, name: 'reviewer-promote' },
+    };
     await reg.registerSpec(v1);
     await reg.registerSpec(bump(v1, '1.5.0'));
     await reg.registerSpec(bump(v1, '2.0.0'));
@@ -77,19 +80,13 @@ describe('PostgresStorage', () => {
       NoPromotedVersionError,
     );
 
-    await reg.promote(
-      { name: 'reviewer-promote', version: '1.5.0' },
-      { evalReportId: 'abc' },
-    );
+    await reg.promote({ name: 'reviewer-promote', version: '1.5.0' }, { evalReportId: 'abc' });
     expect(await reg.promotedVersion('reviewer-promote')).toBe('1.5.0');
     const got = await reg.load({ name: 'reviewer-promote' });
     expect(got.identity.version).toBe('1.5.0');
 
     // Re-promoting flips and the previous row goes back to promoted=false.
-    await reg.promote(
-      { name: 'reviewer-promote', version: '2.0.0' },
-      { evalReportId: 'def' },
-    );
+    await reg.promote({ name: 'reviewer-promote', version: '2.0.0' }, { evalReportId: 'def' });
     expect(await reg.promotedVersion('reviewer-promote')).toBe('2.0.0');
 
     // Evidence is persisted on the row, accessible through getPromoted.
@@ -104,9 +101,7 @@ describe('PostgresStorage', () => {
     await expect(reg.load({ name: 'nope', version: '1.0.0' })).rejects.toBeInstanceOf(
       AgentNotFoundError,
     );
-    await expect(reg.load({ name: 'nope-no-version' })).rejects.toBeInstanceOf(
-      AgentNotFoundError,
-    );
+    await expect(reg.load({ name: 'nope-no-version' })).rejects.toBeInstanceOf(AgentNotFoundError);
   });
 
   it('list() filters by name and owner against Postgres rows', async () => {

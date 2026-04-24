@@ -20,12 +20,12 @@ import type {
   TraceId,
   Tracer,
   ValidationResult,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 
 /** Build a minimal AgentSpec, overriding only what a test cares about. */
 export function makeSpec(partial: Partial<AgentSpec> & { name: string }): AgentSpec {
   return {
-    apiVersion: 'meridian/agent.v1',
+    apiVersion: 'aldo-ai/agent.v1',
     kind: 'Agent',
     identity: {
       name: partial.name,

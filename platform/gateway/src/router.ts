@@ -1,11 +1,5 @@
-import type {
-  Budget,
-  CallContext,
-  Capability,
-  CapabilityClass,
-  PrivacyTier,
-} from '@meridian/types';
-import { providerAllowsTier } from '@meridian/types';
+import type { Budget, CallContext, Capability, CapabilityClass, PrivacyTier } from '@aldo-ai/types';
+import { providerAllowsTier } from '@aldo-ai/types';
 import { NoEligibleModelError } from './errors.js';
 import type { ModelRegistry, RegisteredModel } from './model-registry.js';
 import { estimateCallCeilingUsd } from './pricing.js';

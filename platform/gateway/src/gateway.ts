@@ -1,4 +1,4 @@
-import type { CallContext, CompletionRequest, Delta, ModelGateway } from '@meridian/types';
+import type { CallContext, CompletionRequest, Delta, ModelGateway } from '@aldo-ai/types';
 import { UnknownProviderKindError } from './errors.js';
 import type { ModelRegistry, RegisteredModel } from './model-registry.js';
 import type { AdapterRegistry, ProviderConfig } from './provider.js';

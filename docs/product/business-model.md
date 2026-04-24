@@ -21,7 +21,7 @@ CTA, yearly discount, a "contact sales" button on Enterprise.
 1. **Multi-tenant from day one.** Every object (agent, run, trace, memory
    entry, cost record) is scoped to a tenant and an organisation. The
    gateway, engine, memory store, and observability all thread
-   `TenantId` through `CallContext`. This is already in `@meridian/types`.
+   `TenantId` through `CallContext`. This is already in `@aldo-ai/types`.
 
 2. **Seats and roles.** Team and Enterprise plans need:
    - Seat management (invite, revoke, transfer)

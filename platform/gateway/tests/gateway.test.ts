@@ -7,8 +7,8 @@ import type {
   RunId,
   TenantId,
   TraceId,
-} from '@meridian/types';
-import { NoEligibleModelError } from '@meridian/types';
+} from '@aldo-ai/types';
+import { NoEligibleModelError } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import { createGateway } from '../src/gateway.js';
 import { type RegisteredModel, createModelRegistry } from '../src/model-registry.js';

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Entry point for the `meridian` binary.
+ * Entry point for the `aldo` binary.
  *
  * Everything interesting lives in `./cli.ts`; this file is the thinnest
  * possible wrapper so `bun build --compile` has a stable target.

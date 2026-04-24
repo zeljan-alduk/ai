@@ -60,7 +60,7 @@ see the positioning doc).
 
 ```
               ┌──────────────────────────────────────────────────┐
-              │  Agent spec (YAML)    meridian/agent.v1         │
+              │  Agent spec (YAML)    aldo-ai/agent.v1         │
               │  • capability reqs    • privacy tier            │
               │  • budget             • MCP tools               │
               │  • eval gate          • spawn/escalation rules  │
@@ -68,29 +68,29 @@ see the positioning doc).
                                    │ loaded by
                                    ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  @meridian/registry   Zod schema + semver store + promotion     │
+│  @aldo-ai/registry   Zod schema + semver store + promotion     │
 └──────────────────────┬──────────────────────────────────────────┘
                        │ spec hydrated
                        ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  @meridian/engine    Runtime • Orchestrator (pipeline /         │
+│  @aldo-ai/engine    Runtime • Orchestrator (pipeline /         │
 │                      supervisor / parallel / router / debate /  │
 │                      subscription) • Checkpointer • EventBus    │
 └───────────┬─────────────────────────────────────────────────────┘
             │ model/tool calls
             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  @meridian/gateway   Capability × privacy × budget router       │
+│  @aldo-ai/gateway   Capability × privacy × budget router       │
 │    Anthropic  OpenAI-compat  Google  xAI  Bedrock  Ollama       │
 │    vLLM  llama.cpp  LM Studio  Groq  OpenRouter  TGI            │
 └───────────┬─────────────────────────────────────────────────────┘
             │ instrumented by
             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  @meridian/observability   OTEL GenAI spans + replay bundles    │
+│  @aldo-ai/observability   OTEL GenAI spans + replay bundles    │
 └─────────────────────────────────────────────────────────────────┘
 
-        ┌─── apps/cli  (`meridian` command) ───┐
+        ┌─── apps/cli  (`aldo` command) ───┐
         │  init  agent new/validate/ls  run    │
         │  runs ls/view  models ls  mcp ls     │
         └───────────────────────────────────────┘
@@ -133,7 +133,7 @@ platform/
   engine/        runtime + orchestrator + checkpointer
   observability/ OTEL GenAI tracer + replay bundles
 apps/
-  cli/           the `meridian` command-line tool
+  cli/           the `aldo` command-line tool
 agency/          reference agency ("ALDO TECH LABS") — 26 agent YAMLs
                  + prompts across direction / delivery / support / meta
 mcp-servers/     first-party MCP tool servers (in progress)
@@ -154,8 +154,8 @@ Ollama (for local-model tests), Python 3.12 + uv (for the eval
 harness under `platform/eval`, planned).
 
 ```bash
-git clone https://github.com/zeljan-alduk/ai meridian
-cd meridian
+git clone https://github.com/zeljan-alduk/ai aldo
+cd aldo
 pnpm install
 
 # Build + test everything
@@ -163,7 +163,7 @@ pnpm -r typecheck
 pnpm -r test
 
 # Validate the reference agency
-pnpm --filter @meridian/cli exec meridian agent validate \
+pnpm --filter @aldo-ai/cli exec aldo agent validate \
   agency/support/code-reviewer.yaml
 ```
 

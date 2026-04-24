@@ -1,5 +1,5 @@
 /**
- * `meridian runs ls` — stub. Will list recent run ids + status once the
+ * `aldo runs ls` — stub. Will list recent run ids + status once the
  * engine ships a persistent runs store.
  */
 

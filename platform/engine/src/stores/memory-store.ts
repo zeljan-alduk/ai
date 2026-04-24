@@ -1,4 +1,4 @@
-import type { CallContext, MemoryEntry, MemoryScope, MemoryStore } from '@meridian/types';
+import type { CallContext, MemoryEntry, MemoryScope, MemoryStore } from '@aldo-ai/types';
 
 /**
  * In-memory, scope-aware MemoryStore for v0.

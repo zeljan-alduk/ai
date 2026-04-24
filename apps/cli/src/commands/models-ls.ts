@@ -1,5 +1,5 @@
 /**
- * `meridian models ls` — stub. Will list the capability classes configured
+ * `aldo models ls` — stub. Will list the capability classes configured
  * in the local gateway, provider-agnostic.
  */
 

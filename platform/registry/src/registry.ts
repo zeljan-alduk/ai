@@ -3,7 +3,7 @@
  *
  * Combines the loader, validator, and a pluggable `RegistryStorage`
  * backend. Implements the `AgentRegistry` interface from
- * `@meridian/types`.
+ * `@aldo-ai/types`.
  *
  * Resolution rules for `load(ref)`:
  *  - if `ref.version` is given, return exactly that version or throw,
@@ -17,7 +17,7 @@ import type {
   AgentRegistry as AgentRegistryIface,
   AgentSpec,
   ValidationResult,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 import { loadFromFile, parseYaml } from './loader.js';
 import { assertValid } from './semver.js';
 import {

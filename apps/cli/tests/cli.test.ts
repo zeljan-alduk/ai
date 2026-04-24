@@ -2,7 +2,7 @@
  * CLI integration tests. We drive `main(argv, { io })` directly and capture
  * stdout / stderr into buffers so we can assert against them. The registry
  * is mocked via `setRegistry` so these tests don't depend on the real
- * `@meridian/registry` package being built.
+ * `@aldo-ai/registry` package being built.
  */
 
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
@@ -44,7 +44,7 @@ function mockRegistry(): RegistryLike {
           ok: true,
           errors: [],
           spec: {
-            apiVersion: 'meridian/agent.v1',
+            apiVersion: 'aldo-ai/agent.v1',
             kind: 'Agent',
             identity: {
               name: 'sample-agent',
@@ -55,7 +55,7 @@ function mockRegistry(): RegistryLike {
             },
             // The rest of AgentSpec is unused by the CLI paths under test;
             // cast through unknown so we don't need the full tree here.
-          } as unknown as import('@meridian/types').AgentSpec,
+          } as unknown as import('@aldo-ai/types').AgentSpec,
         };
       }
       return {
@@ -68,12 +68,12 @@ function mockRegistry(): RegistryLike {
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 
-describe('meridian cli', () => {
+describe('aldo cli', () => {
   let tmp: string;
 
   beforeEach(async () => {
     setRegistry(mockRegistry());
-    tmp = await mkdtemp(join(tmpdir(), 'meridian-cli-'));
+    tmp = await mkdtemp(join(tmpdir(), 'aldo-cli-'));
   });
 
   afterEach(async () => {
@@ -86,7 +86,7 @@ describe('meridian cli', () => {
     const code = await main(['--help'], { io });
     expect(code).toBe(0);
     const text = out();
-    expect(text).toContain('meridian');
+    expect(text).toContain('aldo');
     expect(text).toContain('Usage:');
     expect(text).toContain('init');
     expect(text).toContain('agent');

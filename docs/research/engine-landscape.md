@@ -87,7 +87,7 @@ No framework covers all six natively, and none enforce privacy-tier routing. The
 2. Subscription pattern — Postgres LISTEN/NOTIFY for v0 is fine, but at what concurrent-run count do we need NATS JetStream / Redis Streams, and do we ship that switch in v0 behind a flag?
 3. Do we ship a Temporal adapter in v1 for hosted-scale tier, or is `pg-boss` + sharded Postgres sufficient through 10k concurrent runs?
 4. How do we handle long-lived (days/weeks) approval gates without a heartbeat — durable timers via `graphile-worker`, or push to OS-level cron?
-5. Should `meridian replay --with-model X` operate at the super-step boundary only, or per-tool-call? The latter is more useful but multiplies checkpoint volume.
+5. Should `aldo replay --with-model X` operate at the super-step boundary only, or per-tool-call? The latter is more useful but multiplies checkpoint volume.
 6. Do we adopt Mastra-style `suspend()`/`resume()` API names for familiarity, or invent our own to avoid future namespace collision?
 
 Status: proposed

@@ -1,15 +1,15 @@
-# @meridian/registry
+# @aldo-ai/registry
 
-Agent-spec loader, validator, and in-memory version store for Meridian.
+Agent-spec loader, validator, and in-memory version store for ALDO AI.
 
-Implements the `AgentRegistry` interface defined in `@meridian/types`
-(`runtime.ts`). All cross-package types come from `@meridian/types`; this
+Implements the `AgentRegistry` interface defined in `@aldo-ai/types`
+(`runtime.ts`). All cross-package types come from `@aldo-ai/types`; this
 package contributes only the Zod schema for the on-disk YAML shape and the
 snake_case -> camelCase transform.
 
 ## Scope (v0)
 
-- Parse and validate `meridian/agent.v1` YAML documents.
+- Parse and validate `aldo-ai/agent.v1` YAML documents.
 - Translate snake_case YAML keys into the camelCase `AgentSpec` shape.
 - Track multiple semver versions per agent name in memory.
 - Track a "promoted" version pointer per agent; `load(ref)` without a version

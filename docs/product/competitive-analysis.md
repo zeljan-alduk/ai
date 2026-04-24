@@ -116,7 +116,7 @@ Everything else (MCP-native, multi-tenant, OSS-core + managed) is table stakes w
 
 **First-20 design-partner profile.** Mid-size (50–500 eng) product or platform team that (a) has a regulated data class — health, finance, legal, defense, internal HR — that can't leave the VPC, (b) already runs at least one agent in production on LangChain/CrewAI/OpenAI SDK and has felt the pain, (c) has an internal LLM gateway proposal stuck in review. Bonus: a platform team chartered to standardize agent infra across BUs.
 
-**10-minute hello-world.** `pipx install meridian && meridian init`, drop in two YAML agents (a public researcher on a frontier model, a sensitive summarizer pinned to local Llama), run `meridian eval` against a seed dataset, watch the router refuse sensitive traffic to OpenAI even when you misconfigure it. The demo *is* the wedge.
+**10-minute hello-world.** `pipx install aldo && aldo init`, drop in two YAML agents (a public researcher on a frontier model, a sensitive summarizer pinned to local Llama), run `aldo eval` against a seed dataset, watch the router refuse sensitive traffic to OpenAI even when you misconfigure it. The demo *is* the wedge.
 
 **Migration adapter angle.** Ship import shims from LangGraph graphs, CrewAI crews, and OpenAI Agents SDK specs into ALDO AI YAML. Don't ask teams to rewrite — wrap. Then sell the gateway, replay, and eval gate as the upgrade.
 

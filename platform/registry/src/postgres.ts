@@ -2,17 +2,17 @@
  * Postgres-backed `RegistryStorage`.
  *
  * Persists agent specs, version history, and the promotion pointer in the
- * `agents` and `agent_versions` tables defined by `@meridian/storage`.
+ * `agents` and `agent_versions` tables defined by `@aldo-ai/storage`.
  * The promotion pointer is encoded as a partial `WHERE promoted = TRUE`
  * row per agent name — there is at most one promoted row at a time, kept
  * consistent inside a transaction.
  *
- * This module imports `@meridian/storage`'s `SqlClient` interface only;
+ * This module imports `@aldo-ai/storage`'s `SqlClient` interface only;
  * it is driver-agnostic.
  */
 
-import type { AgentSpec } from '@meridian/types';
-import type { SqlClient } from '@meridian/storage';
+import type { SqlClient } from '@aldo-ai/storage';
+import type { AgentSpec } from '@aldo-ai/types';
 import { assertValid, compare, latest } from './semver.js';
 import {
   AgentNotFoundError,
@@ -74,13 +74,13 @@ export class PostgresStorage implements RegistryStorage {
   async has(name: string, version?: string): Promise<boolean> {
     if (version === undefined) {
       const r = await this.client.query<{ count: string | number }>(
-        `SELECT count(*)::text AS count FROM agent_versions WHERE name = $1`,
+        'SELECT count(*)::text AS count FROM agent_versions WHERE name = $1',
         [name],
       );
       return Number(r.rows[0]?.count ?? 0) > 0;
     }
     const r = await this.client.query<{ count: string | number }>(
-      `SELECT count(*)::text AS count FROM agent_versions WHERE name = $1 AND version = $2`,
+      'SELECT count(*)::text AS count FROM agent_versions WHERE name = $1 AND version = $2',
       [name, version],
     );
     return Number(r.rows[0]?.count ?? 0) > 0;
@@ -110,7 +110,7 @@ export class PostgresStorage implements RegistryStorage {
 
   async listVersions(name: string): Promise<readonly string[]> {
     const r = await this.client.query<{ version: string }>(
-      `SELECT version FROM agent_versions WHERE name = $1`,
+      'SELECT version FROM agent_versions WHERE name = $1',
       [name],
     );
     return r.rows.map((row) => row.version).sort(compare);
@@ -118,14 +118,14 @@ export class PostgresStorage implements RegistryStorage {
 
   async listNames(): Promise<readonly string[]> {
     const r = await this.client.query<{ name: string }>(
-      `SELECT DISTINCT name FROM agent_versions ORDER BY name ASC`,
+      'SELECT DISTINCT name FROM agent_versions ORDER BY name ASC',
     );
     return r.rows.map((row) => row.name);
   }
 
   async promotedVersion(name: string): Promise<string | null> {
     const r = await this.client.query<{ version: string }>(
-      `SELECT version FROM agent_versions WHERE name = $1 AND promoted = TRUE`,
+      'SELECT version FROM agent_versions WHERE name = $1 AND promoted = TRUE',
       [name],
     );
     return r.rows[0]?.version ?? null;
@@ -134,7 +134,7 @@ export class PostgresStorage implements RegistryStorage {
   async promote(name: string, version: string, evidence: unknown): Promise<void> {
     // Verify the (name, version) exists before flipping the pointer.
     const r = await this.client.query<{ count: string | number }>(
-      `SELECT count(*)::text AS count FROM agent_versions WHERE name = $1 AND version = $2`,
+      'SELECT count(*)::text AS count FROM agent_versions WHERE name = $1 AND version = $2',
       [name, version],
     );
     if (Number(r.rows[0]?.count ?? 0) === 0) {
@@ -147,7 +147,7 @@ export class PostgresStorage implements RegistryStorage {
     // promoted rows is microseconds; readers that fall into it just see
     // `promotedVersion -> null` and fall back to the bootstrap path.
     await this.client.query(
-      `UPDATE agent_versions SET promoted = FALSE WHERE name = $1 AND promoted = TRUE`,
+      'UPDATE agent_versions SET promoted = FALSE WHERE name = $1 AND promoted = TRUE',
       [name],
     );
     await this.client.query(

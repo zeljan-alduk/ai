@@ -1,4 +1,4 @@
-import type { Node, RunId } from '@meridian/types';
+import type { Node, RunId } from '@aldo-ai/types';
 import type { InternalAgentRun } from '../agent-run.js';
 import type { PlatformRuntime } from '../runtime.js';
 

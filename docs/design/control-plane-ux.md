@@ -8,11 +8,11 @@ ALDO AI is an LLM-agnostic sub-agent orchestrator. UX job: make multi-agent syst
 
 ## 1. Design principles
 
-1. **Every run is a URL.** Run, step, tool call, memory op — each has a stable ID. `meridian://run/01HXYZ/step/7` resolves identically in CLI, web, IDE.
+1. **Every run is a URL.** Run, step, tool call, memory op — each has a stable ID. `aldo://run/01HXYZ/step/7` resolves identically in CLI, web, IDE.
 2. **Replay is one click.** Any run replays, forks, or partially re-executes from any step. If a user re-wires inputs by hand to reproduce a bug, we failed.
 3. **Privacy tier is always visible.** Every model call renders a tier badge (`public` / `vpc` / `on-prem` / `local`). No silent fallbacks.
 4. **Cost is always visible.** Running total on every run view, agent card, PR comment. Budget exhaustion is a first-class state, not a 500.
-5. **Local is not second-class.** `meridian dev` is the same control plane as cloud. Ollama/llama.cpp/MLX sit in the same eval matrix as frontier APIs.
+5. **Local is not second-class.** `aldo dev` is the same control plane as cloud. Ollama/llama.cpp/MLX sit in the same eval matrix as frontier APIs.
 6. **CLI is the source of truth.** Anything in the web, you can do in the CLI. Web is a view layer.
 7. **Model choice is a dimension, not a commitment.** Swap provider at any scope with one command. Cross-model sweeps are the default eval shape.
 
@@ -24,24 +24,24 @@ Feel: `gh` ergonomics, `kubectl` verbs, `claude` polish. `NO_COLOR`-aware. `-o j
 
 | Command | Purpose | Example |
 |---|---|---|
-| `meridian init` | Scaffold (`agents/`, `evals/`, `meridian.toml`) | `meridian init support-bot --template triage` |
-| `meridian agent new` | New agent from template | `meridian agent new researcher --from supervisor` |
-| `meridian agent validate` | Lint + schema-check, dry-run tools | `meridian agent validate agents/researcher.yaml` |
-| `meridian agent promote` | Promote version, gated by eval | `meridian agent promote researcher@v7 --to prod` |
-| `meridian run <agent>` | Execute; streams timeline | `meridian run triage --inputs ticket=T-4821 --model claude-opus-4-7` |
-| `meridian runs ls` | Filter by agent, status, tenant, tag | `meridian runs ls --agent triage --status failed --since 24h` |
-| `meridian runs view <id>` | Full trace: steps, tools, tokens, cost | `meridian runs view 01HXYZ --follow` |
-| `meridian runs replay <id>` | Deterministic replay from recorded inputs | `meridian runs replay 01HXYZ --from-step 4` |
-| `meridian runs fork <id>` | Fork at a step, mutate state, rerun | `meridian runs fork 01HXYZ --at 4 --model gpt-5.1` |
-| `meridian eval run` | Eval set, optionally across models | `meridian eval run triage-reg --models claude-opus-4-7,gpt-5.1` |
-| `meridian eval promote-gate` | Non-zero exit on regression — for CI | `meridian eval promote-gate researcher@v7 --baseline v6` |
-| `meridian models ls` | Configured providers and status | `meridian models ls --tier on-prem` |
-| `meridian models test <cap>` | Probe for tool-use / vision / JSON mode | `meridian models test tool-use --model llama-4-70b` |
-| `meridian mcp ls/add/remove` | Manage MCP connections | `meridian mcp add github --url https://mcp.github.com` |
-| `meridian dev` | Local control plane, SQLite trace store | `meridian dev --open` |
-| `meridian login` | OIDC device flow, per-tenant | `meridian login --tenant acme` |
+| `aldo init` | Scaffold (`agents/`, `evals/`, `aldo.toml`) | `aldo init support-bot --template triage` |
+| `aldo agent new` | New agent from template | `aldo agent new researcher --from supervisor` |
+| `aldo agent validate` | Lint + schema-check, dry-run tools | `aldo agent validate agents/researcher.yaml` |
+| `aldo agent promote` | Promote version, gated by eval | `aldo agent promote researcher@v7 --to prod` |
+| `aldo run <agent>` | Execute; streams timeline | `aldo run triage --inputs ticket=T-4821 --model claude-opus-4-7` |
+| `aldo runs ls` | Filter by agent, status, tenant, tag | `aldo runs ls --agent triage --status failed --since 24h` |
+| `aldo runs view <id>` | Full trace: steps, tools, tokens, cost | `aldo runs view 01HXYZ --follow` |
+| `aldo runs replay <id>` | Deterministic replay from recorded inputs | `aldo runs replay 01HXYZ --from-step 4` |
+| `aldo runs fork <id>` | Fork at a step, mutate state, rerun | `aldo runs fork 01HXYZ --at 4 --model gpt-5.1` |
+| `aldo eval run` | Eval set, optionally across models | `aldo eval run triage-reg --models claude-opus-4-7,gpt-5.1` |
+| `aldo eval promote-gate` | Non-zero exit on regression — for CI | `aldo eval promote-gate researcher@v7 --baseline v6` |
+| `aldo models ls` | Configured providers and status | `aldo models ls --tier on-prem` |
+| `aldo models test <cap>` | Probe for tool-use / vision / JSON mode | `aldo models test tool-use --model llama-4-70b` |
+| `aldo mcp ls/add/remove` | Manage MCP connections | `aldo mcp add github --url https://mcp.github.com` |
+| `aldo dev` | Local control plane, SQLite trace store | `aldo dev --open` |
+| `aldo login` | OIDC device flow, per-tenant | `aldo login --tenant acme` |
 
-All ship in v0.1. `meridian runs diff` and `meridian budgets` follow post-v0.1.
+All ship in v0.1. `aldo runs diff` and `aldo budgets` follow post-v0.1.
 
 ---
 
@@ -107,15 +107,15 @@ Per agent: versions, promotion history, spec+prompt diff, eval evidence, prod pi
 5-minute path:
 
 ```
-$ meridian init hello --template echo
-  created agents/echo.yaml, evals/echo.yaml, meridian.toml
+$ aldo init hello --template echo
+  created agents/echo.yaml, evals/echo.yaml, aldo.toml
 
-$ meridian dev --open
+$ aldo dev --open
   control plane  http://localhost:4747
-  trace store    .meridian/traces.db
+  trace store    .aldo/traces.db
 ```
 
-Browser lands on onboarding with three cards: (1) Add provider key (or use bundled local Ollama); (2) Run the echo agent; (3) Open your first trace. Card 2's Run fires `meridian run echo --inputs message=hi`; run view opens mid-stream. Under 5 minutes.
+Browser lands on onboarding with three cards: (1) Add provider key (or use bundled local Ollama); (2) Run the echo agent; (3) Open your first trace. Card 2's Run fires `aldo run echo --inputs message=hi`; run view opens mid-stream. Under 5 minutes.
 
 Elsewhere: eval dashboard with no evals → "generate a starter eval from a past run" picks a successful run, proposes 3 assertions. Org chart empty → ghosted illustration plus "run your first agent".
 
@@ -125,8 +125,8 @@ Elsewhere: eval dashboard with no evals → "generate a starter eval from a past
 
 CLI fully replaces the web.
 - All list/inspect/mutate ops with `-o json`.
-- `meridian runs view --follow` is a live TUI timeline (k9s-like) with step controls (`p` pause, `r` replay, `s` step).
-- Approvals: `meridian approvals ls/approve/deny`. Budgets: `meridian budgets show/set`.
+- `aldo runs view --follow` is a live TUI timeline (k9s-like) with step controls (`p` pause, `r` replay, `s` step).
+- Approvals: `aldo approvals ls/approve/deny`. Budgets: `aldo budgets show/set`.
 
 **Web-only in v0.1:** flame graph, side-by-side compare, org chart rendering. Each has a `--json` equivalent for custom rendering.
 **CLI-only in v0.1:** `init` scaffolding, local `dev` bootstrap, shell completion install.
@@ -142,7 +142,7 @@ Accessibility: WCAG 2.2 AA. No color-only signaling (shape + text paired). Keybo
 - **Temporal UI**: workflow-as-timeline, replay-from-history, stable event IDs.
 - **Vercel**: tenant/project/env breadcrumb, cost pill, preview-URL-per-everything.
 - **gh**: verb/noun grammar, `-o json`, interactive+scriptable duality.
-- **kubectl**: resource/verb symmetry; `meridian agent explain` in v0.2.
+- **kubectl**: resource/verb symmetry; `aldo agent explain` in v0.2.
 - **Linear**: `cmd-k`, optimistic UI, keyboard-first.
 - **Datadog APM**: service map colored by health, flame graph filter chips.
 

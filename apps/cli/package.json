@@ -1,11 +1,11 @@
 {
-  "name": "@meridian/cli",
+  "name": "@aldo-ai/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Meridian command-line tool (meridian).",
+  "description": "ALDO AI command-line tool (aldo).",
   "bin": {
-    "meridian": "./dist/index.js"
+    "aldo": "./dist/index.js"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -16,15 +16,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc",
-    "build:bin": "bun build ./src/index.ts --compile --target=bun --outfile dist/meridian"
+    "build:bin": "bun build ./src/index.ts --compile --target=bun --outfile dist/aldo"
   },
   "dependencies": {
-    "@meridian/engine": "workspace:*",
-    "@meridian/gateway": "workspace:*",
-    "@meridian/observability": "workspace:*",
-    "@meridian/registry": "workspace:*",
-    "@meridian/runtime-config": "workspace:*",
-    "@meridian/types": "workspace:*",
+    "@aldo-ai/engine": "workspace:*",
+    "@aldo-ai/gateway": "workspace:*",
+    "@aldo-ai/observability": "workspace:*",
+    "@aldo-ai/registry": "workspace:*",
+    "@aldo-ai/runtime-config": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
     "commander": "^12.1.0",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"

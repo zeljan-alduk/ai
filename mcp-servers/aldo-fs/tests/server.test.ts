@@ -12,7 +12,7 @@ let acl: ReturnType<typeof createAcl>;
 let client: Client;
 
 beforeAll(async () => {
-  const base = await mkdtemp(join(tmpdir(), 'meridian-fs-server-'));
+  const base = await mkdtemp(join(tmpdir(), 'aldo-fs-server-'));
   rw = join(base, 'rw');
   await mkdir(rw, { recursive: true });
   await writeFile(join(rw, 'greeting.txt'), 'salutations');
@@ -22,11 +22,11 @@ beforeAll(async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
 
-  client = new Client({ name: 'meridian-fs-test', version: '0.0.0' }, { capabilities: {} });
+  client = new Client({ name: 'aldo-fs-test', version: '0.0.0' }, { capabilities: {} });
   await client.connect(clientTransport);
 });
 
-describe('meridian-fs MCP server', () => {
+describe('aldo-fs MCP server', () => {
   it('lists the v0 tools via tools/list', async () => {
     const r = await client.listTools();
     const names = r.tools.map((t) => t.name).sort();

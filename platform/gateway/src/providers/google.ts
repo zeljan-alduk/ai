@@ -1,4 +1,4 @@
-import type { CompletionRequest, Delta, Message, ToolCallPart } from '@meridian/types';
+import type { CompletionRequest, Delta, Message, ToolCallPart } from '@aldo-ai/types';
 import { ProviderError } from '../errors.js';
 import { buildUsageRecord } from '../pricing.js';
 import type { ProviderAdapter, ProviderConfig } from '../provider.js';

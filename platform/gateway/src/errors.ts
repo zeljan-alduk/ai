@@ -1,9 +1,9 @@
 /**
- * Gateway-local errors. `NoEligibleModelError` is imported from `@meridian/types`
+ * Gateway-local errors. `NoEligibleModelError` is imported from `@aldo-ai/types`
  * and re-exported so callers have a single import site.
  */
 
-export { NoEligibleModelError } from '@meridian/types';
+export { NoEligibleModelError } from '@aldo-ai/types';
 
 /** Thrown when a descriptor references a providerKind not in the adapter registry. */
 export class UnknownProviderKindError extends Error {

@@ -1,5 +1,5 @@
 /**
- * @meridian/engine — the agent runtime, orchestrator, and checkpointer.
+ * @aldo-ai/engine — the agent runtime, orchestrator, and checkpointer.
  *
  * This package is LLM-agnostic: a ModelGateway, ToolHost, AgentRegistry,
  * and Tracer are injected at construction. It never imports provider SDKs.

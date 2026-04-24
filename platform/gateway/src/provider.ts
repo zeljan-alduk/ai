@@ -1,4 +1,4 @@
-import type { CompletionRequest, Delta, ModelDescriptor } from '@meridian/types';
+import type { CompletionRequest, Delta, ModelDescriptor } from '@aldo-ai/types';
 
 /**
  * ProviderAdapter is the only contract the router knows about. Adapters hide

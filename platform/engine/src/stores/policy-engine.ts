@@ -1,4 +1,4 @@
-import type { CallContext, Decision, PolicyEngine, PolicyResult } from '@meridian/types';
+import type { CallContext, Decision, PolicyEngine, PolicyResult } from '@aldo-ai/types';
 
 export type PolicyRule = (
   decision: Decision,

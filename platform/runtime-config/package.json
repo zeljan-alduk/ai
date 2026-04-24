@@ -1,5 +1,5 @@
 {
-  "name": "@meridian/runtime-config",
+  "name": "@aldo-ai/runtime-config",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,11 +11,11 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "build": "tsc"
   },
   "dependencies": {
-    "@meridian/types": "workspace:*"
+    "@aldo-ai/types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

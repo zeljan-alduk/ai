@@ -20,7 +20,7 @@ import type {
   ToolResultPart,
   ToolSchema,
   Tracer,
-} from '@meridian/types';
+} from '@aldo-ai/types';
 import type { Checkpoint, Checkpointer } from './checkpointer/index.js';
 
 /**

@@ -41,29 +41,28 @@ describe('loadConfig', () => {
     expect(ollama?.baseUrl).toBe('http://gpu-host:11434');
   });
 
-  it('parses MERIDIAN_RUN_USD_CAP as a number', () => {
+  it('parses ALDO_RUN_USD_CAP as a number', () => {
     const cfg = loadConfig({
-      env: { MERIDIAN_RUN_USD_CAP: '0.25' },
+      env: { ALDO_RUN_USD_CAP: '0.25' },
       dotenvFiles: [],
     });
     expect(cfg.runUsdCap).toBe(0.25);
   });
 
-  it('drops MERIDIAN_RUN_USD_CAP when not numeric', () => {
+  it('drops ALDO_RUN_USD_CAP when not numeric', () => {
     const cfg = loadConfig({
-      env: { MERIDIAN_RUN_USD_CAP: 'two-bucks' },
+      env: { ALDO_RUN_USD_CAP: 'two-bucks' },
       dotenvFiles: [],
     });
     expect(cfg.runUsdCap).toBeUndefined();
   });
 
-  it('honours MERIDIAN_DEFAULT_PRIVACY when valid; falls back otherwise', () => {
+  it('honours ALDO_DEFAULT_PRIVACY when valid; falls back otherwise', () => {
     expect(
-      loadConfig({ env: { MERIDIAN_DEFAULT_PRIVACY: 'sensitive' }, dotenvFiles: [] })
-        .defaultPrivacy,
+      loadConfig({ env: { ALDO_DEFAULT_PRIVACY: 'sensitive' }, dotenvFiles: [] }).defaultPrivacy,
     ).toBe('sensitive');
     expect(
-      loadConfig({ env: { MERIDIAN_DEFAULT_PRIVACY: 'lol' }, dotenvFiles: [] }).defaultPrivacy,
+      loadConfig({ env: { ALDO_DEFAULT_PRIVACY: 'lol' }, dotenvFiles: [] }).defaultPrivacy,
     ).toBe('internal');
   });
 

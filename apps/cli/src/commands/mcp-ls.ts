@@ -1,5 +1,5 @@
 /**
- * `meridian mcp ls` — stub. Will list registered MCP servers and their
+ * `aldo mcp ls` — stub. Will list registered MCP servers and their
  * allowlisted tools once the MCP registry lands.
  */
 

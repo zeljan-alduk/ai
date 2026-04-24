@@ -1,5 +1,5 @@
 /**
- * @meridian/storage — shared Postgres helpers + schema for the platform.
+ * @aldo-ai/storage — shared Postgres helpers + schema for the platform.
  *
  * This package owns:
  *  - the SQL migration runner and the canonical `001_init.sql`,
@@ -7,7 +7,7 @@
  *    pglite behind a single interface (so consumers stay driver-agnostic),
  *  - the Drizzle ORM schema definitions for queries + future codegen.
  *
- * It deliberately does NOT depend on `@meridian/types`; the JSONB columns
+ * It deliberately does NOT depend on `@aldo-ai/types`; the JSONB columns
  * carry cross-package payloads as opaque values. Registry + engine
  * supply the typed wrappers.
  */

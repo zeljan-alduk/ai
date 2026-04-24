@@ -1,5 +1,5 @@
 /**
- * `meridian agent ls` — list agent YAMLs in the project's agents/ directory
+ * `aldo agent ls` — list agent YAMLs in the project's agents/ directory
  * alongside their `identity.name@identity.version`.
  *
  * Promoted-version discovery is a TODO: the registry's `list()` /

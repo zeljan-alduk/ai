@@ -1,4 +1,4 @@
-apiVersion: meridian/agent.v1
+apiVersion: aldo-ai/agent.v1
 kind: Agent
 
 identity:

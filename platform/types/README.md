@@ -1,6 +1,6 @@
-# @meridian/types
+# @aldo-ai/types
 
-Cross-package type contracts for Meridian. **Types only, no runtime.**
+Cross-package type contracts for ALDO AI. **Types only, no runtime.**
 Every other package imports from here; nothing in here imports from
 anywhere else.
 

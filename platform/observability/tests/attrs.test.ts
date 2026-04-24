@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GenAI, Meridian, attrs, genAiOperationName } from '../src/attrs.js';
+import { Aldo, GenAI, attrs, genAiOperationName } from '../src/attrs.js';
 
 describe('attrs.modelCall', () => {
   it('uses OTEL GenAI semantic convention keys', () => {
@@ -57,14 +57,14 @@ describe('attrs.toolCall', () => {
 });
 
 describe('attrs.memoryOp / policyCheck', () => {
-  it('uses meridian namespace for replay-only fields', () => {
+  it('uses aldo namespace for replay-only fields', () => {
     const m = attrs.memoryOp({ scope: 'session', op: 'read' });
-    expect(m[Meridian.MEMORY_SCOPE]).toBe('session');
-    expect(m[Meridian.MEMORY_OP]).toBe('read');
+    expect(m[Aldo.MEMORY_SCOPE]).toBe('session');
+    expect(m[Aldo.MEMORY_OP]).toBe('read');
 
     const p = attrs.policyCheck({ rule: 'pii.redact', decision: 'redact' });
-    expect(p[Meridian.POLICY_RULE]).toBe('pii.redact');
-    expect(p[Meridian.POLICY_DECISION]).toBe('redact');
+    expect(p[Aldo.POLICY_RULE]).toBe('pii.redact');
+    expect(p[Aldo.POLICY_DECISION]).toBe('redact');
   });
 });
 

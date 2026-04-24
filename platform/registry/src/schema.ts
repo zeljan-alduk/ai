@@ -3,13 +3,13 @@
  *
  * The schema speaks the on-disk snake_case shape. The loader is responsible
  * for translating snake_case -> camelCase and for producing values that
- * conform to the TS types in `@meridian/types`.
+ * conform to the TS types in `@aldo-ai/types`.
  *
  * Unknown top-level keys (and unknown keys in every nested object) are
  * rejected (`.strict()`) — agents-as-data must not silently drift.
  */
 
-import { CANONICAL_CAPABILITIES } from '@meridian/types';
+import { CANONICAL_CAPABILITIES } from '@aldo-ai/types';
 import { z } from 'zod';
 
 // --- primitives ------------------------------------------------------------
@@ -210,7 +210,7 @@ const evalGateSchema = z
 
 export const agentV1YamlSchema = z
   .object({
-    apiVersion: z.literal('meridian/agent.v1'),
+    apiVersion: z.literal('aldo-ai/agent.v1'),
     kind: z.literal('Agent'),
     identity: identitySchema,
     role: roleSchema,

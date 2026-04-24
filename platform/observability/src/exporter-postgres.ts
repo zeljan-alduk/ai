@@ -20,7 +20,7 @@
  * v0 does NOT actually write anything — it just validates the interface
  * so the OTEL side can ship independently.
  */
-import type { Attrs, SpanKind, TraceId } from '@meridian/types';
+import type { Attrs, SpanKind, TraceId } from '@aldo-ai/types';
 
 export interface SpanRecord {
   readonly spanId: string;

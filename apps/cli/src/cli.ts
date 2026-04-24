@@ -46,8 +46,8 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
   program.exitOverride();
 
   program
-    .name('meridian')
-    .description('Meridian — LLM-agnostic AI sub-agent orchestrator')
+    .name('aldo')
+    .description('ALDO AI — LLM-agnostic AI sub-agent orchestrator')
     .version(CLI_VERSION, '-v, --version', 'print version')
     .helpOption('-h, --help', 'show help')
     .showHelpAfterError(false)
@@ -59,7 +59,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
   // --- init -----------------------------------------------------------------
   program
     .command('init <dir>')
-    .description('scaffold a new Meridian project')
+    .description('scaffold a new ALDO AI project')
     .option('--json', 'emit JSON output', false)
     .action((dir: string, o: { json?: boolean }) => {
       action = () => runInit(dir, { json: o.json === true }, io);

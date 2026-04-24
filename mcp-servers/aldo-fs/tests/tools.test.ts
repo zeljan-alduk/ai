@@ -14,7 +14,7 @@ let ro = '';
 let acl: ReturnType<typeof createAcl>;
 
 beforeAll(async () => {
-  const base = await mkdtemp(join(tmpdir(), 'meridian-fs-tools-'));
+  const base = await mkdtemp(join(tmpdir(), 'aldo-fs-tools-'));
   rw = join(base, 'rw');
   ro = join(base, 'ro');
   await mkdir(rw, { recursive: true });

@@ -1,12 +1,12 @@
-# @meridian/engine
+# @aldo-ai/engine
 
-The Meridian agent runtime, orchestrator, and checkpointer.
+The ALDO AI agent runtime, orchestrator, and checkpointer.
 
 ## Shape
 
 This package owns three concerns:
 
-1. **Runtime** (`src/runtime.ts`) — the `Runtime` from `@meridian/types`.
+1. **Runtime** (`src/runtime.ts`) — the `Runtime` from `@aldo-ai/types`.
    `spawn(ref, inputs, parent?)` resolves an `AgentSpec` from the injected
    `AgentRegistry`, validates `spawn.allowed`, and builds a `LeafAgentRun`.
    Tracks parent/child relationships so `parentsOf(id)` / `childrenOf(id)`
@@ -46,10 +46,10 @@ real implementations:
 
 ```ts
 const runtime = new PlatformRuntime({
-  modelGateway,          // @meridian/gateway
-  toolHost,              // @meridian/sandbox (via MCP)
-  registry,              // @meridian/registry
-  tracer,                // @meridian/observability
+  modelGateway,          // @aldo-ai/gateway
+  toolHost,              // @aldo-ai/sandbox (via MCP)
+  registry,              // @aldo-ai/registry
+  tracer,                // @aldo-ai/observability
   tenant: tenantId,
 });
 
@@ -99,7 +99,7 @@ in the graph.
 ## Tests
 
 ```sh
-pnpm --filter @meridian/engine test
+pnpm --filter @aldo-ai/engine test
 ```
 
 Mocks for `ModelGateway`, `AgentRegistry`, `ToolHost`, `Tracer` live in

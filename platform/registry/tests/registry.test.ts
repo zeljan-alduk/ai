@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AgentSpec } from '@meridian/types';
+import type { AgentSpec } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
 import { AgentRegistry } from '../src/registry.js';
 import { AgentNotFoundError, NoPromotedVersionError } from '../src/storage.js';
@@ -85,7 +85,7 @@ describe('AgentRegistry', () => {
     const byName = await reg.list({ name: 'code-reviewer' });
     expect(byName).toHaveLength(2);
 
-    const byOwner = await reg.list({ owner: 'support-team@meridian-labs' });
+    const byOwner = await reg.list({ owner: 'support-team@aldo-labs' });
     expect(byOwner).toHaveLength(2);
 
     const none = await reg.list({ owner: 'someone-else' });

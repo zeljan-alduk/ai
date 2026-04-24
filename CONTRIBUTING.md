@@ -48,8 +48,8 @@ Not accepted without discussion:
 # Requirements: Node 22+, pnpm 9+, (optional) Bun, (optional) Ollama for
 # local-model tests. Python 3.12 + uv if you touch platform/eval.
 
-git clone https://github.com/zeljan-alduk/ai meridian
-cd meridian
+git clone https://github.com/zeljan-alduk/ai aldo
+cd aldo
 pnpm install
 pnpm -r typecheck
 pnpm -r test
@@ -58,8 +58,8 @@ pnpm lint
 
 Package-local commands:
 ```bash
-pnpm --filter @meridian/gateway test
-pnpm --filter @meridian/engine typecheck
+pnpm --filter @aldo-ai/gateway test
+pnpm --filter @aldo-ai/engine typecheck
 ```
 
 ## Code standards
@@ -69,7 +69,7 @@ pnpm --filter @meridian/engine typecheck
 - **Tests are required** for new behaviour. Vitest for TS packages.
 - **No hidden provider coupling.** If your code imports an LLM SDK,
   it belongs under `platform/gateway/src/providers/` and nowhere else.
-- **Types from `@meridian/types`.** Don't redefine shared contract
+- **Types from `@aldo-ai/types`.** Don't redefine shared contract
   types in downstream packages. If you need a new field, propose it
   via an ADR (see `docs/adr/`).
 - **No emojis in source or commit messages.**

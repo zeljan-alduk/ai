@@ -41,7 +41,10 @@ export function defaultMigrationsDir(): string {
  * Apply every pending migration found in `dir`. Safe to run repeatedly;
  * already-applied versions are skipped.
  */
-export async function migrate(client: SqlClient, opts: MigrateOptions = {}): Promise<MigrationRecord[]> {
+export async function migrate(
+  client: SqlClient,
+  opts: MigrateOptions = {},
+): Promise<MigrationRecord[]> {
   const dir = opts.dir ?? defaultMigrationsDir();
   const table = opts.table ?? DEFAULT_TABLE;
 
@@ -61,10 +64,11 @@ export async function migrate(client: SqlClient, opts: MigrateOptions = {}): Pro
     const sql = await readFile(join(dir, file), 'utf8');
     await client.exec(sql);
     const appliedAt = new Date().toISOString();
-    await client.query(
-      `INSERT INTO ${table} (version, name, applied_at) VALUES ($1, $2, $3)`,
-      [version, name, appliedAt],
-    );
+    await client.query(`INSERT INTO ${table} (version, name, applied_at) VALUES ($1, $2, $3)`, [
+      version,
+      name,
+      appliedAt,
+    ]);
     newlyApplied.push({ version, name, appliedAt });
   }
   return newlyApplied;

@@ -10,7 +10,7 @@ let outsideDir = '';
 let acl: ReturnType<typeof createAcl>;
 
 beforeAll(async () => {
-  const base = await mkdtemp(join(tmpdir(), 'meridian-fs-acl-'));
+  const base = await mkdtemp(join(tmpdir(), 'aldo-fs-acl-'));
   rwRoot = join(base, 'rw');
   roRoot = join(base, 'ro');
   outsideDir = join(base, 'outside');

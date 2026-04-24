@@ -1,5 +1,5 @@
 /**
- * SQL client abstraction for Meridian storage.
+ * SQL client abstraction for ALDO AI storage.
  *
  * The platform must run against three backends without coupling to any of
  * them at the type level:
@@ -191,7 +191,9 @@ async function createPgliteClient(url: string, prebuilt: unknown): Promise<SqlCl
     })) as unknown as { PGlite: new (path?: string) => unknown };
     const PGlite = mod.PGlite;
     const dataDir =
-      url === '' || url === 'pglite:' || url === 'memory://' ? undefined : url.replace(/^pglite:/, '');
+      url === '' || url === 'pglite:' || url === 'memory://'
+        ? undefined
+        : url.replace(/^pglite:/, '');
     db = dataDir === undefined ? new PGlite() : new PGlite(dataDir);
   }
   return {

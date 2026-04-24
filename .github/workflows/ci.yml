@@ -58,4 +58,4 @@ jobs:
   #   steps:
   #     - uses: actions/checkout@v4
   #     - run: pnpm install --frozen-lockfile
-  #     - run: pnpm --filter @meridian/cli exec meridian agent validate agency/**/*.yaml
+  #     - run: pnpm --filter @aldo-ai/cli exec aldo agent validate agency/**/*.yaml

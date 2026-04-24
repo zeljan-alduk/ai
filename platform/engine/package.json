@@ -1,5 +1,5 @@
 {
-  "name": "@meridian/engine",
+  "name": "@aldo-ai/engine",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@meridian/storage": "workspace:*",
-    "@meridian/types": "workspace:*",
+    "@aldo-ai/storage": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {

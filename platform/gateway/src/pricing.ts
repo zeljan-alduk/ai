@@ -1,4 +1,4 @@
-import type { ModelDescriptor, UsageRecord } from '@meridian/types';
+import type { ModelDescriptor, UsageRecord } from '@aldo-ai/types';
 
 /**
  * Pricing math. Pure; no I/O, no time source (callers pass `at`).

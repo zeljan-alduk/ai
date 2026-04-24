@@ -1,5 +1,5 @@
 /**
- * Meridian core types. Single source of truth for cross-package contracts,
+ * ALDO AI core types. Single source of truth for cross-package contracts,
  * drawn from ADR 0001. Packages must import types from here rather than
  * redeclaring them.
  *

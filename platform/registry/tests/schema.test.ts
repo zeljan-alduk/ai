@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { agentV1YamlSchema } from '../src/schema.js';
 
 const minimalRaw = {
-  apiVersion: 'meridian/agent.v1',
+  apiVersion: 'aldo-ai/agent.v1',
   kind: 'Agent',
   identity: {
     name: 'demo',
@@ -61,7 +61,7 @@ describe('agentV1YamlSchema', () => {
   });
 
   it('rejects a bad apiVersion', () => {
-    const bad = { ...minimalRaw, apiVersion: 'meridian/agent.v2' };
+    const bad = { ...minimalRaw, apiVersion: 'aldo/agent.v2' };
     const res = agentV1YamlSchema.safeParse(bad);
     expect(res.success).toBe(false);
   });

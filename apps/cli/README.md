@@ -1,6 +1,6 @@
-# @meridian/cli
+# @aldo-ai/cli
 
-The `meridian` command-line tool.
+The `aldo` command-line tool.
 
 ## Status (v0)
 
@@ -10,23 +10,23 @@ the rest are honest stubs that exit with code `2` and point at
 
 | command                        | status |
 | ------------------------------ | ------ |
-| `meridian init <dir>`          | real   |
-| `meridian agent new <name>`    | real   |
-| `meridian agent validate <f>`  | real   |
-| `meridian agent ls`            | real   |
-| `meridian run <agent>`         | stub   |
-| `meridian runs ls`             | stub   |
-| `meridian runs view <id>`      | stub   |
-| `meridian models ls`           | stub   |
-| `meridian mcp ls`              | stub   |
-| `meridian dev`                 | stub   |
+| `aldo init <dir>`          | real   |
+| `aldo agent new <name>`    | real   |
+| `aldo agent validate <f>`  | real   |
+| `aldo agent ls`            | real   |
+| `aldo run <agent>`         | stub   |
+| `aldo runs ls`             | stub   |
+| `aldo runs view <id>`      | stub   |
+| `aldo models ls`           | stub   |
+| `aldo mcp ls`              | stub   |
+| `aldo dev`                 | stub   |
 
 ## Install / build
 
 ```
-pnpm -F @meridian/cli build         # tsc -> dist/
-pnpm -F @meridian/cli build:bin     # bun build --compile -> dist/meridian
-pnpm -F @meridian/cli test          # vitest
+pnpm -F @aldo-ai/cli build         # tsc -> dist/
+pnpm -F @aldo-ai/cli build:bin     # bun build --compile -> dist/aldo
+pnpm -F @aldo-ai/cli test          # vitest
 ```
 
 The CLI targets Bun first but runs on Node 22 — see `src/index.ts`.
@@ -43,13 +43,13 @@ The CLI targets Bun first but runs on Node 22 — see `src/index.ts`.
 ## Dependencies
 
 - `commander` for argv parsing.
-- `yaml` and `zod` are pulled in transitively via `@meridian/registry`.
+- `yaml` and `zod` are pulled in transitively via `@aldo-ai/registry`.
 - No provider SDKs — the CLI stays LLM-agnostic.
 
 ## Registry assumption
 
-The CLI imports `@meridian/registry` through a small adapter at
+The CLI imports `@aldo-ai/registry` through a small adapter at
 `src/registry-adapter.ts`. The adapter currently performs a dynamic import
-of `@meridian/registry/src/validator.js` (the registry does not yet expose a
+of `@aldo-ai/registry/src/validator.js` (the registry does not yet expose a
 root barrel). When the registry ships a stable `index.ts`, swap the import
 path; no callers need to change.

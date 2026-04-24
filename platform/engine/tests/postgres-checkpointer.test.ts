@@ -5,11 +5,11 @@
  * Uses pglite so this runs without Docker or a live database.
  */
 
-import type { CheckpointId, Message, RunId } from '@meridian/types';
-import { fromDatabaseUrl, migrate } from '@meridian/storage';
+import { fromDatabaseUrl, migrate } from '@aldo-ai/storage';
+import type { CheckpointId, Message, RunId } from '@aldo-ai/types';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PostgresCheckpointer } from '../src/checkpointer/postgres.js';
 import type { Checkpoint } from '../src/checkpointer/index.js';
+import { PostgresCheckpointer } from '../src/checkpointer/postgres.js';
 
 const clientP = (async () => {
   const c = await fromDatabaseUrl({ driver: 'pglite' });

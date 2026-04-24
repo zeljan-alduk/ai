@@ -1,5 +1,5 @@
 {
-  "$schema": "https://meridian-labs.dev/schemas/meridianrc.v1.json",
+  "$schema": "https://aldo-labs.dev/schemas/meridianrc.v1.json",
   "version": 1,
   "agency": {
     "root": "agency",

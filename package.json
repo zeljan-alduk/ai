@@ -1,9 +1,9 @@
 {
-  "name": "meridian",
+  "name": "aldo",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Meridian — LLM-agnostic AI sub-agent orchestrator",
+  "description": "ALDO AI — LLM-agnostic AI sub-agent orchestrator",
   "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@9.12.0",
   "engines": {

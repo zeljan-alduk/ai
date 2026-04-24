@@ -1,5 +1,5 @@
 /**
- * `meridian init <dir>` — scaffold a new Meridian project.
+ * `aldo init <dir>` — scaffold a new ALDO AI project.
  *
  * Lays down:
  *   <dir>/.meridianrc                     (JSON)
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import type { CliIO } from '../io.js';
 import { writeLine } from '../io.js';
 
-const SAMPLE_SYSTEM_PROMPT = `You are code-reviewer, a Meridian agent.
+const SAMPLE_SYSTEM_PROMPT = `You are code-reviewer, a ALDO AI agent.
 
 Review pull requests for correctness, clarity, and test coverage.
 Prefer concrete, actionable comments over generic advice.
@@ -57,7 +57,7 @@ export async function runInit(dir: string, opts: InitOptions, io: CliIO): Promis
       `${JSON.stringify({ ok: true, root, created: files.map((f) => f.path) }, null, 2)}\n`,
     );
   } else {
-    writeLine(io, `Initialized Meridian project in ${root}`);
+    writeLine(io, `Initialized ALDO AI project in ${root}`);
     for (const f of files) writeLine(io, `  created ${f.path}`);
   }
   return 0;

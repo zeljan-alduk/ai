@@ -1,3 +1,4 @@
 packages:
   - platform/*
   - apps/*
+  - mcp-servers/*

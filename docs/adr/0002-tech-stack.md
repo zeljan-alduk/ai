@@ -50,7 +50,7 @@ Rationale over Python:
 | Local model backends | Ollama, llama.cpp server, vLLM (all OpenAI-compatible on the wire) |
 | Constrained decoding | llguidance via llama.cpp / vLLM for local tool calls |
 | Embeddings | Local: BGE / Nomic / Arctic via Ollama. Cloud: configurable. Privacy-tier-aware routing. |
-| Eval harness | Python service (Inspect + promptfoo) exposed as MCP server `meridian-eval` |
+| Eval harness | Python service (Inspect + promptfoo) exposed as MCP server `aldo-eval` |
 | Auth | Clerk (hosted) or Supabase Auth (self-host) — pluggable |
 | Package mgmt | pnpm workspaces (TS) + uv (Python eval service) |
 | Lint / format | Biome (TS), Ruff (Python) |

@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { CheckpointId, RunId } from '@meridian/types';
-import type { SqlClient } from '@meridian/storage';
+import type { SqlClient } from '@aldo-ai/storage';
+import type { CheckpointId, RunId } from '@aldo-ai/types';
 import type { Checkpoint, Checkpointer } from './index.js';
 
 /**
  * Postgres-backed `Checkpointer`. Persists every checkpoint to the
- * `checkpoints` table defined by `@meridian/storage` so a run can be
+ * `checkpoints` table defined by `@aldo-ai/storage` so a run can be
  * replayed across process restarts.
  *
  * Storage shape:
@@ -18,7 +18,7 @@ import type { Checkpoint, Checkpointer } from './index.js';
  * The full envelope (messages, tool results, RNG seed, overrides, …) is
  * stored as JSONB so the engine can evolve checkpoint shapes without a
  * schema migration. The replay-bundle exporter in
- * `@meridian/observability` (separate engineer) reads the same rows.
+ * `@aldo-ai/observability` (separate engineer) reads the same rows.
  */
 export interface PostgresCheckpointerOptions {
   readonly client: SqlClient;
