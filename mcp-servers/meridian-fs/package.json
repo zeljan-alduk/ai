@@ -1,0 +1,36 @@
+{
+  "name": "@meridian/mcp-fs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Meridian first-party MCP server: sandboxed filesystem with per-agent path ACLs.",
+  "license": "SEE LICENSE IN LICENSE",
+  "main": "./src/index.ts",
+  "bin": {
+    "meridian-mcp-fs": "./src/index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node --import=tsx/esm src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
