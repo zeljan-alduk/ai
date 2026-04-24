@@ -20,7 +20,7 @@ Meridian is an LLM-agnostic sub-agent orchestrator. UX job: make multi-agent sys
 
 ## 2. CLI surface
 
-Target feel: `gh` ergonomics, `kubectl` verbs, `claude` interactive polish. `NO_COLOR`-aware. `-o json` on every command. TTY-aware: pretty when interactive, plain when piped.
+Feel: `gh` ergonomics, `kubectl` verbs, `claude` interactive polish. `NO_COLOR`-aware. `-o json` on every command. TTY-aware.
 
 | Command | Purpose | Example |
 |---|---|---|
@@ -51,46 +51,44 @@ Global chrome: tenant switcher (top-left), cost burn-down pill (top-right), priv
 
 ### 3.1 Org chart (live)
 Auto-laid-out DAG of agents and sub-agents across current runs. Nodes colored by status (green running, amber waiting-tool, red failed, grey idle, blue waiting-human). Edges thicken with message volume.
-- Top interactions: (1) click node → slide in run view; (2) hover edge → last 3 messages preview; (3) filter strip by tenant / agent / model / tier.
+- Interactions: (1) click node → slide in run view; (2) hover edge → last 3 messages; (3) filter by tenant / agent / model / tier.
 
 ### 3.2 Run view
-Three-pane: left step tree, center message/tool-call/memory-op stream, right inspector (prompt, tools, tokens, cost, tier). Step controls at top: pause, step over, step into, replay.
-- Top interactions: (1) click step → inspector jumps, URL updates; (2) `r` replay from here; (3) `cmd-.` swap model from here and fork.
+Three-pane: left step tree, center message/tool-call/memory-op stream, right inspector (prompt, tools, tokens, cost, tier). Step controls: pause, step over, step into, replay.
+- Interactions: (1) click step → inspector jumps, URL updates; (2) `r` replay from here; (3) `cmd-.` swap model and fork.
 
 ### 3.3 Trace explorer
-OTEL-compatible. Flame graph of spans, tool calls as leaves. Filter by attribute (model, tier, tool, cost>X). Split view: two runs side-by-side with aligned spans, diff badges on drift.
-- Top interactions: (1) drag-select time window; (2) "compare with…" picker of recent runs; (3) right-click span → "create eval case from this".
+OTEL-compatible. Flame graph of spans; tool calls as leaves. Filter by attribute (model, tier, tool, cost>X). Split view aligns two runs' spans with diff badges on drift.
+- Interactions: (1) drag-select time window; (2) "compare with…" recent-runs picker; (3) right-click span → "create eval case".
 
 ### 3.4 Replay debugger — the wedge
-Run view plus breakpoints. Breakpoint on a step, tool-call name, or predicate (`tokens > 4000`, `tier == public`). On hit: pause, show state (messages, memory, tools), user can:
-- Edit prompt or inputs, continue — downstream is re-derived.
-- Swap model from this step forward. Diff badge appears on timeline.
+Run view plus breakpoints. Break on a step, tool-call name, or predicate (`tokens > 4000`, `tier == public`). On hit, pause and show state; user can:
+- Edit prompt/inputs and continue — downstream re-derives.
+- Swap model from this step forward. Diff badge on timeline.
 - Inject a tool result — simulate flaky tools or human corrections.
-- Top interactions: (1) gutter-click to breakpoint; (2) `e` edit current prompt inline; (3) `m` swap model, auto-fork with a named delta.
+- Interactions: (1) gutter-click to breakpoint; (2) `e` edit prompt inline; (3) `m` swap model, auto-fork with named delta.
 
 ### 3.5 Eval dashboard
-Rows = agent versions, columns = models x eval sets. Cells show pass-rate, cost, p50/p95, tier. Red border on regression vs. baseline. "Open failing cases" jumps to trace explorer pre-filtered.
-- Top interactions: (1) click cell → failing-case drawer; (2) "sweep" re-runs matrix; (3) pin as PR check → markdown table comment.
+Rows = agent versions, columns = models x eval sets. Cells show pass-rate, cost, p50/p95, tier. Red border on regression vs. baseline. "Open failing cases" jumps to pre-filtered trace explorer.
+- Interactions: (1) click cell → failing-case drawer; (2) "sweep" re-runs matrix; (3) pin as PR check → markdown table comment.
 
 ### 3.6 Approvals queue
-Human-in-the-loop gates across all runs. Card per gate: agent, action preview, blast radius, suggested auto-approve rule.
-- Top interactions: approve / deny / approve-with-edit (mutate args before release).
+Human-in-the-loop gates. Card per gate: agent, action preview, blast radius, suggested auto-approve rule. Approve / deny / approve-with-edit.
 
 ### 3.7 Budgets and cost
-Burn-down per tenant / project / agent / run. 7-day forecast line. Editable alarm thresholds. Breakdown by model and tier.
-- Top interactions: (1) drill tenant → project → agent → run; (2) "explain this spike" lists top 10 costly runs; (3) hard caps reject new runs when crossed.
+Burn-down per tenant / project / agent / run. 7-day forecast. Editable alarm thresholds. Breakdown by model and tier.
+- Interactions: (1) drill tenant → project → agent → run; (2) "explain this spike" lists top 10 costly runs; (3) hard caps reject new runs.
 
 ### 3.8 Agent registry
-Per agent: versions, promotion history, spec+prompt diff, attached eval evidence, prod pin, release timeline.
-- Top interactions: (1) compare two versions; (2) promote with required evidence; (3) one-click rollback.
+Per agent: versions, promotion history, spec+prompt diff, eval evidence, prod pin, release timeline. Compare two versions; promote with required evidence; one-click rollback.
 
 ---
 
 ## 4. IDE integration (VS Code focus; JetBrains parity v0.2)
 
-- **YAML schema + IntelliSense** for specs: tools, models, tiers, memory scopes autocompleted from live registry. Red squiggle on unknown tool or ungated model-tier combo.
-- **"Run this agent" code lens** above each spec. Click opens a run panel inside VS Code streaming the same timeline as the web run view.
-- **Trace panel** (sidebar). Recent runs, filterable. Click opens the embedded webview; "Open in browser" mirrors the URL.
+- **YAML schema + IntelliSense**: tools, models, tiers, memory scopes autocompleted from live registry. Squiggle on unknown tool or ungated model-tier combo.
+- **"Run this agent" code lens** above each spec. Opens a run panel inside VS Code streaming the same timeline as the web.
+- **Trace panel** (sidebar). Recent runs, filterable. Click opens embedded webview; "Open in browser" mirrors the URL.
 - **Prompt file preview** (`.prompt.md`): variable expansion with live injection from a scratch inputs panel; shows token count and context headroom.
 - **Inline diagnostics from last eval run**: failing cases surface as warnings on the owning spec.
 
