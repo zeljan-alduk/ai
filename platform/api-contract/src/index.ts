@@ -15,3 +15,4 @@ export * from './runs.js';
 export * from './agents.js';
 export * from './models.js';
 export * from './debugger.js';
+export * from './eval.js';

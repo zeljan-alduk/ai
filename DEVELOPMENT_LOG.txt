@@ -631,3 +631,21 @@ Vercel auto-deploy of the web UI shipped earlier with commit
 e66a61e1; the new /runs/[id]/debug route is live at the latest preview
 URL. With no real persisted runs yet, the UI shows the empty timeline
 and offers controls disabled until a paused state.
+
+[2026-04-25 10:55 UTC] principal — wave 6 launching (eval harness primitive)
+Tight scope this wave: build the eval-harness primitive end-to-end in
+TypeScript only. Defer the Python (Inspect/promptfoo) bridge to wave
+6.5; ship built-in evaluators (contains/regex/exact/json_schema/rubric)
+that cover ~80% of practical cases and prove the wedge: cross-model
+sweeps + promotion gate.
+
+Spawning 3 engineers against a shared api-contract addition (eval.ts:
+EvalCase + EvalSuite + Sweep + StartSweepRequest + PromoteAgentRequest):
+- Engineer A: @aldo-ai/eval package (suite YAML loader + 5 built-in
+  evaluators + cross-model sweep runner against the existing
+  ModelGateway) + CLI commands (`aldo eval run`, `aldo eval sweep`,
+  `aldo agent promote`).
+- Engineer B: apps/api eval endpoints (suites, sweeps, promotion;
+  Postgres-backed sweep store).
+- Engineer C: apps/web /eval page (suites list, sweeps table, sweep
+  detail with model-x-case matrix, promote dialog).
