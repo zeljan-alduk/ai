@@ -777,3 +777,50 @@ Engineer A scope:
   cells get costUsd > 0 and the debugger timeline shows token spend.
 - Implement POST /v1/eval/suites in apps/api against the new contract.
 - Add `aldo eval suite create <file>` CLI command that POSTs to it.
+
+[2026-04-25 13:18 UTC] backend-engineer — wave 6.5 wedges wired end-to-end
+Closed the four pieces in engine/cli/api so the deployed replay debugger
+and eval-sweep matrices light up against real data.
+- engine: LeafAgentRun now re-emits Delta.end.usage as a typed `usage`
+  RunEvent {provider, model, tokensIn, tokensOut, usd, at}; persists
+  through RunStore so eval cells aggregate costUsd and the debugger
+  timeline can render token spend (platform/engine/tests/usage-event.test.ts).
+- cli: bootstrapAsync auto-wires PostgresRunStore from cfg.databaseUrl
+  via @aldo-ai/storage; in-memory fallback unchanged. New
+  bootstrap-persistence.test.ts exercises pglite round-trip.
+- api: POST /v1/eval/suites parses through @aldo-ai/eval's parseSuiteYaml,
+  rejects 409 conflict on duplicate (name, version), persists via
+  SweepStore.putSuite; 4 new test cases in apps/api/tests/eval.test.ts.
+- cli: new `aldo eval suite create <file>` command POSTs YAML to the
+  control-plane API; honours API_BASE / --api-base / --json. Stubbed-fetch
+  test covers request shape, success, conflict surfacing, missing file,
+  and env-default base URL.
+
+Suite tally: engine 17→19, cli 35→42, api 39→43; typecheck + biome clean.
+Smoke upload: API_BASE=http://localhost:3001 aldo eval suite create eval/suites/code-reviewer-smoke.yaml --json
+
+[2026-04-25 12:35 UTC] principal — wave 6.5 LANDS (wedges wired to data)
+Engineer A complete. Four pieces shipped, 12 files touched:
+1. Engine usage event: LeafAgentRun re-emits the gateway's terminal
+   Delta.end.usage as a RunEvent of type='usage' with full
+   {provider, model, tokensIn, tokensOut, usd, at} payload. Sweep
+   cells will now populate costUsd > 0; debugger timeline shows token
+   spend.
+2. CLI Postgres persistence: bootstrapAsync() + createDefaultRunStore()
+   inject a PostgresRunStore into the PlatformRuntime when
+   DATABASE_URL is non-empty. Sync bootstrap() keeps in-memory default.
+3. POST /v1/eval/suites: parses CreateSuiteRequest, runs YAML through
+   @aldo-ai/eval's parseSuiteYaml, 400 on bad YAML / schema, 409 on
+   (name, version) collision, persists via SweepStore.putSuite.
+4. `aldo eval suite create <file>` CLI: reads a YAML file, POSTs
+   to ${API_BASE}/v1/eval/suites, --json for machine output.
+
+Test deltas: engine 17 -> 19 (+2 usage event), api 39 -> 43 (+4
+suite-upload paths), cli 35 -> 42 (+5 suite-create + 2 persistence).
+Total now ~233 across 10 packages.
+
+Contract follow-up the engineer flagged: @aldo-ai/types RunEvent.type
+union doesn't include 'usage' (and didn't include 'paused' from wave
+5 either). Engine code casts to widen. Worth a future janitorial bump
+to formalise both event types in the union with discriminated
+payloads. Adding to the open-items list.

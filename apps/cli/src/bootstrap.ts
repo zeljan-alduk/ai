@@ -20,7 +20,9 @@ import {
   InProcessEventBus,
   NoopTracer,
   PlatformRuntime,
+  PostgresRunStore,
   RuleChainPolicyEngine,
+  type RunStore,
 } from '@aldo-ai/engine';
 import {
   type AdapterRegistry,
@@ -39,6 +41,7 @@ import {
   parseModelsYaml,
 } from '@aldo-ai/gateway';
 import { AgentRegistry } from '@aldo-ai/registry';
+import { fromDatabaseUrl } from '@aldo-ai/storage';
 import type { TenantId, ToolHost } from '@aldo-ai/types';
 import type { Config } from './config.js';
 
@@ -54,6 +57,13 @@ export interface RuntimeBundle {
   readonly eventBus: InProcessEventBus;
   readonly policy: RuleChainPolicyEngine;
   readonly tenant: TenantId;
+  /**
+   * Optional persistence for runs + run events. Present when
+   * `DATABASE_URL` was set and the caller went through `bootstrapAsync`
+   * (or supplied a `runStore` directly). Absent for the in-memory
+   * default path.
+   */
+  readonly runStore?: RunStore;
 }
 
 export interface BootstrapOptions {
@@ -72,6 +82,14 @@ export interface BootstrapOptions {
   readonly gatewayOverride?: GatewayEx;
   /** Optional ToolHost. Defaults to a no-op host that rejects every tool. */
   readonly toolHost?: ToolHost;
+  /**
+   * Optional pre-built RunStore. When supplied, the runtime persists
+   * every emitted RunEvent through it (the API layer + replay debugger
+   * read from the same row). `bootstrapAsync` builds one automatically
+   * from `cfg.databaseUrl`; the sync `bootstrap` form keeps this
+   * undefined unless the caller threads one in explicitly.
+   */
+  readonly runStore?: RunStore;
 }
 
 /** Construct the runtime bundle. Pure; never makes a network call here. */
@@ -124,6 +142,7 @@ export function bootstrap(opts: BootstrapOptions): RuntimeBundle {
     tracer,
     tenant,
     checkpointer,
+    ...(opts.runStore !== undefined ? { runStore: opts.runStore } : {}),
   });
 
   return {
@@ -137,7 +156,37 @@ export function bootstrap(opts: BootstrapOptions): RuntimeBundle {
     eventBus,
     policy,
     tenant,
+    ...(opts.runStore !== undefined ? { runStore: opts.runStore } : {}),
   };
+}
+
+/**
+ * Async variant of `bootstrap` that auto-wires a `PostgresRunStore` when
+ * `cfg.databaseUrl` is non-empty. Falls back to the in-memory path
+ * otherwise. The CLI's `run` command goes through this so persistence
+ * is automatic when the user has `DATABASE_URL` set.
+ *
+ * The store is built via `@aldo-ai/storage`'s `fromDatabaseUrl`, which
+ * picks the right driver (pg / Neon / pglite) from the URL — agents
+ * never see the driver name.
+ */
+export async function bootstrapAsync(opts: BootstrapOptions): Promise<RuntimeBundle> {
+  const cfgUrl = opts.config.databaseUrl;
+  if (opts.runStore !== undefined || cfgUrl === undefined || cfgUrl.length === 0) {
+    return bootstrap(opts);
+  }
+  const runStore = await createDefaultRunStore(cfgUrl);
+  return bootstrap({ ...opts, runStore });
+}
+
+/**
+ * Build a `PostgresRunStore` from a DATABASE_URL via `@aldo-ai/storage`.
+ * Exposed so callers that want their own bootstrap composition can
+ * still get the same persistence wiring as `bootstrapAsync`.
+ */
+export async function createDefaultRunStore(databaseUrl: string): Promise<RunStore> {
+  const client = await fromDatabaseUrl({ url: databaseUrl });
+  return new PostgresRunStore({ client });
 }
 
 /** Resolve a YAML model `RegisteredModel[]` from disk. */

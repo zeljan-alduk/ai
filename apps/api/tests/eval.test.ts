@@ -10,6 +10,7 @@
 
 import {
   ApiError,
+  CreateSuiteResponse,
   type EvalSuite,
   ListSuitesResponse,
   ListSweepsResponse,
@@ -189,6 +190,81 @@ describe('GET /v1/eval/suites/:name', () => {
     expect(res.status).toBe(404);
     const body = ApiError.parse(await res.json());
     expect(body.error.code).toBe('not_found');
+  });
+});
+
+describe('POST /v1/eval/suites', () => {
+  const NEW_SUITE_YAML = `name: uploaded-suite
+version: 0.1.0
+description: test suite uploaded via the API
+agent: reviewer
+passThreshold: 0.5
+cases:
+  - id: hi
+    input: hello
+    expect:
+      kind: contains
+      value: "hi"
+`;
+
+  it('returns 200 with name/version/caseCount for a fresh suite', async () => {
+    const res = await env.app.request('/v1/eval/suites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yaml: NEW_SUITE_YAML }),
+    });
+    expect(res.status).toBe(200);
+    const body = CreateSuiteResponse.parse(await res.json());
+    expect(body.name).toBe('uploaded-suite');
+    expect(body.version).toBe('0.1.0');
+    expect(body.caseCount).toBe(1);
+
+    // The suite is now visible to the listing endpoint.
+    const list = await env.app.request('/v1/eval/suites');
+    const listBody = ListSuitesResponse.parse(await list.json());
+    expect(listBody.suites.some((s) => s.name === 'uploaded-suite')).toBe(true);
+  });
+
+  it('rejects with 400 when the YAML body is unparseable', async () => {
+    const res = await env.app.request('/v1/eval/suites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yaml: ':\n  - not [valid' }),
+    });
+    expect(res.status).toBe(400);
+    const body = ApiError.parse(await res.json());
+    expect(body.error.code).toBe('validation_error');
+  });
+
+  it('rejects with 400 when YAML parses but violates the EvalSuite schema', async () => {
+    const bad = `name: missing-cases
+version: 1.0.0
+description: no cases at all
+agent: reviewer
+passThreshold: 0.5
+cases: []
+`;
+    const res = await env.app.request('/v1/eval/suites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yaml: bad }),
+    });
+    expect(res.status).toBe(400);
+    const body = ApiError.parse(await res.json());
+    expect(body.error.code).toBe('validation_error');
+  });
+
+  it('rejects with 409 conflict when (name, version) already exists', async () => {
+    // The first POST in this block created uploaded-suite@0.1.0; reposting
+    // the same payload must fail with a conflict envelope.
+    const res = await env.app.request('/v1/eval/suites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yaml: NEW_SUITE_YAML }),
+    });
+    expect(res.status).toBe(409);
+    const body = ApiError.parse(await res.json());
+    expect(body.error.code).toBe('conflict');
   });
 });
 

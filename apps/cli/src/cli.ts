@@ -11,6 +11,7 @@ import { runAgentPromote } from './commands/agent-promote.js';
 import { runAgentValidate } from './commands/agent-validate.js';
 import { runDev } from './commands/dev.js';
 import { runEvalRun } from './commands/eval-run.js';
+import { runEvalSuiteCreate } from './commands/eval-suite-create.js';
 import { runEvalSweep } from './commands/eval-sweep.js';
 import { runInit } from './commands/init.js';
 import { runMcpLs } from './commands/mcp-ls.js';
@@ -210,6 +211,27 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           suiteFile,
           {
             ...(o.models !== undefined ? { models: o.models } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
+  // `aldo eval suite create <file>` — upload a suite YAML through the
+  // control-plane API. The CLI never writes Postgres directly; the API
+  // is the only owner of the suite store.
+  const evalSuite = evalCmd.command('suite').description('manage eval suites via the API');
+  evalSuite
+    .command('create <file>')
+    .description('upload an eval-suite YAML to the API')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action((file: string, o: { apiBase?: string; json?: boolean }) => {
+      action = () =>
+        runEvalSuiteCreate(
+          file,
+          {
+            ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
             json: o.json === true,
           },
           io,

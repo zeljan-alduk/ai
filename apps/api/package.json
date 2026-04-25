@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aldo-ai/api-contract": "workspace:*",
+    "@aldo-ai/eval": "workspace:*",
     "@aldo-ai/registry": "workspace:*",
     "@aldo-ai/storage": "workspace:*",
     "@aldo-ai/types": "workspace:*",

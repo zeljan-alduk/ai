@@ -318,6 +318,7 @@ export class LeafAgentRun implements InternalAgentRun {
         let textAccum = '';
         const toolCalls: ToolCallPart[] = [];
         let finishReason: 'stop' | 'length' | 'tool_use' | 'error' = 'stop';
+        let endUsage: import('@aldo-ai/types').UsageRecord | undefined;
 
         try {
           for await (const delta of this.deps.modelGateway.complete(
@@ -329,6 +330,7 @@ export class LeafAgentRun implements InternalAgentRun {
             if (delta.toolCall !== undefined) toolCalls.push(delta.toolCall);
             if (delta.end !== undefined) {
               finishReason = delta.end.finishReason;
+              endUsage = delta.end.usage;
             }
           }
         } catch (err) {
@@ -349,6 +351,32 @@ export class LeafAgentRun implements InternalAgentRun {
           const assistantMsg: Message = { role: 'assistant', content: assistantParts };
           this.messages.push(assistantMsg);
           this.emit({ type: 'message', at: now(), payload: assistantMsg });
+        }
+
+        // Emit a typed `usage` event for the terminal model call. The
+        // gateway's `Delta.end.usage` carries provider, model, tokensIn,
+        // tokensOut, usd and an ISO `at` timestamp — i.e. exactly the
+        // shape eval-sweep cost aggregation and the debugger timeline
+        // need. The cross-package `RunEvent.type` union in @aldo-ai/types
+        // doesn't list `usage` (the breakpoint code has the same
+        // constraint and tags `checkpoint` payloads instead), so we cast
+        // here. The wire shape of run_events is `{ type, payload, at }`
+        // and a 'usage' string flows through the same plumbing as any
+        // other event type.
+        if (endUsage !== undefined) {
+          const usagePayload = {
+            provider: endUsage.provider,
+            model: endUsage.model,
+            tokensIn: endUsage.tokensIn,
+            tokensOut: endUsage.tokensOut,
+            usd: endUsage.usd,
+            at: endUsage.at,
+          };
+          this.emit({
+            type: 'usage',
+            at: now(),
+            payload: usagePayload,
+          } as unknown as RunEvent);
         }
 
         // Post-turn checkpoint (outputs + usage stashed on messages already).

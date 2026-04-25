@@ -26,6 +26,9 @@ importers:
       '@aldo-ai/api-contract':
         specifier: workspace:*
         version: link:../../platform/api-contract
+      '@aldo-ai/eval':
+        specifier: workspace:*
+        version: link:../../platform/eval
       '@aldo-ai/registry':
         specifier: workspace:*
         version: link:../../platform/registry
@@ -87,6 +90,9 @@ importers:
       '@aldo-ai/runtime-config':
         specifier: workspace:*
         version: link:../../platform/runtime-config
+      '@aldo-ai/storage':
+        specifier: workspace:*
+        version: link:../../platform/storage
       '@aldo-ai/types':
         specifier: workspace:*
         version: link:../../platform/types
@@ -100,6 +106,9 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ~0.4.4
+        version: 0.4.4
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17

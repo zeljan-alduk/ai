@@ -28,6 +28,8 @@
 
 import { randomUUID } from 'node:crypto';
 import {
+  CreateSuiteRequest,
+  CreateSuiteResponse,
   ListSuitesResponse,
   ListSweepsResponse,
   PromoteAgentRequest,
@@ -37,6 +39,7 @@ import {
   Sweep,
 } from '@aldo-ai/api-contract';
 import type { EvalSuite, SweepStatus } from '@aldo-ai/api-contract';
+import { parseSuiteYaml } from '@aldo-ai/eval';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Deps } from '../deps.js';
@@ -51,7 +54,7 @@ import {
 // Re-export the engineer-A surface so tests + future integrations can
 // import from the same module they import the route factory from.
 export type { PromotionGate, PromotionGateReport, SweepRunner, SweepStore };
-import { notFound, validationError } from '../middleware/error.js';
+import { HttpError, notFound, validationError } from '../middleware/error.js';
 
 // ---------------------------------------------------------------------------
 // Eval deps — injected by the app builder, swappable in tests.
@@ -126,6 +129,37 @@ export function evalRoutes(deps: Deps, opts: EvalRouteOptions = {}): Hono {
   const app = new Hono();
 
   // ----- suites ----------------------------------------------------------
+
+  app.post('/v1/eval/suites', async (c) => {
+    const json = await readJsonBody(c);
+    const parsed = CreateSuiteRequest.safeParse(json);
+    if (!parsed.success) {
+      throw validationError('invalid create-suite request', parsed.error.issues);
+    }
+    // Run the suite YAML through `@aldo-ai/eval`'s parser so the same
+    // structural lint that gates `aldo eval run` also gates HTTP uploads.
+    const outcome = parseSuiteYaml(parsed.data.yaml);
+    if (!outcome.ok) {
+      throw validationError('invalid suite YAML', outcome.errors);
+    }
+    const suite = outcome.suite;
+
+    // Reject re-uploading the same `(name, version)` pair so authors
+    // bump the version intentionally — silent overwrites would let a
+    // promotion gate quietly change semantics.
+    const existing = await evalDeps.store.getSuiteVersion(suite.name, suite.version);
+    if (existing !== null) {
+      throw new HttpError(409, 'conflict', `suite ${suite.name}@${suite.version} already exists`);
+    }
+
+    await evalDeps.store.putSuite(suite, parsed.data.yaml);
+    const body = CreateSuiteResponse.parse({
+      name: suite.name,
+      version: suite.version,
+      caseCount: suite.cases.length,
+    });
+    return c.json(body);
+  });
 
   app.get('/v1/eval/suites', async (c) => {
     const suites = await evalDeps.store.listSuites();
