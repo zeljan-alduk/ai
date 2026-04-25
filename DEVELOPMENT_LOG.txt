@@ -312,3 +312,20 @@ packages, pnpm lint clean across 142 files (Biome auto-fixes for
 useLiteralKeys + noUnusedTemplateLiteral), pnpm -r test 144 passing
 (registry 23, gateway 20, engine 11, observability 21, cli 35, storage
 2, aldo-fs 32; types + runtime-config have no tests).
+
+[2026-04-24 22:50 UTC] principal — wave 4 launching (web control plane MVP)
+Goal: a Next.js control plane backed by a Hono API, served from the
+existing Postgres-backed registry + run/checkpoint store. Routes for
+/runs (list + detail), /agents (list + detail), and /models. No replay
+debugger yet — that's wave 5. Two engineers spawned in parallel:
+- API engineer: apps/api (Hono + storage + routes + pglite-backed tests)
+- Web engineer: apps/web (Next.js 15 App Router + Tailwind v3 + typed
+  fetch client validating responses through the api-contract schemas)
+
+Prep landed: new @aldo-ai/api-contract package providing Zod schemas
+for ListRuns/GetRun/ListAgents/GetAgent/ListModels and a shared
+ApiError envelope. Cursor-based pagination (opaque base64). Privacy
+tier visible everywhere (public | internal | sensitive). Models
+endpoint stamps an `available` flag based on which provider keys
+are configured server-side — so the UI can grey out unconfigured
+ones without the contract knowing about specific providers.

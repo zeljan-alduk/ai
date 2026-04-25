@@ -1,0 +1,29 @@
+{
+  "name": "@aldo-ai/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ALDO AI control-plane API server (Hono).",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@aldo-ai/api-contract": "workspace:*",
+    "@aldo-ai/registry": "workspace:*",
+    "@aldo-ai/storage": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
+    "hono": "^4.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}
