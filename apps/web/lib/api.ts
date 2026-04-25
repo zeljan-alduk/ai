@@ -20,6 +20,9 @@ import {
   ListModelsResponse,
   type ListRunsQuery,
   ListRunsResponse,
+  ListSecretsResponse,
+  type SetSecretRequest,
+  SetSecretResponse,
 } from '@aldo-ai/api-contract';
 import type { z } from 'zod';
 
@@ -156,4 +159,77 @@ export function getAgent(name: string) {
 
 export function listModels() {
   return request('/v1/models', ListModelsResponse);
+}
+
+/* ------------------------------- Secrets -------------------------------- */
+
+export function listSecrets() {
+  return request('/v1/secrets', ListSecretsResponse);
+}
+
+export function setSecret(req: SetSecretRequest) {
+  return request('/v1/secrets', SetSecretResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/**
+ * DELETE /v1/secrets/:name. Returns void on 204; throws ApiClientError
+ * on any non-2xx (404 when the secret is already gone, 4xx for invalid
+ * names, 5xx for store failures). Mirrors the contract surface — never
+ * touches the raw value.
+ */
+export async function deleteSecret(name: string): Promise<void> {
+  const url = buildUrl(`/v1/secrets/${encodeURIComponent(name)}`);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'DELETE',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+    });
+  } catch (err) {
+    throw new ApiClientError('network', `Network error contacting API at ${url}`, {
+      cause: err,
+    });
+  }
+
+  if (res.status === 204) return;
+
+  const text = await res.text();
+  let json: unknown = undefined;
+  if (text.length > 0) {
+    try {
+      json = JSON.parse(text);
+    } catch (err) {
+      throw new ApiClientError('parse', `Invalid JSON from ${url}`, {
+        status: res.status,
+        cause: err,
+      });
+    }
+  }
+
+  if (!res.ok) {
+    const parsedErr = ApiError.safeParse(json);
+    if (parsedErr.success) {
+      throw new ApiClientError(
+        res.status >= 500 ? 'http_5xx' : 'http_4xx',
+        parsedErr.data.error.message,
+        {
+          status: res.status,
+          code: parsedErr.data.error.code,
+          details: parsedErr.data.error.details,
+        },
+      );
+    }
+    throw new ApiClientError(
+      res.status >= 500 ? 'http_5xx' : 'http_4xx',
+      `HTTP ${res.status} from ${url}`,
+      { status: res.status, details: json },
+    );
+  }
+
+  // 2xx other than 204 — accept silently.
 }

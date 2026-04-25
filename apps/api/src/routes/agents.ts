@@ -5,9 +5,23 @@
  * `AgentDetail` contract; clients re-validate via `@aldo-ai/registry`
  * if they need a typed `AgentSpec`. We never re-shape the spec on the
  * server because the contract already declares it opaque.
+ *
+ * Wave 7.5: we additionally project two policy slices (`tools.guards`
+ * and the spec-level `sandbox` block) onto the response envelope so the
+ * web client can render the safety panels without walking an `unknown`
+ * payload. Both projections are best-effort — if the persisted spec
+ * doesn't carry the field we emit `null` and the UI shows the
+ * "default sandbox" / "no guards" empty states. We never *invent*
+ * values; the projection only forwards what the agent author declared.
  */
 
-import { GetAgentResponse, ListAgentsQuery, ListAgentsResponse } from '@aldo-ai/api-contract';
+import {
+  GetAgentResponse,
+  ListAgentsQuery,
+  ListAgentsResponse,
+  SandboxConfigWire,
+  ToolsGuardsWire,
+} from '@aldo-ai/api-contract';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { decodeCursor, getAgent, listAgents } from '../db.js';
@@ -65,10 +79,46 @@ export function agentsRoutes(deps: Deps): Hono {
         tags: detail.tags,
         versions: detail.versions,
         spec: detail.spec,
+        guards: projectGuards(detail.spec),
+        sandbox: projectSandbox(detail.spec),
       },
     });
     return c.json(body);
   });
 
   return app;
+}
+
+/**
+ * Pull `tools.guards` off the persisted spec and re-validate it
+ * through the wire schema. Returns `null` when the spec doesn't
+ * declare a guards block — matches the optional contract field.
+ */
+function projectGuards(spec: unknown): z.infer<typeof ToolsGuardsWire> | null {
+  const tools = readObject(spec, 'tools');
+  const raw = tools !== null ? (tools as Record<string, unknown>).guards : undefined;
+  if (raw === undefined || raw === null) return null;
+  const parsed = ToolsGuardsWire.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Pull the spec-level `sandbox` block. Returns `null` when absent so
+ * the web client can render its "running in default sandbox" empty
+ * state without ambiguity.
+ */
+function projectSandbox(spec: unknown): z.infer<typeof SandboxConfigWire> | null {
+  if (spec === null || typeof spec !== 'object') return null;
+  const raw = (spec as Record<string, unknown>).sandbox;
+  if (raw === undefined || raw === null) return null;
+  const parsed = SandboxConfigWire.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+function readObject(spec: unknown, key: string): Record<string, unknown> | null {
+  if (spec === null || typeof spec !== 'object') return null;
+  const v = (spec as Record<string, unknown>)[key];
+  return v !== null && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
 }

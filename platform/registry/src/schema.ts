@@ -233,6 +233,36 @@ const evalGateSchema = z
   })
   .strict();
 
+/**
+ * Optional `sandbox:` block on the agent.v1 YAML. Additive — pre-wave-7.5
+ * specs without this block continue to parse and resolve to the platform
+ * defaults. The on-disk shape is snake_case; the loader normalises to
+ * camelCase for the SandboxConfig in @aldo-ai/types.
+ */
+const sandboxNetworkSchema = z
+  .object({
+    mode: z.enum(['none', 'allowlist', 'host']),
+    allowed_hosts: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
+const sandboxFilesystemSchema = z
+  .object({
+    permission: z.enum(['none', 'repo-readonly', 'repo-readwrite', 'full']),
+    read_paths: z.array(z.string().min(1)).optional(),
+    write_paths: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
+const sandboxSchema = z
+  .object({
+    timeout_ms: z.number().int().positive().optional(),
+    env_scrub: z.boolean().optional(),
+    network: sandboxNetworkSchema.optional(),
+    filesystem: sandboxFilesystemSchema.optional(),
+  })
+  .strict();
+
 // --- top-level -------------------------------------------------------------
 
 export const agentV1YamlSchema = z
@@ -251,6 +281,8 @@ export const agentV1YamlSchema = z
     inputs: inputsSchema.optional(),
     outputs: z.record(z.string(), outputEntrySchema).optional(),
     eval_gate: evalGateSchema,
+    /** Wave-7.5: optional, additive declared sandbox policy. */
+    sandbox: sandboxSchema.optional(),
   })
   .strict();
 

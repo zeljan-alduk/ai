@@ -1,3 +1,4 @@
+import { PolicyPanels } from '@/components/agent/policy-panels';
 import { NeutralBadge, PrivacyBadge } from '@/components/badge';
 import { ErrorView } from '@/components/error-boundary';
 import { PageHeader } from '@/components/page-header';
@@ -132,6 +133,13 @@ function AgentBody({ agent }: { agent: Awaited<ReturnType<typeof getAgent>>['age
             <p className="text-sm text-slate-500">No tools declared.</p>
           )}
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Safety policy
+        </h2>
+        <PolicyPanels agent={agent} />
       </section>
 
       <section>

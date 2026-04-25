@@ -78,6 +78,28 @@ export interface ToolsConfig {
   readonly guards?: ToolsGuardsConfig;
 }
 
+/**
+ * Optional `sandbox` block on an agent.v1 spec. Describes the *declared*
+ * sandbox policy (timeout, env scrub, declared network/fs allowlists).
+ * Runtime resolution (e.g. expanding `repo-readonly` to a path) happens in
+ * @aldo-ai/sandbox. All fields are optional — a missing block means the
+ * platform's default sandbox is used.
+ */
+export interface SandboxConfig {
+  readonly timeoutMs?: number;
+  /** Whether to strip the host process env before invoking tool bodies. */
+  readonly envScrub?: boolean;
+  readonly network?: {
+    readonly mode: 'none' | 'allowlist' | 'host';
+    readonly allowedHosts?: readonly string[];
+  };
+  readonly filesystem?: {
+    readonly permission: ToolPermission;
+    readonly readPaths?: readonly string[];
+    readonly writePaths?: readonly string[];
+  };
+}
+
 export type MemoryScope = 'private' | 'project' | 'org' | 'session';
 
 export interface MemoryPolicy {
@@ -124,6 +146,8 @@ export interface AgentSpec {
   readonly inputs?: { readonly schemaRef: string };
   readonly outputs?: Readonly<Record<string, { readonly jsonSchema: unknown }>>;
   readonly evalGate: EvalGate;
+  /** Optional sandbox policy declared on the spec (additive, wave 7.5+). */
+  readonly sandbox?: SandboxConfig;
 }
 
 export interface AgentRef {

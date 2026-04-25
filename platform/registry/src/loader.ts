@@ -20,6 +20,7 @@ import type {
   MemoryScope,
   ModelPolicy,
   PromptConfig,
+  SandboxConfig,
   SpawnPolicy,
   Subscription,
   ToolsConfig,
@@ -205,6 +206,37 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
         )
       : undefined;
 
+  const sandbox: SandboxConfig | undefined =
+    y.sandbox !== undefined
+      ? {
+          ...(y.sandbox.timeout_ms !== undefined ? { timeoutMs: y.sandbox.timeout_ms } : {}),
+          ...(y.sandbox.env_scrub !== undefined ? { envScrub: y.sandbox.env_scrub } : {}),
+          ...(y.sandbox.network !== undefined
+            ? {
+                network: {
+                  mode: y.sandbox.network.mode,
+                  ...(y.sandbox.network.allowed_hosts !== undefined
+                    ? { allowedHosts: y.sandbox.network.allowed_hosts }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(y.sandbox.filesystem !== undefined
+            ? {
+                filesystem: {
+                  permission: y.sandbox.filesystem.permission,
+                  ...(y.sandbox.filesystem.read_paths !== undefined
+                    ? { readPaths: y.sandbox.filesystem.read_paths }
+                    : {}),
+                  ...(y.sandbox.filesystem.write_paths !== undefined
+                    ? { writePaths: y.sandbox.filesystem.write_paths }
+                    : {}),
+                },
+              }
+            : {}),
+        }
+      : undefined;
+
   const spec: AgentSpec = {
     apiVersion: 'aldo-ai/agent.v1',
     kind: 'Agent',
@@ -230,6 +262,7 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
     ...(y.inputs !== undefined ? { inputs: { schemaRef: y.inputs.schema_ref } } : {}),
     ...(outputs !== undefined ? { outputs } : {}),
     evalGate,
+    ...(sandbox !== undefined ? { sandbox } : {}),
   };
 
   return spec;

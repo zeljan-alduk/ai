@@ -35,6 +35,8 @@
       "**/.vercel/**",
       "**/.turbo/**",
       "**/coverage/**",
+      "**/playwright-report/**",
+      "**/test-results/**",
       "**/*.md",
       "agency/**/*.yaml"
     ]

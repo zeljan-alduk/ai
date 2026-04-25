@@ -988,3 +988,94 @@ in a row before commit.
 
 Deployed via run 24933945400. Re-smoked: POST 200, DELETE 204, second
 DELETE 404, final GET empty list. Recovery #8 closed.
+
+[2026-04-25 15:34 UTC] Engineer E — wave 7.5 policy panels
+Surfaced wave-7's safety story on /agents/[name] so reviewers can see
+sandbox + guards without grepping YAML. Two collapsible read-only
+panels: "Sandbox" (timeout / env scrub / network mode + allowlist /
+filesystem perms with read+write paths, plus a "default sandbox" pill
+for agents that declare nothing) and "Guards" (spotlighting,
+output_scanner with severity+url_allowlist, quarantine threshold,
+plus a 13-marker prompt-leak count pinned from
+platform/guards/src/output-scanner.ts). New presentational primitive
+apps/web/components/agent/policy-value.tsx (PolicyValue + PolicyPill +
+TokenList, slate palette, no new deps); a tiny client-island
+collapsible-panel.tsx is the only "use client" boundary. Wire-contract
+additions in @aldo-ai/api-contract are STRICTLY ADDITIVE: new optional
+ToolsGuardsWire + SandboxConfigWire schemas + GuardSeverityWire enum,
+and AgentDetail gains `guards` / `sandbox` as `.nullish()` fields.
+Existing AgentDetail consumers parse unchanged. apps/api projects
+both fields off the persisted spec into the response (null when the
+agent declares nothing — explicit choice, documented in routes/
+agents.ts). Registry adds an optional top-level `sandbox:` block
+(snake_case in YAML, camelCased by loader into a new SandboxConfig
+in @aldo-ai/types). pnpm -r typecheck green; pnpm lint green; new
+api-contract round-trip suite (8 cases) green; pnpm --filter
+@aldo-ai/api test green with 3 new cases asserting the projection;
+registry test suite green (28 cases). Smoke against
+NEXT_PUBLIC_API_BASE=https://aldo-ai-api.fly.dev returned 200 but the
+prod registry has zero agents (anticipated by the task) — projection
+correctness is locked down by the apps/api projection tests against
+a "guarded" fixture and a "plain" mirror. LLM-agnostic verified: no
+provider name appears in any new spec, schema, or component.
+Not committed — orchestrator integrates.
+
+
+[2026-04-25 16:42 UTC] Engineer D — wave 7.5 secrets UI
+Built the /secrets pages so an operator can list/create/delete secrets
+through the web app. Files added: apps/web/app/secrets/page.tsx (server
+component list, empty-state explainer + "New secret" CTA, table of
+name / fingerprint-truncated-to-12-with-full-in-title / "…last4"
+preview / updatedAt / delete column),
+apps/web/app/secrets/delete-button.tsx (client island, window.confirm
+guard, calls deleteSecret then router.refresh()),
+apps/web/app/secrets/new/page.tsx (server shell) and
+apps/web/app/secrets/new/form.tsx (client form, mirrors
+/^[A-Z][A-Z0-9_]*$/ regex client-side, requires non-empty value, posts
+through setSecret, drops raw value from state and router.push('/secrets')
++ router.refresh() on success, surfaces ApiClientError.message inline).
+Files modified: apps/web/lib/api.ts (added listSecrets / setSecret via
+the existing request<T> helper using ListSecretsResponse and
+SetSecretResponse from @aldo-ai/api-contract; deleteSecret is a small
+bespoke helper since 204-no-body doesn't fit the schema-parsing path —
+it returns void on 204 and throws ApiClientError on any non-2xx, so
+the route's "404 only on miss" semantics propagate untouched).
+apps/web/components/sidebar.tsx (added /secrets between Agents and
+Models with the same match() predicate pattern). Constraints honoured:
+raw value is never read back from the server, only the redacted
+SecretSummary; the create form does not echo the value and clears it
+from React state before navigating; autocomplete/spellcheck/lpignore
+disabled on the value field; LLM-agnostic (no provider strings hard-
+coded — placeholder is OPENAI_API_KEY only as a familiar SCREAMING_-
+SNAKE_CASE example, identical to how it would render USER_TOKEN or
+WEBHOOK_SIGNING_KEY). Quality bar: pnpm --filter @aldo-ai/web typecheck
+green, pnpm lint green (biome auto-fixed two formatting nits during
+--write), dev server boots and SSRs both routes 200 against
+https://aldo-ai-api.fly.dev (verified GET /v1/secrets returns
+{"secrets":[]} and the empty-state renders end-to-end). Deliberate
+deferrals: no edit/rotate flow (wave 8), no auth/tenancy UI (v0
+single-tenant convention), did not touch /v1/secrets/:name backend
+behaviour. Not committed — orchestrator integrates.
+
+[2026-04-25 16:40 UTC] Engineer F — wave 7.5 playwright e2e
+Stood up the first browser-driven e2e suite as a fresh workspace at
+apps/web-e2e/ (kept out of @aldo-ai/web's bundle graph on purpose),
+covered by apps/* glob in pnpm-workspace.yaml. Suite: 7 tests across
+two specs — golden-path.spec.ts (home/branding, sidebar walk through
+/runs ↔ /agents ↔ /models, /secrets-loads-without-5xx, and a write-
+gated POST→GET→DELETE round-trip on /v1/secrets) plus health.spec.ts
+(GET /health, GET /v1/models non-empty by shape only — no provider
+names, GET /v1/secrets returns the {secrets:[]} envelope). Chromium
+only, retries=2 in CI, traces on first retry, screenshots/videos on
+failure, playwright-report + test-results uploaded as artifacts on
+failure. New workflow .github/workflows/e2e.yml fires on PR (gated
+by an e2e label OR a diff under apps/web/**) and on workflow_dispatch
+with overridable inputs; defaults E2E_ALLOW_WRITES=false so prod
+runs never mutate. Verified locally against the real Vercel alias
+(https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app)
+and https://aldo-ai-api.fly.dev: 6 passing, 1 skipped (the secrets-
+CRUD test, exactly as designed). pnpm -r typecheck green; biome lint
+clean on the new files (added playwright-report/test-results to
+biome.json's ignore list). LLM-agnostic verified: no provider name
+appears in any spec or asserter. Not committed — orchestrator
+integrates.
