@@ -218,19 +218,52 @@ async function createPgliteClient(url: string, prebuilt: unknown): Promise<SqlCl
 }
 
 /**
- * Split a Postgres script on top-level semicolons. Naive but enough for
- * our hand-written migrations: no dollar-quoted bodies, no procedures,
- * no string literals containing `;` outside a quote.
+ * Split a Postgres script on top-level semicolons. Skips `--` line
+ * comments and `/* *\/` block comments so apostrophes inside comments
+ * (`engine's`) don't toggle the in-string flag.
+ *
+ * Still naive: no dollar-quoted bodies, no E'...' escape strings, no
+ * nested block comments. Sufficient for our hand-written migrations.
  */
 export function splitSqlScript(sql: string): string[] {
   const out: string[] = [];
   let buf = '';
   let inSingle = false;
   let inDouble = false;
+  let inLineComment = false;
+  let inBlockComment = false;
   for (let i = 0; i < sql.length; i++) {
     const ch = sql[i] ?? '';
+    const next = sql[i + 1] ?? '';
+
+    if (inLineComment) {
+      buf += ch;
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      buf += ch;
+      if (ch === '*' && next === '/') {
+        buf += next;
+        i += 1;
+        inBlockComment = false;
+      }
+      continue;
+    }
+    if (!inSingle && !inDouble && ch === '-' && next === '-') {
+      inLineComment = true;
+      buf += ch;
+      continue;
+    }
+    if (!inSingle && !inDouble && ch === '/' && next === '*') {
+      inBlockComment = true;
+      buf += ch;
+      continue;
+    }
+
     if (ch === "'" && !inDouble) inSingle = !inSingle;
     else if (ch === '"' && !inSingle) inDouble = !inDouble;
+
     if (ch === ';' && !inSingle && !inDouble) {
       const trimmed = buf.trim();
       if (trimmed.length > 0) out.push(trimmed);
