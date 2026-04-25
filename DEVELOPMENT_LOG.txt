@@ -497,3 +497,24 @@ Live URLs:
 docs/deploy/live.md captures all the above + the recovery loop +
 next-steps (token rotation, optional production-branch promotion,
 provider keys).
+
+[2026-04-25 08:15 UTC] principal — wave 5 launching (replay debugger)
+The differentiator: pause a live run on a tool-call breakpoint, edit a
+message, swap the model from any checkpoint, resume. Spawning three
+engineers in parallel against a shared api-contract addition
+(debugger.ts: DebugRunEvent SSE schema, Breakpoint, ContinueCommand,
+EditAndResumeCommand, SwapModelCommand).
+
+- Engineer A (engine + storage): breakpoint primitives in @aldo-ai/
+  engine (BreakpointStore + per-turn check before tool/model calls),
+  edit-message-and-resume (extends existing resume), persist runs to
+  Postgres via @aldo-ai/storage so the API has data to debug.
+- Engineer B (apps/api): SSE event-stream endpoint
+  GET /v1/runs/:id/events, breakpoint CRUD, POST commands (continue,
+  edit-and-resume, swap-model), all wired to engine.
+- Engineer C (apps/web): /runs/[id] page upgraded into the debugger
+  view — three panes (timeline + state + controls), live SSE client,
+  mutation actions, model-swap and message-edit dialogs.
+
+Wire format is the single source of truth in @aldo-ai/api-contract;
+all three engineers parse + emit through those Zod schemas.
