@@ -27,11 +27,5 @@ export type ApiError = z.infer<typeof ApiError>;
 export const PrivacyTier = z.enum(['public', 'internal', 'sensitive']);
 export type PrivacyTier = z.infer<typeof PrivacyTier>;
 
-export const RunStatus = z.enum([
-  'queued',
-  'running',
-  'completed',
-  'failed',
-  'cancelled',
-]);
+export const RunStatus = z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']);
 export type RunStatus = z.infer<typeof RunStatus>;

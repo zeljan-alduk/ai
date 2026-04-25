@@ -362,3 +362,21 @@ spot env is read; tests inject db + registry. pnpm typecheck + tests
 green; biome clean for apps/api. Boots via `pnpm --filter @aldo-ai/api dev`
 on PORT 3001 (HOST 0.0.0.0) after applying @aldo-ai/storage migrations.
 Touched only apps/api/.
+
+[2026-04-24 23:05 UTC] principal — wave 4 complete
+Both engineers landed cleanly. apps/web (23 files): /runs (list +
+detail), /agents (list + detail), /models — all server-rendered, typed
+via @aldo-ai/api-contract, privacy tier and cost surfaced everywhere.
+apps/api (13 files, 16 tests): Hono server, /v1/* routes against
+Postgres via @aldo-ai/storage, opaque base64 cursor, ApiError envelope,
+CORS for localhost:3000 + CORS_ORIGINS extras, route-prefixed under
+/v1 except /health, models endpoint flips `available` flag based on
+configured provider envs (only place provider strings are matched).
+Added @aldo-ai/api-contract package as the wire-format SoT.
+Workspace verify: pnpm install clean, pnpm -r typecheck clean across
+11 packages, pnpm lint clean across 190 files (Biome auto-fixed one
+formatting nit), pnpm -r test 160 passing (registry 23, gateway 20,
+engine 11, observability 21, cli 35, storage 2, aldo-fs 32, api 16;
+types/runtime-config/api-contract/web have no tests). Boot
+commands: `pnpm --filter @aldo-ai/api dev` (port 3001) +
+`pnpm --filter @aldo-ai/web dev` (port 3000). Ready for smoke test.
