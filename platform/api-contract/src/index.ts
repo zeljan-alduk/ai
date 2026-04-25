@@ -18,3 +18,5 @@ export * from './debugger.js';
 export * from './eval.js';
 export * from './secrets.js';
 export * from './auth.js';
+export * from './design-partners.js';
+export * from './billing.js';

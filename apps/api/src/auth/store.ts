@@ -196,15 +196,26 @@ export async function getMembership(
 }
 
 /**
- * Atomically create a new user + tenant + owner membership. Returns
- * the created records so the caller can mint a session token.
+ * Atomically create a new user + tenant + owner membership + the
+ * tenant's initial 14-day trial subscription row. Returns the created
+ * records so the caller can mint a session token.
  *
  * The driver abstraction doesn't expose `BEGIN/COMMIT` directly, but
  * inserts are FK-checked and our migration's UNIQUE indices on
  * `users.email` + `tenants.slug` give us idempotency on conflicts —
  * the route layer is responsible for surfacing 409s before calling
  * this so we don't half-create state.
+ *
+ * Wave 11: the `subscriptions` row is inserted alongside the membership
+ * with `plan='trial', status='trialing', trial_end=now()+14d`. The
+ * insert uses `ON CONFLICT (tenant_id) DO NOTHING` so a retried signup
+ * doesn't blow away an already-populated row. Putting this here keeps
+ * the trial-bootstrap inside the signup flow — Engineer Q's brief
+ * called out that adding it as a side-effect downstream of the tx
+ * could break under retry.
  */
+export const TRIAL_DAYS = 14;
+
 export async function createTenantAndOwner(
   db: SqlClient,
   args: {
@@ -234,6 +245,19 @@ export async function createTenantAndOwner(
     tenantId,
     userId,
   ]);
+
+  // Wave-11 trial bootstrap. Co-located with the rest of the signup
+  // writes so a partial-failure retry recovers cleanly: every other
+  // INSERT in this function is also idempotent against re-run, and
+  // the FK target (the just-inserted tenant row) is guaranteed to
+  // exist by the time we reach this line.
+  const trialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  await db.query(
+    `INSERT INTO subscriptions (tenant_id, plan, status, trial_end)
+       VALUES ($1, 'trial', 'trialing', $2)
+     ON CONFLICT (tenant_id) DO NOTHING`,
+    [tenantId, trialEnd],
+  );
 
   const userRow = await findUserById(db, userId);
   const tenantRow = await findTenantById(db, tenantId);

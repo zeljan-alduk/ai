@@ -1928,3 +1928,125 @@ This closes the MVP-foundational layer. Next: wave 11 commerce
 (landing + pricing + Stripe + design-partner program). Brief is
 ready; awaiting user sign-off on Stripe keys, pricing, and brand
 copy before spawning.
+
+[2026-04-25 20:42 UTC] engineer-p — wave 11 marketing site
+Public face shipped: route group apps/web/app/(marketing)/ with its
+own minimal layout (sticky top nav, footer, no sidebar) housing /,
+/pricing, /about, /security, /design-partner, and /docs (308 to
+the GitHub repo). Old apps/web/app/page.tsx redirect deleted so
+(marketing)/page.tsx owns /. Middleware allow-list extended in
+lib/middleware-shared.ts (new bounded entries plus an exact-match
+short-circuit for / so it doesn't swallow every protected path).
+Root layout branches on x-aldo-pathname: auth pages and marketing
+pages render chromeless; everything else keeps the wave-10 sidebar.
+Top-nav is the only client island (scroll-state for transparent ->
+solid background). Pricing page renders a "billing enables next
+sprint" banner when STRIPE_SECRET_KEY is unset — graceful fallback
+until Engineer Q lands. Design-partner page is a shell with a
+FormPlaceholder; comment marks the swap point for Engineer R's
+form. New tests: 5 cases for the marketing public-path additions
+in middleware-shared.test.ts (now 15 cases there) plus a 5-case
+SSR snapshot for MarketingTopNav (renderToStaticMarkup). vitest
+config now picks up .tsx tests in components/ and uses the
+automatic JSX runtime. Typecheck green, lint clean for my files
+(2 remaining biome errors are in Engineer R/Q untracked WIP —
+platform/api-contract/src/design-partners.ts + platform/billing/
+src/mailer.ts — not my scope), web build succeeds, 50/50 web
+tests pass. Three placeholder addresses flagged in code comments
+that need real inboxes before public launch: security@aldo-ai.com
+(/security responsible-disclosure), contact@aldo-ai.com (footer),
+design-partners@aldo-ai.com (/design-partner fallback). Marketing
+pages render as ƒ (Dynamic) like every other route in this app —
+the existing root layout's headers() call forces dynamic
+rendering tree-wide, which is a wave-10 architectural constraint
+not introduced here. Not committed — orchestrator integrates.
+
+[2026-04-25 20:54 UTC] Engineer R — wave 11 design-partner program
+Shipped the design-partner program end-to-end: migration 009
+(`design_partner_applications`, intentionally NOT tenant-scoped
+because rows come from prospects who haven't signed up yet),
+three API routes (`POST /v1/design-partners/apply` PUBLIC, plus
+`GET` + `PATCH /v1/admin/design-partner-applications[/:id]` admin-
+only), the public `/design-partner` landing page (extends Engineer
+P's stub — kept P's copy + perks list, swapped the form
+placeholder for a real client-island form + server action), and
+the founder-facing `/admin/design-partners` review page
+(server-component shell + ApplicationCard client island with
+inline status + admin-notes editor). Mailer interface lives in
+`platform/billing/src/mailer.ts` (Engineer Q is in the same package
+this wave; we share it). Default impl is `NoopMailer` which writes
+one structured stderr line — drop in an SES/Resend implementation
+in the same file when the inbox lands and `loadMailerFromEnv`
+picks it up via `MAILER_PROVIDER`. Admin-permission policy is
+hard-coded as `role==='owner' && tenantSlug ∈ {'default',
+'aldo-tech-labs'}` inside `requireAdmin()` in
+`apps/api/src/routes/design-partners.ts` — documented at the call
+site as a temporary stand-in until proper RBAC lands; the
+`ADMIN_TENANT_SLUGS` constant is the single place to widen it.
+Rate-limit is in-process token bucket (5/IP/h) with a TODO comment
+flagging it's not multi-instance safe (wave-13 work). Idempotent
+on `(lower(email), useCase)` within 5 min so a refreshed success
+page doesn't double-insert. Migration numbering: I started at 008
+but Engineer Q landed `008_subscriptions.sql` first; rolled to
+`009_design_partner_applications.sql` — agreed-on tiebreak from
+the brief. Public-path allow-list extended in
+`apps/api/src/auth/middleware.ts` (Engineer Q also touched this
+file in the same wave to add `/v1/billing/webhook`; the changes
+merged cleanly). 18 new API tests covering: public apply (happy
+path, validation, rate-limit firing, idempotency, mailer fired,
+mailer-throw doesn't break apply), admin read (401 unauth / 403
+default-tenant member / 403 other-tenant owner / 200 default
+owner / status filter / 400 bad filter), admin patch (403 member
+/ 200 with reviewed_by stamping / 400 empty body / 404 unknown
+id / 400 malformed id). Storage 009 round-trip extended in
+`migrate.test.ts`. Total apps/api tests: 140 (was 122 pre-wave),
+storage 2/2. `pnpm -r typecheck` green; biome clean on every
+file I touched. Not committed — orchestrator integrates.
+
+[2026-04-25 20:57 UTC] engineer-Q — wave 11 Stripe scaffolding (placeholder)
+Built end-to-end Stripe integration that boots clean in placeholder
+mode and goes live with a config flip — no code change. Migration
+008 adds `subscriptions` (PK tenant_id, plan/status enums, trial_end
++ current_period_end + cancelled_at + jsonb metadata; FK to
+tenants(id) ON DELETE CASCADE). New `@aldo-ai/billing` workspace
+(types/config/stripe-client/checkout/portal/webhook/store/trial-gate)
+plus index + mailer (latter from Engineer R, kept intact). 55 unit
+tests across the package (config 7, store 16 across both impls,
+checkout 7, portal 2, webhook 9, trial-gate 14). Five env vars gate
+live mode (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SIGNING_SECRET,
+STRIPE_PRICE_SOLO, STRIPE_PRICE_TEAM, STRIPE_BILLING_PORTAL_RETURN_URL).
+ALL FIVE must be non-empty for `loadBillingConfig` to return
+`{configured:true}`; any one missing/empty flips every endpoint to
+the typed `not_configured` (HTTP 503) envelope and the trial-gate
+to permissive. New API routes under /v1/billing/{checkout,portal,
+webhook,subscription} (12 new tests in apps/api covering both
+not_configured AND configured-via-test-seam paths, including the
+tampered-body 400 invalid_signature reject and the trial-expired
+402 block on POST /v1/runs while leaving GET /v1/runs free). Webhook
+endpoint added to the auth-middleware allow-list (Stripe POSTs no
+JWT) and reads c.req.raw.text() BEFORE any JSON middleware so the
+HMAC-over-raw-bytes signature survives. Stripe SDK loads via
+dynamic import in stripe-client.ts so a not_configured boot never
+pays the import cost. Trial-gate middleware mounts only on POST
+/v1/runs and POST /v1/agents/:name/check (the routes that cost
+money to run later) — NOT on read paths. Signup transaction
+extended: `createTenantAndOwner` now also inserts the subscriptions
+row inside the same flow with ON CONFLICT (tenant_id) DO NOTHING
+so a retry stays clean (Engineer M's tx, +Engineer Q's row). Web
+/billing page (server component) renders the trial countdown bar,
+plan/status badge, Manage Subscription button (POSTs portal),
+Upgrade CTAs for solo/team — and a calm amber banner ("Billing
+isn't enabled in this environment yet. Your trial keeps running…")
+when the API returns not_configured. Sidebar nav grew a /billing
+link between Models and Eval. Dockerfile bundles platform/billing.
+deploy-api.yml extended to stage all five Stripe vars as Fly
+secrets (empty values accepted; the API treats empty-string as
+unset). Path from placeholder -> live: set all five GH secrets,
+re-deploy. Boot log prints `[billing] configured: yes/no, prices:
+solo=set/unset, team=set/unset` for operator confirmation.
+Quality bar: pnpm -r typecheck green, biome check clean on every
+file touched, billing 55/55 tests, api 140/140 (+12 new), storage
+2/2 with the wave-11 008 round-trip. `apps/web-e2e/tests/billing-
+webhook.spec.ts` smoke spec gated behind `E2E_ALLOW_WRITES=true` AND
+`STRIPE_TEST_MODE=true` (skips otherwise). Not committed —
+orchestrator integrates.

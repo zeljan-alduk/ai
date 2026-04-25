@@ -29,7 +29,6 @@ describe('isPublicPath', () => {
     expect(isPublicPath('/favicon.ico')).toBe(true);
   });
   it('rejects /runs and other protected paths', () => {
-    expect(isPublicPath('/')).toBe(false);
     expect(isPublicPath('/runs')).toBe(false);
     expect(isPublicPath('/runs/abc-123')).toBe(false);
     expect(isPublicPath('/agents')).toBe(false);
@@ -39,6 +38,35 @@ describe('isPublicPath', () => {
     // `/loginx` should NOT be treated as public.
     expect(isPublicPath('/loginx')).toBe(false);
     expect(isPublicPath('/signup-foo')).toBe(false);
+  });
+
+  // Wave-11 marketing surface — the public face of the product.
+  describe('marketing routes', () => {
+    it('treats the marketing homepage / as public', () => {
+      expect(isPublicPath('/')).toBe(true);
+    });
+    it('treats /pricing, /about, /security, /design-partner, /docs as public', () => {
+      expect(isPublicPath('/pricing')).toBe(true);
+      expect(isPublicPath('/about')).toBe(true);
+      expect(isPublicPath('/security')).toBe(true);
+      expect(isPublicPath('/design-partner')).toBe(true);
+      expect(isPublicPath('/docs')).toBe(true);
+    });
+    it('treats query strings on marketing routes as public (e.g. /pricing?plan=team)', () => {
+      expect(isPublicPath('/pricing?plan=team')).toBe(true);
+      expect(isPublicPath('/design-partner?ref=hn')).toBe(true);
+    });
+    it('does NOT treat the homepage as a wildcard parent of protected routes', () => {
+      // Defensive: `pathname.startsWith('/')` is true for every URL,
+      // so `/` MUST be matched as an exact-only public path.
+      expect(isPublicPath('/runs')).toBe(false);
+      expect(isPublicPath('/agents/system-architect')).toBe(false);
+    });
+    it('rejects spoofed marketing prefixes (e.g. /pricingx, /aboutus)', () => {
+      expect(isPublicPath('/pricingx')).toBe(false);
+      expect(isPublicPath('/aboutus')).toBe(false);
+      expect(isPublicPath('/securityz')).toBe(false);
+    });
   });
 });
 

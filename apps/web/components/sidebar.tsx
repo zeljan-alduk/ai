@@ -15,6 +15,11 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     match: (p) => p === '/secrets' || p.startsWith('/secrets/'),
   },
   { href: '/models', label: 'Models', match: (p) => p === '/models' || p.startsWith('/models/') },
+  {
+    href: '/billing',
+    label: 'Billing',
+    match: (p) => p === '/billing' || p.startsWith('/billing/'),
+  },
   { href: '/eval', label: 'Eval', match: (p) => p === '/eval' || p.startsWith('/eval/') },
   { href: '/docs', label: 'Docs', match: (p) => p.startsWith('/docs') },
 ];

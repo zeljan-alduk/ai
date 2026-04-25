@@ -18,10 +18,17 @@ export default defineConfig({
       'app/**/*.test.ts',
       'app/**/*.test.tsx',
       'components/**/*.test.ts',
+      'components/**/*.test.tsx',
     ],
     environment: 'node',
     testTimeout: 10_000,
     hookTimeout: 10_000,
+  },
+  // Use the automatic JSX runtime so `.tsx` test files don't need an
+  // explicit `import React from 'react'` — matches what Next.js does
+  // for the production bundle.
+  esbuild: {
+    jsx: 'automatic',
   },
   resolve: {
     alias: {

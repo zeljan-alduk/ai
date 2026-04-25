@@ -133,6 +133,67 @@ describe('migrate()', () => {
     );
     expect(ptrRows.rows[0]?.current_version).toBe('0.1.0');
 
+    // Wave-11: migration 008 — subscriptions table. The schema is keyed
+    // on tenant_id (one billing relationship per tenant); the row
+    // round-trips with plan='trial' / status='trialing' as the docs
+    // promise. JSONB metadata accepts an empty object literal.
+    expect(applied.some((m) => m.version === '008')).toBe(true);
+    const futureTrialEnd = new Date(Date.now() + 14 * 86400_000).toISOString();
+    await client.query(
+      `INSERT INTO subscriptions (tenant_id, plan, status, trial_end)
+       VALUES ($1, 'trial', 'trialing', $2)
+       ON CONFLICT (tenant_id) DO NOTHING`,
+      [DEFAULT_TENANT_UUID, futureTrialEnd],
+    );
+    const subRows = await client.query<{
+      tenant_id: string;
+      plan: string;
+      status: string;
+      trial_end: string | Date | null;
+      stripe_customer_id: string | null;
+    }>(
+      `SELECT tenant_id, plan, status, trial_end, stripe_customer_id
+         FROM subscriptions WHERE tenant_id = $1`,
+      [DEFAULT_TENANT_UUID],
+    );
+    expect(subRows.rows).toHaveLength(1);
+    expect(subRows.rows[0]?.plan).toBe('trial');
+    expect(subRows.rows[0]?.status).toBe('trialing');
+    expect(subRows.rows[0]?.stripe_customer_id).toBeNull();
+    expect(subRows.rows[0]?.trial_end).not.toBeNull();
+
+    // Wave-11: migration 009 — design_partner_applications. The table
+    // is intentionally NOT tenant-scoped (applications come from
+    // prospects who haven't signed up yet); we round-trip a row +
+    // assert the workflow defaults (status='new', reviewed_*=NULL)
+    // shake out as expected.
+    expect(applied.some((m) => m.version === '009')).toBe(true);
+    await client.exec(
+      `INSERT INTO design_partner_applications
+         (id, name, email, use_case)
+       VALUES ('app-1', 'Ada Lovelace', 'ada@example.com',
+               'We want to evaluate ALDO AI for a multi-tenant control plane.')`,
+    );
+    const dpRows = await client.query<{
+      id: string;
+      name: string;
+      email: string;
+      status: string;
+      reviewed_by: string | null;
+      reviewed_at: string | null;
+      admin_notes: string | null;
+    }>(
+      `SELECT id, name, email, status, reviewed_by, reviewed_at, admin_notes
+         FROM design_partner_applications
+        WHERE id = 'app-1'`,
+    );
+    expect(dpRows.rows).toHaveLength(1);
+    expect(dpRows.rows[0]?.name).toBe('Ada Lovelace');
+    expect(dpRows.rows[0]?.status).toBe('new');
+    expect(dpRows.rows[0]?.reviewed_by).toBeNull();
+    expect(dpRows.rows[0]?.reviewed_at).toBeNull();
+    expect(dpRows.rows[0]?.admin_notes).toBeNull();
+
     await client.close();
   });
 

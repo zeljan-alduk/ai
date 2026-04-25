@@ -12,10 +12,42 @@ import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 import './globals.css';
 
-/** Pathnames where the sidebar chrome is suppressed (auth pages). */
+/**
+ * Pathnames where the sidebar chrome is suppressed.
+ *
+ * Two families of routes don't want the app sidebar:
+ *
+ *   1. Auth pages (`/login`, `/signup`) — owned by the `(auth)` route
+ *      group, which mounts its own centred-card layout.
+ *   2. Marketing pages (`/`, `/pricing`, `/about`, `/security`,
+ *      `/design-partner`, `/docs`) — owned by the `(marketing)` route
+ *      group, which mounts its own top-nav + footer layout.
+ *
+ * Both families render their children directly; the root layout just
+ * gets out of the way.
+ */
 function isChromelessPath(pathname: string | null): boolean {
   if (!pathname) return false;
-  return pathname === '/login' || pathname === '/signup';
+  if (pathname === '/login' || pathname === '/signup') return true;
+  if (isMarketingPath(pathname)) return true;
+  return false;
+}
+
+/** Marketing route prefixes (kept in sync with the public allow-list). */
+const MARKETING_PATHS: ReadonlyArray<string> = [
+  '/pricing',
+  '/about',
+  '/security',
+  '/design-partner',
+  '/docs',
+];
+
+function isMarketingPath(pathname: string): boolean {
+  if (pathname === '/') return true;
+  for (const p of MARKETING_PATHS) {
+    if (pathname === p || pathname.startsWith(`${p}/`)) return true;
+  }
+  return false;
 }
 
 export const metadata: Metadata = {

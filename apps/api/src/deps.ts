@@ -19,6 +19,15 @@
  */
 
 import {
+  type BillingConfig,
+  type Mailer,
+  PostgresSubscriptionStore,
+  type SubscriptionStore,
+  describeBillingConfig,
+  loadBillingConfig,
+  loadMailerFromEnv,
+} from '@aldo-ai/billing';
+import {
   AgentRegistry,
   PostgresRegisteredAgentStore,
   PostgresStorage,
@@ -68,6 +77,17 @@ export interface Env {
    * `ALDO_SECRETS_MASTER_KEY` pattern.
    */
   readonly ALDO_JWT_SECRET?: string | undefined;
+  /**
+   * Wave 11 — Stripe wiring. ALL FIVE must be set (non-empty) for the
+   * billing endpoints to leave `not_configured` mode. Empty/unset
+   * values make `/v1/billing/*` return HTTP 503 with code
+   * `not_configured`; the trial-gate stays permissive.
+   */
+  readonly STRIPE_SECRET_KEY?: string | undefined;
+  readonly STRIPE_WEBHOOK_SIGNING_SECRET?: string | undefined;
+  readonly STRIPE_PRICE_SOLO?: string | undefined;
+  readonly STRIPE_PRICE_TEAM?: string | undefined;
+  readonly STRIPE_BILLING_PORTAL_RETURN_URL?: string | undefined;
   /** Provider key + base-URL env vars. Read by the models route to stamp `available`. */
   readonly [k: string]: string | undefined;
 }
@@ -115,6 +135,28 @@ export interface Deps {
    * in-memory implementation through `CreateDepsOptions.agentStore`.
    */
   readonly agentStore: RegisteredAgentStore;
+  /**
+   * Wave-11 mailer used by the design-partner program notification
+   * path. Defaults to `noopMailer` (logs one stderr line per send)
+   * when `MAILER_PROVIDER` is unset; tests inject a capturing stub
+   * via `CreateDepsOptions.mailer`. Send failures are NEVER allowed
+   * to break the API request that triggered them.
+   */
+  readonly mailer: Mailer;
+  /**
+   * Wave-11 billing config. Either `{ configured: true, ... }` (all
+   * STRIPE_* env vars set) or `{ configured: false, ... }`. Routes
+   * under `/v1/billing/*` switch on this; the trial-gate is
+   * permissive when `configured: false`.
+   */
+  readonly billing: BillingConfig;
+  /**
+   * Wave-11 subscription store. Always present so the trial-gate
+   * middleware and `/v1/billing/subscription` can read it whether or
+   * not Stripe itself is configured (the trial row exists for every
+   * tenant the moment they sign up).
+   */
+  readonly subscriptionStore: SubscriptionStore;
   /** Release the underlying SQL client. */
   close(): Promise<void>;
 }
@@ -142,6 +184,22 @@ export interface CreateDepsOptions {
    * `loadSigningKeyFromEnv` resolve it.
    */
   readonly signingKey?: Uint8Array;
+  /**
+   * Inject a mailer (tests use a capturing stub to assert the
+   * design-partner notification fires). Production leaves this
+   * unset and `loadMailerFromEnv` decides between `NoopMailer` and
+   * (eventually) a real provider.
+   */
+  readonly mailer?: Mailer;
+  /**
+   * Override the resolved billing config (tests pass `{ configured:
+   * false }` to exercise the placeholder envelope without poking
+   * STRIPE_* env vars; or pass `{ configured: true, ... }` with a
+   * fake Stripe client to exercise the live paths).
+   */
+  readonly billing?: BillingConfig;
+  /** Inject a `SubscriptionStore` (tests use the in-memory variant). */
+  readonly subscriptionStore?: SubscriptionStore;
 }
 
 export async function createDeps(
@@ -181,6 +239,23 @@ export async function createDeps(
 
   const agentStore = opts.agentStore ?? new PostgresRegisteredAgentStore({ client: db });
 
+  // Mailer: callers (tests) pass a capturing stub; production resolves
+  // through `loadMailerFromEnv` which currently only knows about the
+  // no-op (real provider lands when the inbox does).
+  const mailer = opts.mailer ?? loadMailerFromEnv(env);
+
+  // Wave-11 billing config. Resolves the STRIPE_* env vars into either
+  // a fully-populated `ResolvedBillingConfig` or the typed
+  // `UnconfiguredBilling` envelope. Tests can pre-stamp either shape
+  // through `opts.billing`.
+  const billing = opts.billing ?? loadBillingConfig(env);
+  // Boot-time signal so operators can read the deploy log and confirm
+  // wiring without inspecting env. Never echoes the actual values.
+  // Mirrors the wave-7 `[secrets]` boot log.
+  console.log(describeBillingConfig(billing));
+
+  const subscriptionStore = opts.subscriptionStore ?? new PostgresSubscriptionStore({ client: db });
+
   const deps: Deps = {
     db,
     registry,
@@ -190,6 +265,9 @@ export async function createDeps(
     __defaultDebugger,
     secrets,
     agentStore,
+    mailer,
+    billing,
+    subscriptionStore,
     ...(opts.engineDebugger !== undefined ? { engineDebugger: opts.engineDebugger } : {}),
     ...(opts.evalDeps !== undefined ? { evalDeps: opts.evalDeps } : {}),
     async close() {

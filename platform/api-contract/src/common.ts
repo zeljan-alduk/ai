@@ -52,6 +52,25 @@ export const KNOWN_API_ERROR_CODES = [
   // endpoints where the slug/id is part of the URL itself surface
   // this code so the client can report a real "wrong tenant" UI.
   'cross_tenant_access',
+  // Wave 11 — billing.
+  // `not_configured` (503) — the requested endpoint depends on a
+  // Stripe wiring (env vars) that the current deploy doesn't have.
+  // Surfaces under `/v1/billing/*` when STRIPE_* env vars are unset
+  // or empty. The web client switches on this code to render a calm
+  // placeholder banner rather than an error UI; the trial-gate is
+  // permissive in this state so users keep working.
+  'not_configured',
+  // `trial_expired` (402) — the tenant's 14-day trial has ended and
+  // no paid subscription is in place. Returned by the trial-gate
+  // middleware on mutating routes (POST /v1/runs, etc) when billing
+  // IS configured. The detail payload carries an `upgradeUrl` the
+  // client can redirect to.
+  'trial_expired',
+  // `payment_required` (402) — generic billing-block: subscription
+  // was past_due, unpaid, or otherwise unable to charge. Distinct
+  // from `trial_expired` so the upgrade UI can render a "fix your
+  // card" CTA instead of a "pick a plan" CTA.
+  'payment_required',
 ] as const;
 export type KnownApiErrorCode = (typeof KNOWN_API_ERROR_CODES)[number];
 

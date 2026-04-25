@@ -22,11 +22,14 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { bearerAuth } from './auth/middleware.js';
 import { authRoutes } from './auth/routes.js';
+import { trialGate } from './auth/trial-gate.js';
 import type { Deps } from './deps.js';
 import { errorHandler } from './middleware/error.js';
 import { logger } from './middleware/logger.js';
 import { agentsRoutes } from './routes/agents.js';
+import { billingRoutes } from './routes/billing.js';
 import { debuggerRoutes } from './routes/debugger.js';
+import { designPartnersRoutes } from './routes/design-partners.js';
 import { evalRoutes } from './routes/eval.js';
 import { healthRoutes } from './routes/health.js';
 import { modelsRoutes } from './routes/models.js';
@@ -66,6 +69,21 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   // `c.var.auth` for downstream routes.
   app.use('*', bearerAuth(deps.signingKey));
 
+  // Wave 11 — trial gate on the mutating routes that COST money to
+  // run later. Permissive when billing is `not_configured`, when the
+  // subscription row is missing, or when the trial is still active.
+  // Read paths are NOT gated. Mounted BEFORE the route handlers so a
+  // gate-block fires before any request body is processed.
+  const gate = trialGate(deps);
+  app.use('/v1/runs', async (c, next) => {
+    if (c.req.method === 'POST') return gate(c, next);
+    await next();
+  });
+  app.use('/v1/agents/:name/check', async (c, next) => {
+    if (c.req.method === 'POST') return gate(c, next);
+    await next();
+  });
+
   app.route('/', healthRoutes(deps));
   app.route('/', authRoutes({ db: deps.db, signingKey: deps.signingKey }));
   app.route('/', runsRoutes(deps));
@@ -75,6 +93,8 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', evalRoutes(deps, deps.evalDeps !== undefined ? { evalDeps: deps.evalDeps } : {}));
   app.route('/', secretsRoutes(deps));
   app.route('/', tenantsRoutes(deps));
+  app.route('/', designPartnersRoutes(deps));
+  app.route('/', billingRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>

@@ -18,10 +18,33 @@ export const SESSION_COOKIE_NAME = 'aldo_session';
  */
 const PUBLIC_PREFIXES: ReadonlyArray<string> = ['/_next/', '/favicon.ico'];
 
-/** Routes that must match exactly, OR with a `/<rest>` suffix. */
-const PUBLIC_BOUNDED: ReadonlyArray<string> = ['/login', '/signup', '/api/health'];
+/**
+ * Routes that must match exactly, OR with a `/<rest>` suffix.
+ *
+ * Auth pages: /login, /signup. Health probe: /api/health.
+ *
+ * Marketing surface (wave 11) — public so unauthenticated visitors
+ * landing on the root domain see a real product page rather than
+ * being kicked into /login. The root `/` is handled separately below
+ * because matching it as a bounded prefix would treat every URL as
+ * a child of `/`.
+ */
+const PUBLIC_BOUNDED: ReadonlyArray<string> = [
+  '/login',
+  '/signup',
+  '/api/health',
+  '/pricing',
+  '/about',
+  '/security',
+  '/design-partner',
+  '/docs',
+];
 
 export function isPublicPath(pathname: string): boolean {
+  // The marketing homepage is the only `/` exact-match: we must NOT
+  // treat `/` as a bounded prefix, otherwise `pathname.startsWith('/')`
+  // would match every protected path too.
+  if (pathname === '/') return true;
   for (const p of PUBLIC_BOUNDED) {
     if (pathname === p) return true;
     if (pathname.startsWith(`${p}/`)) return true;

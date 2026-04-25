@@ -16,21 +16,29 @@ import {
   AuthMeResponse,
   AuthSessionResponse,
   CheckAgentResponse,
+  type CheckoutRequest,
+  CheckoutResponse,
+  DesignPartnerApplication,
   GetAgentResponse,
   GetRunResponse,
   GetRunTreeResponse,
+  GetSubscriptionResponse,
   type ListAgentsQuery,
   ListAgentsResponse,
+  ListDesignPartnerApplicationsResponse,
   ListModelsResponse,
   type ListRunsQuery,
   ListRunsResponse,
   ListSecretsResponse,
   type LoginRequest,
+  type PortalRequest,
+  PortalResponse,
   type SetSecretRequest,
   SetSecretResponse,
   type SignupRequest,
   type SwitchTenantRequest,
   SwitchTenantResponse,
+  type UpdateDesignPartnerApplicationRequest,
 } from '@aldo-ai/api-contract';
 import type { z } from 'zod';
 
@@ -394,6 +402,80 @@ export function getAuthMe() {
 /** `POST /v1/auth/switch-tenant`. Returns a fresh JWT scoped to the new tenant. */
 export function switchTenant(req: SwitchTenantRequest) {
   return request('/v1/auth/switch-tenant', SwitchTenantResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/* ------------------------- Design-partner admin ------------------------ */
+
+/**
+ * `GET /v1/admin/design-partner-applications` — admin only. Listed
+ * newest-first. Optional `status` filter narrows to one workflow
+ * state (`new` | `contacted` | `accepted` | `declined`).
+ */
+export function listDesignPartnerApplications(query: { status?: string } = {}) {
+  return request('/v1/admin/design-partner-applications', ListDesignPartnerApplicationsResponse, {
+    query,
+  });
+}
+
+/**
+ * `PATCH /v1/admin/design-partner-applications/:id` — admin only.
+ * Updates status and/or admin notes. The API stamps `reviewed_by` +
+ * `reviewed_at` from the authenticated session.
+ */
+export function updateDesignPartnerApplication(
+  id: string,
+  body: UpdateDesignPartnerApplicationRequest,
+) {
+  return request(
+    `/v1/admin/design-partner-applications/${encodeURIComponent(id)}`,
+    DesignPartnerApplication,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/* ------------------------------ Billing --------------------------------- */
+
+/**
+ * `GET /v1/billing/subscription` — caller's tenant subscription. The
+ * response shape is the same in placeholder mode and live mode; only
+ * the trial countdown changes. The `/v1/billing/checkout` endpoint
+ * returns a typed `not_configured` error when STRIPE_* env vars are
+ * unset; the `/billing` page switches on that to render a banner
+ * instead of an error UI.
+ */
+export function getSubscription() {
+  return request('/v1/billing/subscription', GetSubscriptionResponse);
+}
+
+/**
+ * `POST /v1/billing/checkout` — mint a Stripe Checkout URL. Throws an
+ * `ApiClientError` with `code === 'not_configured'` (HTTP 503) when
+ * billing isn't wired in this environment; pages that consume this
+ * function should catch and render a placeholder.
+ */
+export function createCheckoutSession(req: CheckoutRequest) {
+  return request('/v1/billing/checkout', CheckoutResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/**
+ * `POST /v1/billing/portal` — mint a Stripe Billing Portal URL. Same
+ * `not_configured` semantics as checkout. Used by the "Manage
+ * subscription" button on /billing.
+ */
+export function createPortalSession(req: PortalRequest = {}) {
+  return request('/v1/billing/portal', PortalResponse, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(req),

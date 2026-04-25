@@ -30,8 +30,25 @@ export interface AuthContextVars {
   readonly auth?: SessionAuth;
 }
 
-/** Allow-listed public paths. Order matters only for the OPTIONS check. */
-const PUBLIC_PATH_EXACT = new Set<string>(['/health', '/v1/auth/signup', '/v1/auth/login']);
+/**
+ * Allow-listed public paths. Order matters only for the OPTIONS check.
+ *
+ * Wave 11 added `/v1/design-partners/apply` so the marketing
+ * `/design-partner` form can post without a session — applicants
+ * haven't signed up yet. The admin endpoints under
+ * `/v1/admin/design-partner-applications` are NOT in this list; they
+ * stay behind bearer auth and add their own admin-only check.
+ */
+const PUBLIC_PATH_EXACT = new Set<string>([
+  '/health',
+  '/v1/auth/signup',
+  '/v1/auth/login',
+  '/v1/design-partners/apply',
+  // Wave 11: Stripe POSTs webhooks without a JWT. Authentication is
+  // HMAC over the raw body via `Stripe-Signature`; the route handler
+  // verifies the signature before touching any state.
+  '/v1/billing/webhook',
+]);
 
 /** True iff this request can pass without a bearer token. */
 export function isPublicPath(method: string, path: string): boolean {

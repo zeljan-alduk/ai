@@ -26,6 +26,9 @@ importers:
       '@aldo-ai/api-contract':
         specifier: workspace:*
         version: link:../../platform/api-contract
+      '@aldo-ai/billing':
+        specifier: workspace:*
+        version: link:../../platform/billing
       '@aldo-ai/engine':
         specifier: workspace:*
         version: link:../../platform/engine
@@ -232,6 +235,37 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)
+
+  platform/billing:
+    dependencies:
+      '@aldo-ai/api-contract':
+        specifier: workspace:*
+        version: link:../api-contract
+      '@aldo-ai/storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@aldo-ai/types':
+        specifier: workspace:*
+        version: link:../types
+      stripe:
+        specifier: ^17.0.0
+        version: 17.7.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ~0.4.4
+        version: 0.4.4
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17
@@ -2344,6 +2378,10 @@ packages:
   std-env@3.10.0:
     resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
 
+  stripe@17.7.0:
+    resolution: {integrity: sha512-aT2BU9KkizY9SATf14WhhYVv2uOapBWX0OFWF4xvcj1mPaNotlSc2CsxpS4DS46ZueSppmCF5BX1sNYBtwBvfw==}
+    engines: {node: '>=12.*'}
+
   styled-jsx@5.1.6:
     resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
     engines: {node: '>= 12.0.0'}
@@ -4024,6 +4062,11 @@ snapshots:
   statuses@2.0.2: {}
 
   std-env@3.10.0: {}
+
+  stripe@17.7.0:
+    dependencies:
+      '@types/node': 22.19.17
+      qs: 6.15.1
 
   styled-jsx@5.1.6(react@19.2.5):
     dependencies:
