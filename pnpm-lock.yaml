@@ -66,9 +66,15 @@ importers:
 
   apps/cli:
     dependencies:
+      '@aldo-ai/api-contract':
+        specifier: workspace:*
+        version: link:../../platform/api-contract
       '@aldo-ai/engine':
         specifier: workspace:*
         version: link:../../platform/engine
+      '@aldo-ai/eval':
+        specifier: workspace:*
+        version: link:../../platform/eval
       '@aldo-ai/gateway':
         specifier: workspace:*
         version: link:../../platform/gateway

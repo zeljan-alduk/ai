@@ -126,10 +126,7 @@ function lintCases(
       });
     }
     if (
-      (kind === 'contains' ||
-        kind === 'not_contains' ||
-        kind === 'regex' ||
-        kind === 'exact') &&
+      (kind === 'contains' || kind === 'not_contains' || kind === 'regex' || kind === 'exact') &&
       hasSchema
     ) {
       errors.push({

@@ -19,14 +19,7 @@
 import type { EvaluationResult } from './index.js';
 
 type Schema = Record<string, unknown>;
-type JsonType =
-  | 'object'
-  | 'array'
-  | 'string'
-  | 'number'
-  | 'integer'
-  | 'boolean'
-  | 'null';
+type JsonType = 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean' | 'null';
 
 export function evaluateJsonSchema(output: string, schema: unknown): EvaluationResult {
   let parsed: unknown;

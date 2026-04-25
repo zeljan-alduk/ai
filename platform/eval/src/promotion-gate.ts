@@ -13,6 +13,7 @@
 
 import type { Sweep } from '@aldo-ai/api-contract';
 import type { AgentSpec } from '@aldo-ai/types';
+import { loadSuiteFromFile, parseSuiteYamlOrThrow } from './suite-loader.js';
 import {
   type RuntimeFactory,
   type SweepResult,
@@ -20,7 +21,6 @@ import {
   weightedPassRatio,
 } from './sweep-runner.js';
 import type { SweepStore } from './sweep-store.js';
-import { loadSuiteFromFile, parseSuiteYamlOrThrow } from './suite-loader.js';
 
 /** Strategy: how does the gate find the YAML for each declared suite? */
 export interface SuiteResolver {
@@ -85,9 +85,7 @@ export interface PromotionGateResult {
  * mechanism-only so the same code can be exercised by the CLI and the
  * API.
  */
-export async function runPromotionGate(
-  opts: PromotionGateOptions,
-): Promise<PromotionGateResult> {
+export async function runPromotionGate(opts: PromotionGateOptions): Promise<PromotionGateResult> {
   const required = opts.spec.evalGate.requiredSuites;
   if (required.length === 0) {
     return {
@@ -177,9 +175,7 @@ export async function runPromotionGate(
     sweepIds,
     failedSuites,
     outcomes,
-    ...(passed
-      ? {}
-      : { reason: `suites failed: ${failedSuites.join(', ')}` }),
+    ...(passed ? {} : { reason: `suites failed: ${failedSuites.join(', ')}` }),
   };
 }
 

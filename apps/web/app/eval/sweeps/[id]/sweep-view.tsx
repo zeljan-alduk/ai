@@ -7,14 +7,13 @@ import { getSweep, isTerminalSweepStatus } from '@/lib/eval-client';
 import { formatRelativeTime, formatUsd } from '@/lib/format';
 import type { Sweep } from '@aldo-ai/api-contract';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const POLL_INTERVAL_MS = 5_000;
 
 export function SweepView({ initialSweep }: { initialSweep: Sweep }) {
   const [sweep, setSweep] = useState<Sweep>(initialSweep);
   const [pollError, setPollError] = useState<string | null>(null);
-  const lastFetchRef = useRef<number>(Date.now());
 
   useEffect(() => {
     if (isTerminalSweepStatus(sweep.status)) return;
@@ -27,7 +26,6 @@ export function SweepView({ initialSweep }: { initialSweep: Sweep }) {
       try {
         const res = await getSweep(sweep.id, { signal: ctrl.signal });
         if (cancelled) return;
-        lastFetchRef.current = Date.now();
         setSweep(res.sweep);
         setPollError(null);
       } catch (err) {

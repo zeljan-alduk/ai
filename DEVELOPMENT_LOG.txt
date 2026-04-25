@@ -663,3 +663,63 @@ registry.promote() with sweep evidence. Local interface stubs for
 SweepStore / SweepRunner / PromotionGate / loadSuiteFromYaml live in
 eval-store.ts marked TODO(integrate) so the swap to @aldo-ai/eval is
 mechanical. 13 new vitest cases, 39 total green; biome + tsc clean.
+
+2026-04-25T11:24:22Z frontend-engineer (Wave 6 / eval UI)
+Built the eval harness UI in apps/web. Added `lib/eval-client.ts`
+(typed, Zod-parsed wrappers for the 6 eval endpoints), four
+`components/eval/*` widgets (matrix, cell-detail, pass-badge,
+sweep-status-badge), `/eval` index, suite detail, sweeps list +
+filters, new-sweep form, sweep detail with 5s polling while status
+is queued|running, and `/agents/[name]/promote` dialog rendering
+PromoteAgentResponse breakdown. Sidebar gains an Eval link; agent
+header gains a Promote button. Matrix shows pending cells as grey
+when the server has not produced a result yet (contract assumption,
+documented in matrix.tsx). tsc + biome clean; vitest passes (no
+eval tests added).
+
+2026-04-25T11:27:11Z backend-engineer (Wave 6 / eval primitive)
+Shipped @aldo-ai/eval: suite-loader (Zod-validated YAML mirroring the
+api-contract EvalSuite), five evaluators (contains/not_contains,
+regex, exact, hand-rolled JSON-schema subset, rubric LLM-as-judge),
+sweep-runner with RuntimeFactory injection + per-model column
+parallelism, SweepStore interface (default InMemorySweepStore — API
+package will plug Postgres), and a promotion-gate that rejects
+agents with no eval_gate.required_suites. Wired `aldo eval run`,
+`aldo eval sweep`, `aldo agent promote` through bootstrap.ts so the
+sweep runner reuses the same gateway/router as `aldo run`. 44 new
+vitest cases in eval pkg green; cli tests still 35 green; tsc +
+biome clean. Default SweepStore is in-memory; recommend the API
+engineer expose a thin `recordCellProgress(sweepId, cell)` hook on
+SweepStore so the WebSocket fan-out can stream cells without
+re-fetching the whole sweep — happy to add it once api needs it.
+
+[2026-04-25 11:30 UTC] principal — wave 6 lands (eval harness primitive)
+All three engineers complete:
+- A (@aldo-ai/eval + CLI): new platform/eval workspace package — suite
+  loader (Zod-validated YAML), 5 evaluators (contains, regex, exact,
+  json-schema, rubric LLM-as-judge), sweep runner that orchestrates
+  case×model matrix through the existing ModelGateway, promotion gate.
+  44 vitest tests. CLI commands: `aldo eval run`, `aldo eval sweep`,
+  `aldo agent promote`. Engineer A also added a new eval-runtime.ts
+  CLI helper.
+- B (apps/api eval HTTP surface): 5 files, 13 new tests, queueMicrotask
+  scheduler for async sweeps, PostgresSweepStore, 003_eval migration
+  (eval_suites + sweeps + sweep_cells tables).
+- C (apps/web /eval pages): 15 files. /eval index, /eval/sweeps list +
+  /eval/sweeps/new + /eval/sweeps/[id] (5s polling while non-terminal,
+  pending cells render grey), /eval/suites/[name], /agents/[name]/
+  promote dialog. Sidebar gained Eval link; agent header gained
+  Promote button.
+
+Janitorial: pnpm install --force was needed because the new
+@aldo-ai/eval package wasn't symlinked into apps/cli/node_modules
+on first install; once relinked, apps/cli typecheck went clean.
+The implicit-any errors in eval-sweep.ts and agent-promote.ts were
+secondary to the missing-module typecheck failures and disappeared
+once @aldo-ai/eval resolved.
+
+Repo verify: pnpm -r typecheck clean across 14 workspace projects,
+pnpm lint clean across 251 files, pnpm -r test 220 passing
+(registry 23 | gateway 20 | engine 17 | observability 21 | storage
+2 | aldo-fs 32 | cli 35 | eval 44 | api 39).
+Pushing; CD redeploys API to Fly + Vercel rebuilds web.

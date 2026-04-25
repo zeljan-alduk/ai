@@ -35,7 +35,7 @@ import type {
   UsageRecord,
 } from '@aldo-ai/types';
 import { evaluate } from './evaluators/index.js';
-import { type SweepStore, InMemorySweepStore } from './sweep-store.js';
+import { InMemorySweepStore, type SweepStore } from './sweep-store.js';
 
 export interface RuntimePerModel {
   readonly runtime: Runtime;

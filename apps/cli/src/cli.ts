@@ -7,8 +7,11 @@
 import { Command, Option } from 'commander';
 import { runAgentLs } from './commands/agent-ls.js';
 import { runAgentNew } from './commands/agent-new.js';
+import { runAgentPromote } from './commands/agent-promote.js';
 import { runAgentValidate } from './commands/agent-validate.js';
 import { runDev } from './commands/dev.js';
+import { runEvalRun } from './commands/eval-run.js';
+import { runEvalSweep } from './commands/eval-sweep.js';
 import { runInit } from './commands/init.js';
 import { runMcpLs } from './commands/mcp-ls.js';
 import { runModelsLs } from './commands/models-ls.js';
@@ -115,6 +118,32 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
         );
     });
 
+  agent
+    .command('promote <ref>')
+    .description('promote <name>@<version> if every eval-gate suite passes on --models')
+    .requiredOption('--models <list>', 'comma-separated provider.model strings')
+    .option('--suites-dir <path>', 'where to find eval suite YAMLs', 'eval/suites')
+    .option('--agents-dir <path>', 'where to find agent YAMLs', 'agents')
+    .option('--json', 'emit JSON output', false)
+    .action(
+      (
+        ref: string,
+        o: { models?: string; suitesDir?: string; agentsDir?: string; json?: boolean },
+      ) => {
+        action = () =>
+          runAgentPromote(
+            ref,
+            {
+              ...(o.models !== undefined ? { models: o.models } : {}),
+              ...(o.suitesDir !== undefined ? { suitesDir: o.suitesDir } : {}),
+              ...(o.agentsDir !== undefined ? { agentsDir: o.agentsDir } : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
+
   // --- run ------------------------------------------------------------------
   program
     .command('run <agent>')
@@ -149,6 +178,43 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           );
       },
     );
+
+  // --- eval -----------------------------------------------------------------
+  const evalCmd = program.command('eval').description('run eval suites + sweeps');
+
+  evalCmd
+    .command('run <suite-file>')
+    .description('run a suite against ONE model and exit 0/1 by passThreshold')
+    .option('--model <name>', 'opaque provider.model string')
+    .option('--json', 'emit JSON output', false)
+    .action((suiteFile: string, o: { model?: string; json?: boolean }) => {
+      action = () =>
+        runEvalRun(
+          suiteFile,
+          {
+            ...(o.model !== undefined ? { model: o.model } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
+  evalCmd
+    .command('sweep <suite-file>')
+    .description('run a suite against EVERY listed model; informational (exit 0)')
+    .requiredOption('--models <list>', 'comma-separated provider.model strings')
+    .option('--json', 'emit JSON output', false)
+    .action((suiteFile: string, o: { models?: string; json?: boolean }) => {
+      action = () =>
+        runEvalSweep(
+          suiteFile,
+          {
+            ...(o.models !== undefined ? { models: o.models } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
 
   // --- runs -----------------------------------------------------------------
   const runs = program.command('runs').description('inspect past runs (stub)');

@@ -1,8 +1,4 @@
-import {
-  InMemoryCheckpointer,
-  NoopTracer,
-  PlatformRuntime,
-} from '@aldo-ai/engine';
+import { InMemoryCheckpointer, NoopTracer, PlatformRuntime } from '@aldo-ai/engine';
 import { AgentRegistry } from '@aldo-ai/registry';
 import type {
   AgentRef,
@@ -18,9 +14,9 @@ import type {
   ToolResult,
 } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
+import { parseSuiteYamlOrThrow } from '../src/suite-loader.js';
 import { aggregate, runSweep } from '../src/sweep-runner.js';
 import { InMemorySweepStore } from '../src/sweep-store.js';
-import { parseSuiteYamlOrThrow } from '../src/suite-loader.js';
 
 // ---------------------------------------------------------------------------
 // Local mocks. We build a minimal AgentSpec plus a per-model "scripted"

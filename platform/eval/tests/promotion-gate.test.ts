@@ -1,8 +1,4 @@
-import {
-  InMemoryCheckpointer,
-  NoopTracer,
-  PlatformRuntime,
-} from '@aldo-ai/engine';
+import { InMemoryCheckpointer, NoopTracer, PlatformRuntime } from '@aldo-ai/engine';
 import { AgentRegistry } from '@aldo-ai/registry';
 import type {
   AgentSpec,
@@ -17,7 +13,7 @@ import type {
   ToolResult,
 } from '@aldo-ai/types';
 import { describe, expect, it } from 'vitest';
-import { runPromotionGate, type SuiteResolver } from '../src/promotion-gate.js';
+import { type SuiteResolver, runPromotionGate } from '../src/promotion-gate.js';
 
 // ---------------------------------------------------------------------------
 // fixtures
