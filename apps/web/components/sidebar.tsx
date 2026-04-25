@@ -7,6 +7,7 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
   { href: '/runs', label: 'Runs', match: (p) => p === '/runs' || p.startsWith('/runs/') },
   { href: '/agents', label: 'Agents', match: (p) => p === '/agents' || p.startsWith('/agents/') },
   { href: '/models', label: 'Models', match: (p) => p === '/models' || p.startsWith('/models/') },
+  { href: '/eval', label: 'Eval', match: (p) => p === '/eval' || p.startsWith('/eval/') },
   { href: '/docs', label: 'Docs', match: (p) => p.startsWith('/docs') },
 ];
 

@@ -649,3 +649,17 @@ EvalCase + EvalSuite + Sweep + StartSweepRequest + PromoteAgentRequest):
   Postgres-backed sweep store).
 - Engineer C: apps/web /eval page (suites list, sweeps table, sweep
   detail with model-x-case matrix, promote dialog).
+
+[2026-04-25 12:00 UTC] backend-engineer@wave6-B — eval HTTP surface in @aldo-ai/api
+Added apps/api/src/routes/eval.ts (suites + sweeps + promote endpoints
+mounted under /v1) and apps/api/src/eval-store.ts with PostgresSweepStore
+backed by storage migration 003_eval.sql (eval_suites, sweeps,
+sweep_cells). Sweeps run async via an in-process queueMicrotask hook
+(swappable seam for a real queue later); the route returns the queued
+sweepId immediately and the background task drives Engineer A's
+SweepRunner.run(suite, models). Promote synchronously calls
+PromotionGate.check(agentSpec, models); on pass it flips
+registry.promote() with sweep evidence. Local interface stubs for
+SweepStore / SweepRunner / PromotionGate / loadSuiteFromYaml live in
+eval-store.ts marked TODO(integrate) so the swap to @aldo-ai/eval is
+mechanical. 13 new vitest cases, 39 total green; biome + tsc clean.

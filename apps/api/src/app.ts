@@ -25,6 +25,7 @@ import { errorHandler } from './middleware/error.js';
 import { logger } from './middleware/logger.js';
 import { agentsRoutes } from './routes/agents.js';
 import { debuggerRoutes } from './routes/debugger.js';
+import { evalRoutes } from './routes/eval.js';
 import { healthRoutes } from './routes/health.js';
 import { modelsRoutes } from './routes/models.js';
 import { runsRoutes } from './routes/runs.js';
@@ -61,6 +62,7 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', agentsRoutes(deps));
   app.route('/', modelsRoutes(deps));
   app.route('/', debuggerRoutes(deps));
+  app.route('/', evalRoutes(deps, deps.evalDeps !== undefined ? { evalDeps: deps.evalDeps } : {}));
 
   app.onError(errorHandler);
   app.notFound((c) =>

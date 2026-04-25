@@ -29,12 +29,20 @@ export default async function AgentDetailPage({
         title={decoded}
         description="Agent identity, versions, model policy, tools, and raw spec."
         actions={
-          <Link
-            href="/agents"
-            className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
-          >
-            Back to agents
-          </Link>
+          <>
+            <Link
+              href="/agents"
+              className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
+            >
+              Back to agents
+            </Link>
+            <Link
+              href={`/agents/${encodeURIComponent(decoded)}/promote`}
+              className="rounded bg-slate-900 px-3 py-1 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Promote
+            </Link>
+          </>
         }
       />
       {error ? (

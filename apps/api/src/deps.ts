@@ -19,6 +19,7 @@ import {
   type InProcessEngineDebugger,
   createInProcessEngineDebugger,
 } from './routes/debugger.js';
+import type { EvalDeps } from './routes/eval.js';
 
 export interface Env {
   /** Postgres URL. Empty / unset / `pglite:` / `memory://` -> in-process pglite. */
@@ -51,6 +52,13 @@ export interface Deps {
    * `index.ts` builds one and assigns it here.
    */
   readonly engineDebugger?: EngineDebugger;
+  /**
+   * Optional override of the eval deps (sweep store + runner + promotion
+   * gate). When undefined, the eval routes build a default
+   * `PostgresSweepStore` + no-op runner/gate (until @aldo-ai/eval ships).
+   * Tests inject a stub through this seam.
+   */
+  readonly evalDeps?: EvalDeps;
   /** Release the underlying SQL client. */
   close(): Promise<void>;
 }
@@ -62,6 +70,8 @@ export interface CreateDepsOptions {
   readonly registry?: AgentRegistry;
   /** Inject a custom engine debugger (tests use this to capture calls). */
   readonly engineDebugger?: EngineDebugger;
+  /** Inject custom eval deps (tests use this to stub the runner / gate). */
+  readonly evalDeps?: EvalDeps;
 }
 
 export async function createDeps(
@@ -80,6 +90,7 @@ export async function createDeps(
     version,
     __defaultDebugger,
     ...(opts.engineDebugger !== undefined ? { engineDebugger: opts.engineDebugger } : {}),
+    ...(opts.evalDeps !== undefined ? { evalDeps: opts.evalDeps } : {}),
     async close() {
       // If the caller supplied the db, they own its lifecycle.
       if (opts.db === undefined) await db.close();
