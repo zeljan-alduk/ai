@@ -23,6 +23,7 @@ import type {
   SpawnPolicy,
   Subscription,
   ToolsConfig,
+  ToolsGuardsConfig,
   ValidationResult,
 } from '@aldo-ai/types';
 import YAML from 'yaml';
@@ -123,6 +124,45 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
     ...(y.prompt.variables !== undefined ? { variables: y.prompt.variables } : {}),
   };
 
+  const guards: ToolsGuardsConfig | undefined =
+    y.tools.guards !== undefined
+      ? {
+          ...(y.tools.guards.spotlighting !== undefined
+            ? { spotlighting: y.tools.guards.spotlighting }
+            : {}),
+          ...(y.tools.guards.output_scanner !== undefined
+            ? {
+                outputScanner: {
+                  ...(y.tools.guards.output_scanner.enabled !== undefined
+                    ? { enabled: y.tools.guards.output_scanner.enabled }
+                    : {}),
+                  ...(y.tools.guards.output_scanner.severity_block !== undefined
+                    ? { severityBlock: y.tools.guards.output_scanner.severity_block }
+                    : {}),
+                  ...(y.tools.guards.output_scanner.url_allowlist !== undefined
+                    ? { urlAllowlist: y.tools.guards.output_scanner.url_allowlist }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(y.tools.guards.quarantine !== undefined
+            ? {
+                quarantine: {
+                  ...(y.tools.guards.quarantine.enabled !== undefined
+                    ? { enabled: y.tools.guards.quarantine.enabled }
+                    : {}),
+                  ...(y.tools.guards.quarantine.capability_class !== undefined
+                    ? { capabilityClass: y.tools.guards.quarantine.capability_class }
+                    : {}),
+                  ...(y.tools.guards.quarantine.threshold_chars !== undefined
+                    ? { thresholdChars: y.tools.guards.quarantine.threshold_chars }
+                    : {}),
+                },
+              }
+            : {}),
+        }
+      : undefined;
+
   const tools: ToolsConfig = {
     mcp: y.tools.mcp.map((m) => ({ server: m.server, allow: m.allow })),
     native: y.tools.native.map((n) => ({ ref: n.ref })),
@@ -130,6 +170,7 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
       network: y.tools.permissions.network,
       filesystem: y.tools.permissions.filesystem,
     },
+    ...(guards !== undefined ? { guards } : {}),
   };
 
   const memory: MemoryPolicy = {

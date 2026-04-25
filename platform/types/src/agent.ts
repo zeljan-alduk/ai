@@ -39,6 +39,32 @@ export interface PromptConfig {
 
 export type ToolPermission = 'none' | 'repo-readonly' | 'repo-readwrite' | 'full';
 
+export type GuardSeverity = 'info' | 'warn' | 'error' | 'critical';
+
+/**
+ * Optional `tools.guards` block on an agent.v1 spec. All fields are optional;
+ * the @aldo-ai/guards package supplies safe defaults. This is additive — an
+ * agent without a `guards` block behaves exactly as before.
+ */
+export interface ToolsGuardsConfig {
+  /** Spotlighting wraps untrusted tool output in delimiter blocks. Default: true. */
+  readonly spotlighting?: boolean;
+  readonly outputScanner?: {
+    readonly enabled?: boolean;
+    /** Severity at or above which the scanner causes the run to block. */
+    readonly severityBlock?: GuardSeverity;
+    /** URL host or prefix patterns the scanner treats as safe. */
+    readonly urlAllowlist?: readonly string[];
+  };
+  readonly quarantine?: {
+    readonly enabled?: boolean;
+    /** Capability class for the quarantine model (kept LLM-agnostic). */
+    readonly capabilityClass?: string;
+    /** Tool-output size in characters above which to quarantine. */
+    readonly thresholdChars?: number;
+  };
+}
+
 export interface ToolsConfig {
   readonly mcp: readonly {
     readonly server: string;
@@ -49,6 +75,7 @@ export interface ToolsConfig {
     readonly network: 'none' | 'allowlist' | 'full';
     readonly filesystem: ToolPermission;
   };
+  readonly guards?: ToolsGuardsConfig;
 }
 
 export type MemoryScope = 'private' | 'project' | 'org' | 'session';

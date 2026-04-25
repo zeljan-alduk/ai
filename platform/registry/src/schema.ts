@@ -120,6 +120,32 @@ const nativeToolBindingSchema = z
   })
   .strict();
 
+const guardSeverityEnum = z.enum(['info', 'warn', 'error', 'critical']);
+
+const guardsOutputScannerSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    severity_block: guardSeverityEnum.optional(),
+    url_allowlist: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
+const guardsQuarantineSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    capability_class: z.string().min(1).optional(),
+    threshold_chars: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
+const toolsGuardsSchema = z
+  .object({
+    spotlighting: z.boolean().optional(),
+    output_scanner: guardsOutputScannerSchema.optional(),
+    quarantine: guardsQuarantineSchema.optional(),
+  })
+  .strict();
+
 const toolsSchema = z
   .object({
     mcp: z.array(mcpToolBindingSchema).default([]),
@@ -130,6 +156,7 @@ const toolsSchema = z
         filesystem: z.enum(['none', 'repo-readonly', 'repo-readwrite', 'full']),
       })
       .strict(),
+    guards: toolsGuardsSchema.optional(),
   })
   .strict();
 

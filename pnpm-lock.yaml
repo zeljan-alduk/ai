@@ -284,6 +284,22 @@ importers:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@22.19.17)
 
+  platform/guards:
+    dependencies:
+      '@aldo-ai/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)
+
   platform/observability:
     dependencies:
       '@aldo-ai/types':
@@ -352,6 +368,50 @@ importers:
         specifier: workspace:*
         version: link:../types
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)
+
+  platform/sandbox:
+    dependencies:
+      '@aldo-ai/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)
+
+  platform/secrets:
+    dependencies:
+      '@aldo-ai/api-contract':
+        specifier: workspace:*
+        version: link:../api-contract
+      '@aldo-ai/storage':
+        specifier: workspace:*
+        version: link:../storage
+      tweetnacl:
+        specifier: ~1.0.3
+        version: 1.0.3
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ~0.4.4
+        version: 0.4.4
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17
@@ -2151,6 +2211,9 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  tweetnacl@1.0.3:
+    resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
+
   type-is@2.0.1:
     resolution: {integrity: sha512-OZs6gsjF4vMp32qrCbiVSkrFmXtG/AZhY3t0iAMrMBiAZyV9oALtXO8hsrHbMXF9x6L3grlFuwW2oAz7cav+Gw==}
     engines: {node: '>= 0.6'}
@@ -3738,6 +3801,8 @@ snapshots:
       get-tsconfig: 4.14.0
     optionalDependencies:
       fsevents: 2.3.3
+
+  tweetnacl@1.0.3: {}
 
   type-is@2.0.1:
     dependencies:
