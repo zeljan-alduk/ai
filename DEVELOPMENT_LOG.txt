@@ -963,3 +963,28 @@ the same time the package lands. The Dockerfile-COPY-list lesson
 generalizes: every wave that touches operational surface (deps, env,
 migrations) must update apps/api/Dockerfile + .github/workflows/
 deploy-api.yml in the same commit as the package itself.
+
+[2026-04-25 15:16 UTC] orchestrator — wave 7 follow-up: rowCount fix (recovery #8)
+Smoke DELETE bug from the wave-7 LIVE entry: traced to the Neon
+adapter (platform/storage/src/pool.ts) calling sql.query with
+`fullResults: false`, which makes @neondatabase/serverless return
+only the rows array. For DELETE/UPDATE without RETURNING the array
+is empty, and the adapter's `rowCount: rows.length` was always 0.
+PostgresSecretStore.delete saw "no row affected" and the API surfaced
+404 on every successful DELETE.
+
+Switched the Neon path to `fullResults: true` and read the real
+`rowCount` from the pg-style envelope. Kept `rows.length` as a fallback
+in case a future Neon version omits the field on certain commands.
+This also unblocks any future caller that branches on `rowCount` for
+mutation queries (audit-replay logic in the registry, eval promotion
+gates, etc.).
+
+While in there: fixed the `recentAudit` flake (pglite `now()` is
+ms-granular and back-to-back recordAudit calls collided on
+`ORDER BY at DESC` with no tiebreak). Pass `at` explicitly with 1s
+spacing in the test — production query unchanged. Suite ran clean 3x
+in a row before commit.
+
+Deployed via run 24933945400. Re-smoked: POST 200, DELETE 204, second
+DELETE 404, final GET empty list. Recovery #8 closed.
