@@ -1888,3 +1888,43 @@ DEFAULT_TENANT/'tenant-default' from: apps/api/src/deps.ts,
 apps/api/src/routes/secrets.ts, apps/api/src/routes/runs.ts,
 apps/api/src/routes/agents.ts (Engineer O), apps/api/tests/_setup.ts.
 Not committed — orchestrator integrates.
+
+[2026-04-25 20:25 UTC] orchestrator — wave 10 LIVE end-to-end
+Auth + multi-tenancy LIVE. Three engineers (M=backend auth, N=web
+auth pages, O=registry tenancy + seed) landed in commit 37b09a2.
+Two recoveries fired during deploy:
+
+  Recovery #9 (b683b3f) — `agency/` not bundled into the runtime
+    image. resolveAgencyDir() walks <workspace>/agency at boot, but
+    the Dockerfile sources stage didn't COPY it. seedDefault silently
+    no-op'd; /v1/tenants/me/seed-default returned {copied:0,skipped:0}
+    for every fresh tenant. Fix: one COPY line in the Dockerfile.
+    Same lesson family as wave-6.5 (gateway/fixtures), wave-7
+    (secrets package), and wave-8 (local-discovery). Internalised
+    again: "every wave that reads bundled assets at runtime must
+    update the Dockerfile in the same commit".
+
+  Recovery #10 (9f18d02) — argon2 OOM on POST /v1/auth/signup. The
+    256MB shared-cpu-1x machine cold-booted; Node's resident set
+    plus argon2's default 64MB memory_cost pushed it over. Login
+    survived because the machine was warm and argon2.verify is the
+    same memory profile but the process was already past peak. Fix:
+    fly.toml [[vm]] memory bump 256mb -> 512mb.
+
+End-to-end smoke verified post-recovery:
+  - POST /v1/auth/signup -> 201 with JWT, tenant + memberships
+  - GET /v1/auth/me -> 200, returns the tenant scoped from the token
+  - GET /v1/agents (no token) -> 401 unauthenticated
+  - GET /v1/agents (fresh tenant, with token) -> 0
+  - POST /v1/tenants/me/seed-default -> 200 {copied:26,skipped:0}
+  - GET /v1/agents -> 200 with all 26 agency specs
+
+Wave totals: 16 backend packages, 673 unit tests (+90 from wave 9).
+Auth gates every CRUD path. The default tenant is seeded from
+agency/ at boot. New users can copy the seed into their own tenant
+on first login (Engineer N's /welcome page calls this).
+
+This closes the MVP-foundational layer. Next: wave 11 commerce
+(landing + pricing + Stripe + design-partner program). Brief is
+ready; awaiting user sign-off on Stripe keys, pricing, and brand
+copy before spawning.
