@@ -39,6 +39,11 @@ COPY platform/types ./platform/types
 COPY platform/api-contract ./platform/api-contract
 COPY platform/registry ./platform/registry
 COPY platform/storage ./platform/storage
+# The /v1/models route reads platform/gateway/fixtures/models.yaml at
+# a path resolved relative to apps/api/src/routes/models.ts. Bundle the
+# fixtures (and the rest of the gateway package, harmless and small)
+# into the image so /v1/models returns the registry instead of [].
+COPY platform/gateway ./platform/gateway
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 
