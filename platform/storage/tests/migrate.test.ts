@@ -43,7 +43,7 @@ describe('migrate()', () => {
     expect(second).toHaveLength(0);
 
     const applied = await listApplied(client);
-    expect(applied).toHaveLength(1);
+    expect(applied.length).toBeGreaterThanOrEqual(1);
     expect(applied[0]?.version).toBe('001');
 
     await client.close();
@@ -51,13 +51,13 @@ describe('migrate()', () => {
 
   it('is safe to call against an already-migrated db without crashing', async () => {
     const client = await fromDatabaseUrl({ driver: 'pglite' });
-    await migrate(client);
+    const initial = await migrate(client);
     // Drop the bookkeeping table only — the schema tables remain. The
-    // migration runner should re-apply 001 because `IF NOT EXISTS`
-    // makes that safe.
+    // migration runner should re-apply every shipped migration because
+    // each one is `IF NOT EXISTS`-guarded.
     await client.exec('DROP TABLE _meridian_migrations');
     const second = await migrate(client);
-    expect(second).toHaveLength(1);
+    expect(second).toHaveLength(initial.length);
     await client.close();
   });
 });

@@ -14,6 +14,11 @@
 
 import { AgentRegistry, PostgresStorage } from '@aldo-ai/registry';
 import { type SqlClient, fromDatabaseUrl } from '@aldo-ai/storage';
+import {
+  type EngineDebugger,
+  type InProcessEngineDebugger,
+  createInProcessEngineDebugger,
+} from './routes/debugger.js';
 
 export interface Env {
   /** Postgres URL. Empty / unset / `pglite:` / `memory://` -> in-process pglite. */
@@ -33,6 +38,19 @@ export interface Deps {
   readonly registry: AgentRegistry;
   readonly env: Env;
   readonly version: string;
+  /**
+   * Default in-process debugger surface. Always present so the debugger
+   * routes can boot without an explicit injection. Tests reach in via
+   * `engineDebugger` to swap a stub in.
+   */
+  readonly __defaultDebugger: InProcessEngineDebugger;
+  /**
+   * Optional override of the engine debugger (used by tests to inject a
+   * mock that captures calls). When undefined, `__defaultDebugger` is
+   * used. Once `@aldo-ai/engine` exports the real `EngineDebugger`,
+   * `index.ts` builds one and assigns it here.
+   */
+  readonly engineDebugger?: EngineDebugger;
   /** Release the underlying SQL client. */
   close(): Promise<void>;
 }
@@ -42,6 +60,8 @@ export interface CreateDepsOptions {
   readonly db?: SqlClient;
   /** Inject an already-built registry (tests can stub). */
   readonly registry?: AgentRegistry;
+  /** Inject a custom engine debugger (tests use this to capture calls). */
+  readonly engineDebugger?: EngineDebugger;
 }
 
 export async function createDeps(
@@ -52,14 +72,18 @@ export async function createDeps(
   const registry =
     opts.registry ?? new AgentRegistry({ storage: new PostgresStorage({ client: db }) });
   const version = env.API_VERSION ?? '0.0.0';
-  return {
+  const __defaultDebugger = createInProcessEngineDebugger();
+  const deps: Deps = {
     db,
     registry,
     env,
     version,
+    __defaultDebugger,
+    ...(opts.engineDebugger !== undefined ? { engineDebugger: opts.engineDebugger } : {}),
     async close() {
       // If the caller supplied the db, they own its lifecycle.
       if (opts.db === undefined) await db.close();
     },
   };
+  return deps;
 }

@@ -22,6 +22,10 @@ import type {
   Tracer,
 } from '@aldo-ai/types';
 import type { Checkpoint, Checkpointer } from './checkpointer/index.js';
+import type { Breakpoint, BreakpointKind, BreakpointStore } from './debugger/breakpoint-store.js';
+import { rewriteCheckpoint } from './debugger/edit-and-resume.js';
+import type { PauseController } from './debugger/pause-controller.js';
+import type { RunStore } from './stores/postgres-run-store.js';
 
 /**
  * Internal runtime hooks that the AgentRun needs from the Runtime.
@@ -35,6 +39,12 @@ export interface AgentRunDeps {
   readonly checkpointer: Checkpointer;
   /** Called when a child AgentRun is created via resume(). */
   readonly track: (run: InternalAgentRun) => void;
+  /** Optional breakpoint store; absent → no breakpoints can ever fire. */
+  readonly breakpoints?: BreakpointStore;
+  /** Optional pause controller; required when `breakpoints` is supplied. */
+  readonly pauseController?: PauseController;
+  /** Optional run-event persistence; absent → events stay in-memory only. */
+  readonly runStore?: RunStore;
 }
 
 export interface AgentRunOptions {
@@ -63,6 +73,16 @@ export interface InternalAgentRun extends AgentRun {
   /** Synchronous snapshot of parent, for tree queries. */
   readonly parent?: RunId;
   readonly ref: AgentRef;
+  /**
+   * Edit the text of a message in `checkpointId` (0-based `messageIndex`)
+   * and resume from the rewritten checkpoint. Returns the new AgentRun.
+   */
+  editAndResume(args: {
+    readonly checkpointId: CheckpointId;
+    readonly messageIndex: number;
+    readonly newText: string;
+    readonly overrides?: RunOverrides;
+  }): Promise<AgentRun>;
 }
 
 interface QueuedMessage {
@@ -132,10 +152,40 @@ export class LeafAgentRun implements InternalAgentRun {
     });
     this.doneDeferred = { promise, resolve, reject };
 
+    // Persist the run row before any events land so referential reads work.
+    if (this.deps.runStore) {
+      void this.deps.runStore.recordRunStart({
+        runId: this.id,
+        tenant: this.tenant,
+        ref: this.ref,
+        ...(this.parent !== undefined ? { parent: this.parent } : {}),
+      });
+    }
+
     this.emit({ type: 'run.started', at: now(), payload: { ref: this.ref, id: this.id } });
 
     // Kick off the first turn in the background.
     void this.runLoop();
+  }
+
+  // ───────────────────────────────────────────────── debugger hooks
+
+  /**
+   * Edit a message in a checkpoint of this run and resume from the
+   * rewritten copy. Returns the new `AgentRun` produced by `resume`.
+   *
+   * The original checkpoint row is preserved — a fresh one is written
+   * with the rewritten message history. Audit + replay can still walk
+   * the original.
+   */
+  async editAndResume(args: {
+    readonly checkpointId: CheckpointId;
+    readonly messageIndex: number;
+    readonly newText: string;
+    readonly overrides?: RunOverrides;
+  }): Promise<AgentRun> {
+    const { newCheckpointId } = await rewriteCheckpoint(this.deps.checkpointer, args);
+    return this.resume(newCheckpointId, args.overrides);
   }
 
   // ───────────────────────────────────────────────── public API
@@ -229,7 +279,11 @@ export class LeafAgentRun implements InternalAgentRun {
       // Each pass is one "agent turn": one completion call, optional tool dispatch.
       while (!this.cancelled) {
         const beforeCp = await this.checkpoint();
-        void beforeCp; // we already emitted an event via checkpoint()
+        // Pre-model-call breakpoint check. The matching surface is the
+        // agent name — this is what authors typically want to break on
+        // (`before_model_call: my-agent`). Step mode also lands here.
+        await this.maybePauseAt('before_model_call', this.ref.name, 'model_call', beforeCp);
+        if (this.cancelled) return;
 
         const tools = buildToolSchemas(this.spec);
         const req: CompletionRequest = {
@@ -319,6 +373,13 @@ export class LeafAgentRun implements InternalAgentRun {
             if (replayed !== undefined) {
               result = replayed;
             } else {
+              // Pre-tool-call breakpoint check. Surface is the tool name as
+              // emitted by the model — we keep it un-resolved so authors can
+              // break on either the namespaced (`server.tool`) form or the
+              // bare tool name they declared in their spec.
+              const tcCp = await this.checkpoint();
+              await this.maybePauseAt('before_tool_call', tc.tool, 'tool_call', tcCp);
+              if (this.cancelled) return;
               this.emit({ type: 'tool_call', at: now(), payload: tc });
               const ref: ToolRef = resolveToolRef(this.spec, tc.tool);
               const r = await this.deps.toolHost.invoke(ref, tc.args, ctx);
@@ -394,7 +455,95 @@ export class LeafAgentRun implements InternalAgentRun {
 
   // ───────────────────────────────────────────────── event stream plumbing
 
+  /**
+   * Look up matching breakpoints for the given surface and, if any are
+   * enabled, persist a "paused" checkpoint envelope, emit a checkpoint
+   * event tagged `paused: true`, and await the PauseController.
+   *
+   * Step mode: if the previous resume was `step`, this method also
+   * pauses (without a matching breakpoint) — the caller passes in a
+   * synthetic breakpoint reason of `step`.
+   */
+  private async maybePauseAt(
+    kind: BreakpointKind,
+    surface: string,
+    aboutTo: 'tool_call' | 'model_call' | 'after_node' | 'event',
+    checkpointId: CheckpointId,
+  ): Promise<void> {
+    const store = this.deps.breakpoints;
+    const ctrl = this.deps.pauseController;
+    if (!ctrl) return;
+
+    let firstMatch: Breakpoint | undefined;
+    let reason: string;
+    if (store) {
+      const matches = await store.findMatches(this.id, kind, surface);
+      firstMatch = matches[0];
+      if (firstMatch !== undefined) {
+        const newHits = await store.recordHit(firstMatch.id);
+        firstMatch = { ...firstMatch, hitCount: newHits };
+        reason = `breakpoint:${firstMatch.id}`;
+      } else if (ctrl.shouldStepPause(this.id)) {
+        reason = 'step';
+      } else {
+        return;
+      }
+    } else if (ctrl.shouldStepPause(this.id)) {
+      reason = 'step';
+    } else {
+      return;
+    }
+
+    // Engine emits a `checkpoint` event — the existing RunEvent.type union
+    // doesn't include `paused`, so we tag the payload with `paused: true`
+    // and let the API layer translate to a `DebugRunEvent` of kind
+    // `paused`. This keeps `@aldo-ai/types` untouched.
+    this.emit({
+      type: 'checkpoint',
+      at: now(),
+      payload: {
+        id: checkpointId,
+        paused: true,
+        reason,
+        kind,
+        surface,
+        aboutTo,
+        ...(firstMatch !== undefined ? { breakpointId: firstMatch.id } : {}),
+      },
+    });
+
+    const ev = {
+      runId: this.id,
+      checkpointId,
+      reason,
+      breakpoint: firstMatch ?? {
+        id: 'step',
+        runId: this.id,
+        kind,
+        match: surface,
+        enabled: true,
+        hitCount: 0,
+      },
+      aboutTo,
+      at: now(),
+    } as const;
+    await ctrl.pause(ev);
+  }
+
   private emit(e: RunEvent): void {
+    if (this.deps.runStore) {
+      // Fire-and-forget — the runStore is a "side audit log", not
+      // load-bearing for the loop. Errors are surfaced as engine-side
+      // unhandled rejections, which the test harness asserts on.
+      void this.deps.runStore.appendEvent(this.id, e);
+      if (e.type === 'run.completed') {
+        void this.deps.runStore.recordRunEnd({ runId: this.id, status: 'completed' });
+      } else if (e.type === 'run.cancelled') {
+        void this.deps.runStore.recordRunEnd({ runId: this.id, status: 'cancelled' });
+      } else if (e.type === 'error') {
+        void this.deps.runStore.recordRunEnd({ runId: this.id, status: 'failed' });
+      }
+    }
     if (this.eventWaiters.length > 0) {
       const waiter = this.eventWaiters.shift();
       waiter?.(e);

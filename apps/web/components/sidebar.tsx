@@ -10,8 +10,15 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
   { href: '/docs', label: 'Docs', match: (p) => p.startsWith('/docs') },
 ];
 
+/** Match `/runs/<id>` and any sub-route (e.g. `/runs/<id>/debug`). */
+const RUN_DETAIL_RE = /^\/runs\/([^/]+)(?:\/.*)?$/;
+
 export function Sidebar() {
   const pathname = usePathname() ?? '/';
+  const runMatch = RUN_DETAIL_RE.exec(pathname);
+  const runId = runMatch?.[1] ? decodeURIComponent(runMatch[1]) : null;
+  const onDebug = runId ? pathname === `/runs/${encodeURIComponent(runId)}/debug` : false;
+
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
       <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-200">
@@ -36,6 +43,31 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {runId ? (
+          <div className="mt-1 ml-2 flex flex-col gap-0.5 border-l border-slate-200 pl-2">
+            <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-slate-400">
+              Run {runId.slice(0, 8)}
+            </div>
+            <Link
+              href={`/runs/${encodeURIComponent(runId)}`}
+              className={`rounded px-3 py-1.5 text-xs transition-colors ${
+                pathname === `/runs/${encodeURIComponent(runId)}`
+                  ? 'bg-slate-200 text-slate-900'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Detail
+            </Link>
+            <Link
+              href={`/runs/${encodeURIComponent(runId)}/debug`}
+              className={`rounded px-3 py-1.5 text-xs transition-colors ${
+                onDebug ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Debug
+            </Link>
+          </div>
+        ) : null}
       </nav>
       <div className="mt-auto border-t border-slate-200 p-4 text-[11px] leading-relaxed text-slate-500">
         v0 control plane. Read-only.

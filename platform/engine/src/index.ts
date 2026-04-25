@@ -33,6 +33,33 @@ export {
 } from './stores/policy-engine.js';
 export type { PolicyRule } from './stores/policy-engine.js';
 
+export {
+  InMemoryRunStore,
+  PostgresRunStore,
+  type PostgresRunStoreOptions,
+  type RunEndArgs,
+  type RunStartArgs,
+  type RunStore,
+  type StoredRunEvent,
+} from './stores/postgres-run-store.js';
+
+export {
+  type Breakpoint,
+  type BreakpointKind,
+  type BreakpointStore,
+  type ContinueMode,
+  type CreateBreakpointInput,
+  type EditAndResumeArgs,
+  editAndResume,
+  InMemoryBreakpointStore,
+  PauseController,
+  type PauseEvent,
+  PostgresBreakpointStore,
+  type PostgresBreakpointStoreOptions,
+  type ResumeEvent,
+  rewriteCheckpoint,
+} from './debugger/index.js';
+
 export { NoopTracer } from './tracer/noop.js';
 
 // Re-export node runners for direct use by tests/advanced callers.

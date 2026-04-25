@@ -1,0 +1,162 @@
+import { randomUUID } from 'node:crypto';
+import type { SqlClient } from '@aldo-ai/storage';
+import type { AgentRef, RunEvent, RunId, TenantId } from '@aldo-ai/types';
+
+/**
+ * Optional persistence layer for runs + run events + checkpoints.
+ *
+ * The engine keeps an in-memory event stream by default — every
+ * `LeafAgentRun` already buffers events internally. When a `RunStore`
+ * is supplied to the `PlatformRuntime`, every emitted event is also
+ * written through to Postgres so the API layer (`apps/api`) and the
+ * replay debugger can read the trace from a database after the engine
+ * process has exited.
+ *
+ * The schema lives in `@aldo-ai/storage` (tables `runs`, `run_events`,
+ * `checkpoints` from migration `001_init.sql`). Checkpoint persistence
+ * is handled by the `PostgresCheckpointer`; this store owns the row in
+ * `runs` and one row per emitted event in `run_events`.
+ */
+export interface RunStartArgs {
+  readonly runId: RunId;
+  readonly tenant: TenantId;
+  readonly ref: AgentRef;
+  readonly parent?: RunId;
+}
+
+export interface RunEndArgs {
+  readonly runId: RunId;
+  /** One of: 'completed' | 'failed' | 'cancelled' (free-form for forward compat). */
+  readonly status: string;
+}
+
+export interface RunStore {
+  /** Insert a row into `runs` (idempotent: existing rows are left alone). */
+  recordRunStart(args: RunStartArgs): Promise<void>;
+  /** Update the run's `ended_at` + `status`. */
+  recordRunEnd(args: RunEndArgs): Promise<void>;
+  /** Append an event to `run_events`. Cheap; called per emission. */
+  appendEvent(runId: RunId, event: RunEvent): Promise<void>;
+  /** List events for a run, oldest first. Used by the API and tests. */
+  listEvents(runId: RunId): Promise<readonly StoredRunEvent[]>;
+}
+
+export interface StoredRunEvent {
+  readonly id: string;
+  readonly runId: RunId;
+  readonly type: string;
+  readonly payload: unknown;
+  readonly at: string;
+}
+
+interface RunEventRow {
+  readonly id: string;
+  readonly run_id: string;
+  readonly type: string;
+  readonly payload_jsonb: unknown;
+  readonly at: string | Date;
+  readonly [k: string]: unknown;
+}
+
+/**
+ * In-memory `RunStore` — useful for tests that want the same surface as
+ * Postgres without standing up pglite. Default behaviour of the engine
+ * is to skip the store entirely (events stay in the per-run buffer);
+ * use this when a test wants to assert against the persisted shape.
+ */
+export class InMemoryRunStore implements RunStore {
+  private readonly runs = new Map<RunId, RunStartArgs & { status: string; endedAt?: string }>();
+  private readonly events = new Map<RunId, StoredRunEvent[]>();
+
+  async recordRunStart(args: RunStartArgs): Promise<void> {
+    if (this.runs.has(args.runId)) return;
+    this.runs.set(args.runId, { ...args, status: 'running' });
+  }
+
+  async recordRunEnd(args: RunEndArgs): Promise<void> {
+    const r = this.runs.get(args.runId);
+    if (!r) return;
+    this.runs.set(args.runId, { ...r, status: args.status, endedAt: new Date().toISOString() });
+  }
+
+  async appendEvent(runId: RunId, event: RunEvent): Promise<void> {
+    const list = this.events.get(runId) ?? [];
+    list.push({
+      id: randomUUID(),
+      runId,
+      type: event.type,
+      payload: event.payload,
+      at: event.at,
+    });
+    this.events.set(runId, list);
+  }
+
+  async listEvents(runId: RunId): Promise<readonly StoredRunEvent[]> {
+    return this.events.get(runId) ?? [];
+  }
+}
+
+export interface PostgresRunStoreOptions {
+  readonly client: SqlClient;
+}
+
+/**
+ * Postgres-backed `RunStore`. Writes through to `runs` + `run_events`.
+ * `checkpoints` is intentionally not touched here — the
+ * `PostgresCheckpointer` owns that table and is wired separately.
+ */
+export class PostgresRunStore implements RunStore {
+  private readonly client: SqlClient;
+
+  constructor(opts: PostgresRunStoreOptions) {
+    this.client = opts.client;
+  }
+
+  async recordRunStart(args: RunStartArgs): Promise<void> {
+    // ON CONFLICT keeps `recordRunStart` safely idempotent — the engine
+    // calls it every time a run spawns, including resumes that share a
+    // parent run id.
+    await this.client.query(
+      `INSERT INTO runs
+         (id, tenant_id, agent_name, agent_version, parent_run_id, status)
+       VALUES ($1, $2, $3, $4, $5, 'running')
+       ON CONFLICT (id) DO NOTHING`,
+      [args.runId, args.tenant, args.ref.name, args.ref.version ?? '0.0.0', args.parent ?? null],
+    );
+  }
+
+  async recordRunEnd(args: RunEndArgs): Promise<void> {
+    await this.client.query('UPDATE runs SET ended_at = now(), status = $2 WHERE id = $1', [
+      args.runId,
+      args.status,
+    ]);
+  }
+
+  async appendEvent(runId: RunId, event: RunEvent): Promise<void> {
+    const id = randomUUID();
+    // The `at` column has a server-side default; we still pass the engine's
+    // ISO timestamp so ordering matches the in-memory event stream exactly.
+    await this.client.query(
+      `INSERT INTO run_events (id, run_id, type, payload_jsonb, at)
+       VALUES ($1, $2, $3, $4::jsonb, $5)`,
+      [id, runId, event.type, JSON.stringify(event.payload ?? null), event.at],
+    );
+  }
+
+  async listEvents(runId: RunId): Promise<readonly StoredRunEvent[]> {
+    const r = await this.client.query<RunEventRow>(
+      `SELECT id, run_id, type, payload_jsonb, at
+         FROM run_events WHERE run_id = $1
+        ORDER BY at ASC, id ASC`,
+      [runId],
+    );
+    return r.rows.map((row) => ({
+      id: row.id,
+      runId: row.run_id as RunId,
+      type: row.type,
+      payload:
+        typeof row.payload_jsonb === 'string' ? JSON.parse(row.payload_jsonb) : row.payload_jsonb,
+      at: row.at instanceof Date ? row.at.toISOString() : String(row.at),
+    }));
+  }
+}

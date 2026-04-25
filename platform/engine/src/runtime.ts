@@ -12,6 +12,9 @@ import type {
 } from '@aldo-ai/types';
 import { type InternalAgentRun, LeafAgentRun } from './agent-run.js';
 import { type Checkpointer, InMemoryCheckpointer } from './checkpointer/index.js';
+import type { BreakpointStore } from './debugger/breakpoint-store.js';
+import type { PauseController } from './debugger/pause-controller.js';
+import type { RunStore } from './stores/postgres-run-store.js';
 
 export interface RuntimeDeps {
   readonly modelGateway: ModelGateway;
@@ -20,6 +23,17 @@ export interface RuntimeDeps {
   readonly tracer: Tracer;
   readonly tenant: TenantId;
   readonly checkpointer?: Checkpointer;
+  /**
+   * Optional debugger primitives. When supplied, the engine consults
+   * `breakpoints` before every model call + tool dispatch and parks the
+   * loop on `pauseController` if a match fires. Both must be supplied
+   * together (a breakpoint store with no controller would never be
+   * able to release a paused run).
+   */
+  readonly breakpoints?: BreakpointStore;
+  readonly pauseController?: PauseController;
+  /** Optional persistence for runs + run events. Defaults to in-memory only. */
+  readonly runStore?: RunStore;
 }
 
 /**
@@ -34,6 +48,9 @@ export class PlatformRuntime implements Runtime {
   private readonly tracer: Tracer;
   private readonly tenant: TenantId;
   private readonly checkpointer: Checkpointer;
+  private readonly breakpoints: BreakpointStore | undefined;
+  private readonly pauseController: PauseController | undefined;
+  private readonly runStore: RunStore | undefined;
 
   constructor(deps: RuntimeDeps) {
     this.modelGateway = deps.modelGateway;
@@ -42,6 +59,24 @@ export class PlatformRuntime implements Runtime {
     this.tracer = deps.tracer;
     this.tenant = deps.tenant;
     this.checkpointer = deps.checkpointer ?? new InMemoryCheckpointer();
+    this.breakpoints = deps.breakpoints;
+    this.pauseController = deps.pauseController;
+    this.runStore = deps.runStore;
+  }
+
+  /** Read-only access for tests + tools that need to observe live pauses. */
+  getPauseController(): PauseController | undefined {
+    return this.pauseController;
+  }
+
+  /** Read-only access for tests + the API layer. */
+  getBreakpointStore(): BreakpointStore | undefined {
+    return this.breakpoints;
+  }
+
+  /** Read-only access for tests + the API layer. */
+  getRunStore(): RunStore | undefined {
+    return this.runStore;
   }
 
   async spawn(ref: AgentRef, inputs: unknown, parent?: RunId): Promise<AgentRun> {
@@ -72,6 +107,9 @@ export class PlatformRuntime implements Runtime {
         tracer: this.tracer,
         checkpointer: this.checkpointer,
         track: (r) => this.runs.set(r.id, r),
+        ...(this.breakpoints !== undefined ? { breakpoints: this.breakpoints } : {}),
+        ...(this.pauseController !== undefined ? { pauseController: this.pauseController } : {}),
+        ...(this.runStore !== undefined ? { runStore: this.runStore } : {}),
       },
     );
     this.runs.set(id, run);
