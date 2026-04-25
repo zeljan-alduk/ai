@@ -161,11 +161,16 @@ async function createNeonClient(url: string, prebuilt: unknown): Promise<SqlClie
       // tagged-template form and exposes the positional-parameter call as
       // `sql.query(text, params, opts)`. The older `sql(text, params, opts)`
       // signature was removed.
-      const rows = (await sql.query(text, params as unknown[], {
+      //
+      // `fullResults: true` returns a pg-style envelope { rows, rowCount,
+      // command, ... }. We need the envelope so DELETE/UPDATE without a
+      // RETURNING clause report a real `rowCount` instead of zero
+      // (rows.length is 0 when nothing is selected back).
+      const res = (await sql.query(text, params as unknown[], {
         arrayMode: false,
-        fullResults: false,
-      })) as readonly R[];
-      return { rows, rowCount: rows.length };
+        fullResults: true,
+      })) as { rows: readonly R[]; rowCount?: number | null };
+      return { rows: res.rows, rowCount: res.rowCount ?? res.rows.length };
     },
     async exec(text: string) {
       // Neon HTTP doesn't support multi-statement, so split on bare semicolons.

@@ -107,17 +107,22 @@ for (const [label, build] of flavors) {
 
     it('audit rows round-trip through recentAudit', async () => {
       await h.store.set('tenant-A', 'AUDITED', 'top-secret-9999');
+      // Pass `at` explicitly so the ORDER BY at DESC tiebreak is
+      // deterministic — pglite's `now()` resolves at ms granularity
+      // and back-to-back writes can land on the same timestamp.
       await h.store.recordAudit({
         tenantId: 'tenant-A',
         secretName: 'AUDITED',
         caller: 'reviewer',
         runId: 'run-1',
+        at: '2026-04-25T12:00:00.000Z',
       });
       await h.store.recordAudit({
         tenantId: 'tenant-A',
         secretName: 'AUDITED',
         caller: 'reviewer',
         runId: 'run-2',
+        at: '2026-04-25T12:00:01.000Z',
       });
       const rows = (await h.store.recentAudit?.('tenant-A', 'AUDITED', 10)) ?? [];
       expect(rows.length).toBeGreaterThanOrEqual(2);
