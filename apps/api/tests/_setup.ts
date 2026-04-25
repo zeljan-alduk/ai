@@ -11,10 +11,10 @@
  * here too so the test files stay focused on assertions.
  */
 
-import { fromDatabaseUrl, migrate, type SqlClient } from '@aldo-ai/storage';
 import { AgentRegistry, PostgresStorage } from '@aldo-ai/registry';
+import { type SqlClient, fromDatabaseUrl, migrate } from '@aldo-ai/storage';
 import { buildApp } from '../src/app.js';
-import { createDeps, type Deps, type Env } from '../src/deps.js';
+import { type Deps, type Env, createDeps } from '../src/deps.js';
 
 export interface TestEnv {
   readonly deps: Deps;

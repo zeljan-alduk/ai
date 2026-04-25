@@ -12,8 +12,8 @@
  * never read environment outside the harness.
  */
 
-import { fromDatabaseUrl, type SqlClient } from '@aldo-ai/storage';
 import { AgentRegistry, PostgresStorage } from '@aldo-ai/registry';
+import { type SqlClient, fromDatabaseUrl } from '@aldo-ai/storage';
 
 export interface Env {
   /** Postgres URL. Empty / unset / `pglite:` / `memory://` -> in-process pglite. */
@@ -44,9 +44,13 @@ export interface CreateDepsOptions {
   readonly registry?: AgentRegistry;
 }
 
-export async function createDeps(env: Env = process.env, opts: CreateDepsOptions = {}): Promise<Deps> {
+export async function createDeps(
+  env: Env = process.env,
+  opts: CreateDepsOptions = {},
+): Promise<Deps> {
   const db = opts.db ?? (await fromDatabaseUrl({ url: env.DATABASE_URL ?? '' }));
-  const registry = opts.registry ?? new AgentRegistry({ storage: new PostgresStorage({ client: db }) });
+  const registry =
+    opts.registry ?? new AgentRegistry({ storage: new PostgresStorage({ client: db }) });
   const version = env.API_VERSION ?? '0.0.0';
   return {
     db,

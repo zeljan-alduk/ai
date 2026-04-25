@@ -1,6 +1,6 @@
-import { ListAgentsResponse, GetAgentResponse, ApiError } from '@aldo-ai/api-contract';
+import { ApiError, GetAgentResponse, ListAgentsResponse } from '@aldo-ai/api-contract';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedAgent, setupTestEnv, type TestEnv } from './_setup.js';
+import { type TestEnv, seedAgent, setupTestEnv } from './_setup.js';
 
 let env: TestEnv;
 

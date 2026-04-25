@@ -1,6 +1,6 @@
-import { ListRunsResponse, GetRunResponse, ApiError } from '@aldo-ai/api-contract';
+import { ApiError, GetRunResponse, ListRunsResponse } from '@aldo-ai/api-contract';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedRun, setupTestEnv, type TestEnv } from './_setup.js';
+import { type TestEnv, seedRun, setupTestEnv } from './_setup.js';
 
 let env: TestEnv;
 
@@ -74,7 +74,9 @@ describe('GET /v1/runs', () => {
     expect(p1.runs[0]?.durationMs).toBe(30_000);
 
     // Page 2: pass the cursor — should yield the remaining 2 rows.
-    const r2 = await env.app.request(`/v1/runs?limit=3&cursor=${encodeURIComponent(p1.meta.nextCursor ?? '')}`);
+    const r2 = await env.app.request(
+      `/v1/runs?limit=3&cursor=${encodeURIComponent(p1.meta.nextCursor ?? '')}`,
+    );
     expect(r2.status).toBe(200);
     const p2 = ListRunsResponse.parse(await r2.json());
     expect(p2.runs.map((r) => r.id)).toEqual(['run-1', 'run-0']);

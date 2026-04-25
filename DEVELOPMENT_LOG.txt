@@ -343,3 +343,22 @@ in apps/web — provider strings are opaque. Typecheck + biome lint clean
 across 24 files. Boots via `pnpm --filter @aldo-ai/web dev` against
 NEXT_PUBLIC_API_BASE (default http://localhost:3001); apps/api will
 need CORS for http://localhost:3000 and routes under /v1.
+
+[2026-04-25 06:30 UTC] backend-engineer@aldo-tech-labs — wave 4 apps/api: Hono control-plane scaffolded
+Built apps/api on top of @aldo-ai/api-contract Zod schemas + @aldo-ai/storage
+SqlClient. Six routes: GET /health, GET /v1/runs (cursor paged), GET
+/v1/runs/:id, GET /v1/agents (cursor paged + team/owner filter), GET
+/v1/agents/:name (versions[] + opaque spec), GET /v1/models (reads
+platform/gateway/fixtures/models.yaml; stamps `available` from env vars
+through a single provider->env mapping — no provider SDKs, no provider
+constants on hot paths). Cursors are opaque base64url JSON of (at, id);
+totalUsd / lastProvider / lastModel computed in SQL via a LEFT JOIN +
+correlated subquery so list pages stay O(page-size). Central error
+handler emits the typed ApiError envelope and turns ZodError into 400
+validation_error with issues in details. CORS allows http://localhost:3000
+plus CORS_ORIGINS extras. Tests (16) drive the Hono app via app.request()
+backed by pglite — no port, no real network. createDeps() is the single
+spot env is read; tests inject db + registry. pnpm typecheck + tests
+green; biome clean for apps/api. Boots via `pnpm --filter @aldo-ai/api dev`
+on PORT 3001 (HOST 0.0.0.0) after applying @aldo-ai/storage migrations.
+Touched only apps/api/.

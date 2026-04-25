@@ -11,7 +11,6 @@
  * regardless of usage volume.
  */
 
-import type { SqlClient } from '@aldo-ai/storage';
 import type {
   AgentSummary,
   RunDetail,
@@ -19,6 +18,7 @@ import type {
   RunSummary,
   UsageRow,
 } from '@aldo-ai/api-contract';
+import type { SqlClient } from '@aldo-ai/storage';
 
 // --- cursor helpers --------------------------------------------------------
 
@@ -79,6 +79,7 @@ interface RunListRow {
   readonly total_usd: string | number | null;
   readonly last_provider: string | null;
   readonly last_model: string | null;
+  readonly [k: string]: unknown;
 }
 
 export interface ListRunsOptions {
@@ -182,13 +183,14 @@ function rowToRunSummary(r: RunListRow): RunSummary {
   };
 }
 
-interface RunDetailRow extends RunListRow {}
+type RunDetailRow = RunListRow;
 
 interface RunEventRow {
   readonly id: string;
   readonly type: string;
   readonly payload_jsonb: unknown;
   readonly at: string | Date;
+  readonly [k: string]: unknown;
 }
 
 interface UsageRecordRow {
@@ -198,6 +200,7 @@ interface UsageRecordRow {
   readonly tokens_out: number | string;
   readonly usd: number | string;
   readonly at: string | Date;
+  readonly [k: string]: unknown;
 }
 
 /** Fetch a run by id, including its full event timeline + usage records. */
@@ -272,6 +275,7 @@ interface AgentListRow {
   readonly promoted: boolean;
   readonly created_at: string | Date;
   readonly spec_json: unknown;
+  readonly [k: string]: unknown;
 }
 
 export interface ListAgentsOptions {
@@ -369,7 +373,7 @@ function rowToAgentSummary(r: AgentListRow): AgentSummary {
     description: stringField(spec, ['identity', 'description']) ?? '',
     privacyTier: privacyTierField(spec),
     team: stringField(spec, ['role', 'team']) ?? '',
-    tags: stringArrayField(spec, ['identity', 'tags']),
+    tags: [...stringArrayField(spec, ['identity', 'tags'])],
   };
 }
 
@@ -378,6 +382,7 @@ interface AgentVersionRow {
   readonly promoted: boolean;
   readonly created_at: string | Date;
   readonly spec_json: unknown;
+  readonly [k: string]: unknown;
 }
 
 export interface AgentDetailRow {

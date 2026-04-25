@@ -7,11 +7,7 @@
  * 404 with a typed `ApiError` if no run matches.
  */
 
-import {
-  GetRunResponse,
-  ListRunsQuery,
-  ListRunsResponse,
-} from '@aldo-ai/api-contract';
+import { GetRunResponse, ListRunsQuery, ListRunsResponse } from '@aldo-ai/api-contract';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { decodeCursor, getRun, listRuns } from '../db.js';

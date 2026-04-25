@@ -7,11 +7,7 @@
  * server because the contract already declares it opaque.
  */
 
-import {
-  GetAgentResponse,
-  ListAgentsQuery,
-  ListAgentsResponse,
-} from '@aldo-ai/api-contract';
+import { GetAgentResponse, ListAgentsQuery, ListAgentsResponse } from '@aldo-ai/api-contract';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { decodeCursor, getAgent, listAgents } from '../db.js';

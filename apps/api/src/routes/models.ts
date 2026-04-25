@@ -80,7 +80,9 @@ function isLocalLocality(locality: string): boolean {
 
 function defaultFixturePath(): string {
   // apps/api/src/routes/models.ts -> platform/gateway/fixtures/models.yaml
-  return fileURLToPath(new URL('../../../../platform/gateway/fixtures/models.yaml', import.meta.url));
+  return fileURLToPath(
+    new URL('../../../../platform/gateway/fixtures/models.yaml', import.meta.url),
+  );
 }
 
 export interface LoadedCatalog {

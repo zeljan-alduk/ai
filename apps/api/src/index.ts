@@ -7,8 +7,8 @@
  * file entirely so they never bind a port.
  */
 
-import { serve } from '@hono/node-server';
 import { migrate } from '@aldo-ai/storage';
+import { serve } from '@hono/node-server';
 import { buildApp } from './app.js';
 import { createDeps } from './deps.js';
 

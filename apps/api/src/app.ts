@@ -40,7 +40,9 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
 
   const extraOrigins =
     typeof deps.env.CORS_ORIGINS === 'string' && deps.env.CORS_ORIGINS.length > 0
-      ? deps.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+      ? deps.env.CORS_ORIGINS.split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
       : [];
   const allowedOrigins = ['http://localhost:3000', ...extraOrigins];
   app.use(
@@ -60,7 +62,10 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
 
   app.onError(errorHandler);
   app.notFound((c) =>
-    c.json({ error: { code: 'not_found', message: `no route: ${c.req.method} ${c.req.path}` } }, 404),
+    c.json(
+      { error: { code: 'not_found', message: `no route: ${c.req.method} ${c.req.path}` } },
+      404,
+    ),
   );
 
   return app;

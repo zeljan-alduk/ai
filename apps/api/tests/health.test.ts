@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { setupTestEnv, type TestEnv } from './_setup.js';
+import { type TestEnv, setupTestEnv } from './_setup.js';
 
 let env: TestEnv;
 
