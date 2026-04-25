@@ -28,6 +28,15 @@
     }
   },
   "files": {
-    "ignore": ["**/dist/**", "**/node_modules/**", "**/*.md", "agency/**/*.yaml"]
+    "ignore": [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/.vercel/**",
+      "**/.turbo/**",
+      "**/coverage/**",
+      "**/*.md",
+      "agency/**/*.yaml"
+    ]
   }
 }

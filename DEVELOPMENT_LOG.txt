@@ -448,3 +448,20 @@ DEPLOY_API_ENABLED=true via the variables API. Triggered the
 deploy-api workflow on the feature branch via workflow_dispatch
 (GitHub run 24925984885). Pushing one more commit so Vercel's GitHub
 integration sees a new ref and kicks off its auto-deploy.
+
+[2026-04-25 07:50 UTC] principal — CI lint recovery + harden ignores
+First Fly deploy via GitHub Actions failed because the workflow ran
+`flyctl deploy` from apps/api so the Dockerfile couldn't COPY the
+monorepo files. Fixed in 8741747 by running flyctl from repo root
+with explicit --config + --dockerfile + --app + --ignorefile flags.
+Re-dispatched (run 24926017242, still in flight).
+
+Concurrent CI run on commit 87417471 also failed: Biome formatter
+flagged apps/web/tsconfig.json (auto-format produced a non-canonical
+shape). Ran `biome format --write` locally. Also tightened
+biome.json's files.ignore to cover **/.next/**, **/.vercel/**,
+**/.turbo/**, **/coverage/** so future build artifacts can't trip
+the formatter when CI does a clean checkout. Pushing the fix; CI
+should go green on this commit, and the in-flight deploy-api run
+will either land or fail on its own — if it fails, I re-dispatch
+on the new SHA.
