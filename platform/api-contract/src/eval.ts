@@ -149,3 +149,20 @@ export const PromoteAgentResponse = z.object({
   failedSuites: z.array(z.string()),
 });
 export type PromoteAgentResponse = z.infer<typeof PromoteAgentResponse>;
+
+/** Upload a suite YAML to the server. The server parses it through the
+ *  same `EvalSuite` schema used everywhere else and persists it under
+ *  `(name, version)` in the suite store. Re-uploading the same
+ *  `(name, version)` is rejected — bump the version. */
+export const CreateSuiteRequest = z.object({
+  /** Raw suite YAML (the same shape as `eval/suites/*.yaml` on disk). */
+  yaml: z.string().min(1),
+});
+export type CreateSuiteRequest = z.infer<typeof CreateSuiteRequest>;
+
+export const CreateSuiteResponse = z.object({
+  name: z.string(),
+  version: z.string(),
+  caseCount: z.number().int().nonnegative(),
+});
+export type CreateSuiteResponse = z.infer<typeof CreateSuiteResponse>;

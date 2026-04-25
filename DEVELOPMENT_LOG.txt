@@ -756,3 +756,24 @@ the comparison matrix render at /eval/sweeps/<id> in the browser.
 Net for this session: 6 waves committed and live. Total tests 220 in
 10 packages. Two of the three wedge differentiators (replay debugger
 + eval-gated promotion) are real and clickable on the public web URL.
+
+[2026-04-25 11:50 UTC] principal — wave 6.5 launching (make wedges demoable)
+The replay debugger and eval sweep UIs are deployed but neither has
+data on production: `aldo run` doesn't persist runs to Postgres yet,
+and there's no upload endpoint for eval suites. One engineer covers
+the gap.
+
+Prep landed in this commit:
+- @aldo-ai/api-contract: CreateSuiteRequest + CreateSuiteResponse
+  schemas (POST /v1/eval/suites — yaml in, name/version/caseCount out).
+- eval/suites/code-reviewer-smoke.yaml: 3-case smoke suite (typo +
+  dangerous-eval + json-schema shape check). Drives the demo: a real
+  sweep against Groq + Ollama produces a populated matrix.
+
+Engineer A scope:
+- Wire apps/cli `aldo run <agent>` to write through PostgresRunStore
+  so /runs and /runs/[id]/debug see real content.
+- Engine emits a typed `usage` RunEvent at end of each turn so eval
+  cells get costUsd > 0 and the debugger timeline shows token spend.
+- Implement POST /v1/eval/suites in apps/api against the new contract.
+- Add `aldo eval suite create <file>` CLI command that POSTs to it.

@@ -1,0 +1,60 @@
+name: code-reviewer-smoke
+version: 0.1.0
+description: |
+  Tiny smoke suite for the code-reviewer agent. Three cases that
+  exercise the canonical "approve / request_changes / comment"
+  verdict surface plus a JSON-schema check on the structured output.
+  The point isn't coverage — it's that the eval harness, the engine,
+  the gateway, and the registry all line up end-to-end on a real
+  agent.
+agent: code-reviewer
+passThreshold: 0.66
+cases:
+  - id: trivial-typo
+    input:
+      diff: |
+        --- a/README.md
+        +++ b/README.md
+        @@ -1 +1 @@
+        -# ALDO AI is a control plain
+        +# ALDO AI is a control plane
+    expect:
+      kind: contains
+      value: approve
+    weight: 1
+    tags: [docs, low-risk]
+
+  - id: dangerous-eval
+    input:
+      diff: |
+        --- a/server.ts
+        +++ b/server.ts
+        @@ -10,3 +10,5 @@
+         export function handle(req: Request) {
+        +  const body = await req.text();
+        +  return new Response(eval(body));
+         }
+    expect:
+      kind: contains
+      value: request_changes
+    weight: 2
+    tags: [security, code]
+
+  - id: shape-of-output
+    input:
+      diff: |
+        --- a/CHANGELOG.md
+        +++ b/CHANGELOG.md
+        @@ -0,0 +1 @@
+        +## 0.1.0
+    expect:
+      kind: json_schema
+      schema:
+        type: object
+        required: [summary, findings, verdict]
+        properties:
+          summary: { type: string }
+          findings: { type: array }
+          verdict: { enum: [approve, request_changes, comment] }
+    weight: 1
+    tags: [shape]
