@@ -25,14 +25,18 @@ import {
   DESIGN_PARTNER_TEAM_SIZES,
 } from '@aldo-ai/api-contract';
 import { useState } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { EMPTY_DESIGN_PARTNER_STATE, applyForDesignPartnerAction } from './actions';
 
 const USE_CASE_MIN = 50;
 const USE_CASE_MAX = 500;
 
 export function DesignPartnerApplicationForm() {
-  const [state, formAction] = useFormState(applyForDesignPartnerAction, EMPTY_DESIGN_PARTNER_STATE);
+  const [state, formAction] = useActionState(
+    applyForDesignPartnerAction,
+    EMPTY_DESIGN_PARTNER_STATE,
+  );
 
   if (state.successId !== null) {
     return <ThankYouCard id={state.successId} />;

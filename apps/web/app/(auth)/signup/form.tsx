@@ -3,11 +3,12 @@
 import { PASSWORD_MIN_LEN } from '@aldo-ai/api-contract';
 import Link from 'next/link';
 import { useState } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { EMPTY_AUTH_STATE, signupAction } from '../actions';
 
 export function SignupForm({ next }: { next: string | null }) {
-  const [state, formAction] = useFormState(signupAction, EMPTY_AUTH_STATE);
+  const [state, formAction] = useActionState(signupAction, EMPTY_AUTH_STATE);
   const [password, setPassword] = useState('');
   const passwordTooShort = password.length > 0 && password.length < PASSWORD_MIN_LEN;
 

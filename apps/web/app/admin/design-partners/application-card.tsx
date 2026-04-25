@@ -20,7 +20,8 @@ import {
   type DesignPartnerStatus,
 } from '@aldo-ai/api-contract';
 import { useState } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { EMPTY_UPDATE_STATE, updateDesignPartnerApplicationAction } from './actions';
 
 interface Props {
@@ -31,7 +32,7 @@ interface Props {
 
 export function ApplicationCard({ application, createdRelative, reviewedRelative }: Props) {
   const [expanded, setExpanded] = useState(application.status === 'new');
-  const [state, formAction] = useFormState(
+  const [state, formAction] = useActionState(
     updateDesignPartnerApplicationAction,
     EMPTY_UPDATE_STATE,
   );

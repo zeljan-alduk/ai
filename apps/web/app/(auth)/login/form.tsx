@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { EMPTY_AUTH_STATE, loginAction } from '../actions';
 
 export function LoginForm({ next }: { next: string | null }) {
-  const [state, formAction] = useFormState(loginAction, EMPTY_AUTH_STATE);
+  const [state, formAction] = useActionState(loginAction, EMPTY_AUTH_STATE);
 
   return (
     <form action={formAction} className="flex flex-col gap-4" autoComplete="on">
