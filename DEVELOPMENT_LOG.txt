@@ -936,3 +936,30 @@ updated proactively to include platform/{sandbox,guards,secrets}
 (applying the wave 6.5 lesson before deploy, not after a 502). Five
 WIP commits during the wave; this commit is the clean wave-7 marker.
 Next: push, dispatch deploy-api, smoke-test /v1/secrets in prod.
+
+[2026-04-25 14:11 UTC] orchestrator — wave 7 LIVE in production (recovery #7)
+First deploy of wave 7 (run 24932592192) succeeded as far as Fly was
+concerned but the new image crashlooped: @aldo-ai/secrets refuses to
+boot in production without ALDO_SECRETS_MASTER_KEY (Engineer C's
+intentional guard). Recovery: generated 32-byte base64 master key,
+added it as GitHub repo secret ALDO_SECRETS_MASTER_KEY via libsodium
+sealed-box (PAT-driven), and added a `flyctl secrets set --stage` step
+to .github/workflows/deploy-api.yml so the secret rolls out atomically
+with the image. Re-dispatched (run 24932714878) — completed success.
+Smoke verified: GET /health 200; GET /v1/secrets 200 {secrets:[]}; POST
+/v1/secrets returns a SecretSummary with fingerprint + preview (raw
+value never echoed); GET shows the row; final GET after DELETE shows
+the row gone.
+
+Follow-up bug: DELETE /v1/secrets/:name returned 404 even when the row
+existed and was successfully removed. The side-effect is correct (the
+secret IS deleted) but the response code is wrong; route handler
+appears to read-then-delete in the wrong order. Not a blocker —
+logging for next wave.
+
+Wave 7 lesson: when an engineer adds a "production refuses to boot
+without ENV_VAR" guard, the deploy pipeline must learn the env var at
+the same time the package lands. The Dockerfile-COPY-list lesson
+generalizes: every wave that touches operational surface (deps, env,
+migrations) must update apps/api/Dockerfile + .github/workflows/
+deploy-api.yml in the same commit as the package itself.
