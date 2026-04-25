@@ -87,7 +87,10 @@ export const Sweep = z.object({
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   /** Aggregate per-model pass ratio. */
-  byModel: z.record(z.string(), z.object({ passed: z.number(), total: z.number(), usd: z.number() })),
+  byModel: z.record(
+    z.string(),
+    z.object({ passed: z.number(), total: z.number(), usd: z.number() }),
+  ),
   /** All per-cell results once status is `completed`. */
   cells: z.array(SweepCellResult),
 });
