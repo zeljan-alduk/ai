@@ -6,8 +6,11 @@
 #   fly secrets set ANTHROPIC_API_KEY=... GROQ_API_KEY=... GEMINI_API_KEY=...
 #   fly deploy                                  # builds the Dockerfile + ships
 #
-# Free-tier sizing: shared-cpu-1x with 256MB. Scale up with
-# `fly scale memory 512` once you start seeing OOMs.
+# Free-tier sizing: shared-cpu-1x with 256MB was the wave-4 default.
+# Wave 10 added argon2 password hashing on signup which costs ~64MB
+# per hash; 256MB cold-boots OOM'd POST /v1/auth/signup with HTTP 503
+# in production. Bumped to 512MB; revisit when traffic warrants
+# right-sizing rather than guessing.
 
 app = "aldo-ai-api"
 primary_region = "iad"
@@ -40,6 +43,6 @@ kill_timeout = "10s"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
