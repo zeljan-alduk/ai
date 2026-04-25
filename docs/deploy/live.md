@@ -1,133 +1,130 @@
 # Live deploy — current state
 
-This page tracks the actual production deployment of ALDO AI as it
-evolves. It is the source of truth for what is up, what is half-up,
-and what still needs a click.
+**ALDO AI v0.2 is live end-to-end.** Web app pulls models from the API,
+which reads from a Postgres-backed registry. All deploys are
+auto-driven from the GitHub repo (Vercel via Git integration; Fly via
+GitHub Actions).
 
-## Status snapshot (2026-04-25)
+## Live URLs (2026-04-25)
 
-| Surface | State | URL |
-|---|---|---|
-| **Neon Postgres** | live, project `aldo-ai` (id `super-wind-07291109`) | `ep-tiny-sea-aei2ge4e-pooler.c-2.us-east-2.aws.neon.tech` |
-| **Fly.io API** | app created, secrets staged, image **not yet built** | `https://aldo-ai-api.fly.dev` (will return ENOENT until first deploy) |
-| **Vercel web** | project created, `NEXT_PUBLIC_API_BASE` env set, **no successful deployment yet** | `https://aldo-ai-web.vercel.app` (when the first deploy lands) |
+| Surface | URL |
+|---|---|
+| **Web (Vercel)** | <https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app> |
+| Web alias | <https://aldo-ai-web-git-claude-ai-age-c0b147-zeljanalduk-3047s-projects.vercel.app> |
+| **API (Fly.io)** | <https://aldo-ai-api.fly.dev> |
+| API health | <https://aldo-ai-api.fly.dev/health> |
+| API models | <https://aldo-ai-api.fly.dev/v1/models> |
+| Postgres (Neon) | `ep-tiny-sea-aei2ge4e-pooler.c-2.us-east-2.aws.neon.tech` (private) |
+| Image registry | `registry.fly.io/aldo-ai-api:deployment-...` |
 
-## What was provisioned successfully from the sandbox
+The web URL is a Vercel preview alias — pushes to
+`claude/ai-agent-orchestrator-hAmzy` redeploy automatically. To pin a
+stable production URL, change the project's production branch to
+`claude/ai-agent-orchestrator-hAmzy` (or merge the branch into `main`).
 
-### Neon — done
-- Org `org-holy-feather-65421590`.
-- Project `aldo-ai` in region `aws-us-east-2`, Postgres 17, 0.5 GB free
-  storage, branch `br-plain-frog-aewv6727`.
-- Database `neondb`, role `neondb_owner`.
-- Pooled connection string captured. (Stored in the sandbox at
-  `/tmp/aldo-deploy/neon.env`; ephemeral. Re-grab from Neon dashboard
-  or via the API on next session.)
+## Stack
 
-### Fly.io — app + secrets
-- App `aldo-ai-api` created on the personal org.
-- Secrets staged (will land on first deploy):
-  - `DATABASE_URL` — pooled Neon URL.
-  - `CORS_ORIGINS` — `https://aldo-ai.vercel.app,http://localhost:3000`.
-- `apps/api/fly.toml` configured: `iad` region, `shared-cpu-1x` 256 MB,
-  auto-stop on idle, `/health` check every 30s.
-
-### Vercel — project + env + settings reset
-- Project `aldo-ai-web` (id `prj_TgLXaABnCqzVj0zbHt22TkXof57L`) under
-  the `zeljanalduk-3047s-projects` team.
-- Env var `NEXT_PUBLIC_API_BASE=https://aldo-ai-api.fly.dev` set for
-  Production.
-- Project settings reset to Vercel defaults (rootDirectory = `apps/web`,
-  framework = nextjs, no custom build command). This makes the project
-  ready for Vercel's standard Next.js + monorepo flow once the GitHub
-  integration is connected.
-
-## What still needs a click (sandbox can't do these)
-
-### 1. Connect Vercel to GitHub (≈ 1 minute)
-The Vercel CLI cannot connect to a GitHub repo unless your Vercel
-account already has a GitHub login connection. From the sandbox we
-got `Failed to link zeljan-alduk/ai. You need to add a Login
-Connection to your GitHub account first.`
-
-Click path:
-1. <https://vercel.com/account/login-connections> → **GitHub** → Authorise.
-2. <https://vercel.com/zeljanalduk-3047s-projects/aldo-ai-web/settings/git>
-   → **Connect Git Repository** → choose `zeljan-alduk/ai`, branch
-   `main`.
-3. Vercel auto-deploys on every push to `main`. The `aldo-ai-web`
-   URL becomes live.
-
-After that, deploys are automatic — every push to `main`, every PR
-gets a preview URL.
-
-### 2. Build & deploy the Fly image (one of two paths)
-
-The sandbox can't reliably build Docker images for Fly because
-Docker Hub auth, npm registry, and Alpine CDN all hit cert-chain or
-503 issues from inside the build container. Fly was deployed
-**from your laptop** in seconds; alternatively use GitHub Actions.
-
-**Path A — from your laptop (~30 s):**
-```bash
-brew install flyctl   # or curl -L https://fly.io/install.sh | sh
-flyctl auth login     # browser flow
-cd <repo>/apps/api
-flyctl deploy --app aldo-ai-api --remote-only
 ```
-Visit `https://aldo-ai-api.fly.dev/health` → `{"ok":true,...}`.
-
-**Path B — via GitHub Actions:**
-We already shipped `.github/workflows/deploy-api.yml`. To enable:
-1. <https://github.com/zeljan-alduk/ai/settings/secrets/actions>
-   → **New repository secret** → `FLY_API_TOKEN` = your Fly access
-   token (from <https://fly.io/user/personal_access_tokens>).
-2. Same page → **Variables** tab → **New variable** →
-   `DEPLOY_API_ENABLED` = `true`.
-3. Push any commit to `main`, or
-   <https://github.com/zeljan-alduk/ai/actions/workflows/deploy-api.yml>
-   → **Run workflow**. Builds on a clean Ubuntu runner with no
-   network restrictions, deploys to Fly, takes ~3 min.
-
-### 3. (Optional) Update CORS origin once Vercel deploys
-The Vercel URL will likely be `aldo-ai-web.vercel.app` (or a hashed
-preview-style URL on first deploy). Once it stabilises:
-```bash
-flyctl secrets set --app aldo-ai-api \
-  CORS_ORIGINS="https://aldo-ai-web.vercel.app,https://aldo-ai-web-*-zeljanalduk-3047s-projects.vercel.app,http://localhost:3000"
-flyctl deploy --app aldo-ai-api  # to apply the secret change
+                         GitHub: zeljan-alduk/ai
+                                  │
+            push to claude/ai-agent-orchestrator-hAmzy
+                                  │
+            ┌─────────────────────┼──────────────────────┐
+            ▼                     ▼                      ▼
+       Vercel git              GitHub Actions       (CodeQL, CLA,
+       integration             deploy-api.yml         Dependabot)
+            │                     │
+       Vercel build              flyctl deploy
+       (Next.js + pnpm)          (remote-only)
+            │                     │
+            ▼                     ▼
+       aldo-ai-7pogem9sm        aldo-ai-api.fly.dev
+       .vercel.app               (Hono + tsx)
+            │                     │
+            └────────────fetch────┘
+                                  │
+                                  ▼
+                         Neon Postgres aldo-ai
+                          (us-east-2, pgvector)
 ```
 
-### 4. **Rotate the tokens you shared during deploy**
-- Neon API key: <https://console.neon.tech/app/settings/api-keys> → revoke `napi_japjo8...`.
-- Fly access token: <https://fly.io/user/personal_access_tokens> →
-  delete the deploy token (the one that starts with
-  `FlyV1 fm2_lJPECAAAAAAAE6Aq...`).
-- Vercel token: <https://vercel.com/account/tokens> → delete
-  `vcp_5YAPWVrFux...`.
+## CD pipeline
 
-Future automatic deploys via GitHub Actions don't need the tokens
-above — the Action uses its own short-lived `FLY_API_TOKEN` repo
-secret.
+1. **Vercel**: Git integration on `zeljan-alduk/ai`. Push to feature
+   branch → preview deploy at `aldo-ai-<hash>-zeljanalduk-3047s-projects.vercel.app`.
+   `rootDirectory=apps/web`, `framework=nextjs`, all install/build/output
+   commands cleared (Vercel auto-detects pnpm + Next.js).
+   `NEXT_PUBLIC_API_BASE=https://aldo-ai-api.fly.dev` set for production,
+   preview, and development targets. Deployment SSO protection
+   disabled so URLs are publicly reachable.
+2. **Fly.io**: GitHub Actions workflow `.github/workflows/deploy-api.yml`,
+   triggered on push to main matching `apps/api/**` paths or via
+   `workflow_dispatch`. Uses `FLY_API_TOKEN` repo secret + the
+   `DEPLOY_API_ENABLED=true` repo variable as a safety gate.
+   `flyctl deploy --remote-only` builds the image on Fly's depot
+   builder and deploys to the `aldo-ai-api` app.
+3. **Neon**: Postgres connection injected via Fly secret `DATABASE_URL`
+   (pooled URL). On boot the API runs migrations against the database
+   via the `@aldo-ai/storage` migrate runner.
 
-## Why the sandbox couldn't finish each piece
+## Recovery loop (already proven 4 times during this deploy)
 
-| Surface | Sandbox blocker | Workaround |
-|---|---|---|
-| Neon | none — full API access works | n/a, done |
-| Fly.io | Docker Hub auth 503 from inside build; npm registry TLS errors; Alpine CDN cert-chain issues | Build elsewhere (laptop or CI runner) |
-| Vercel | CLI couldn't connect Git OAuth; tarball upload + monorepo confused Vercel's framework auto-detect with the workspace layout | One-time GitHub OAuth click in the dashboard |
+When CI or Deploy fails:
 
-These are sandbox-specific (TLS / network policies); they won't
-recur once the deploys run from a real machine or CI runner.
+1. Fetch the failing run's logs via the GitHub API (CI: `actions/jobs/<id>/logs`,
+   Fly: `flyctl logs --app aldo-ai-api --no-tail`).
+2. Identify the root cause (build context, runtime crash, registry
+   crash, dependency missing, env var missing).
+3. Apply a one-line fix in the repo. Avoid blanket workarounds; trace
+   the bug to its actual source.
+4. `git push origin <branch>` — auto-triggers CI. For Fly, also
+   `workflow_dispatch` via the API so we don't wait for a paths-match.
+5. Monitor via the deployments / runs API; iterate.
 
-## After everything is up
+The four real bugs we fixed this session:
 
-- Visit `https://aldo-ai-web.vercel.app`. Sidebar → Models. You should
-  see ~10 models, with `available: false` on most until you set
-  provider keys. (`flyctl secrets set --app aldo-ai-api GROQ_API_KEY=...`
-  unlocks Groq's two free-tier Llama models.)
-- Visit `https://aldo-ai-api.fly.dev/v1/models` directly to confirm the
-  API.
-- The runs and agents pages will be empty until you actually run an
-  agent (the CLI's `aldo run` writes to the same Neon DB). That's
-  wave 5+.
+1. **Workflow build context**: deploy-api.yml ran `flyctl deploy` from
+   `apps/api/` so the multi-stage Dockerfile couldn't COPY the
+   monorepo. Fixed by running from repo root with explicit
+   `--config apps/api/fly.toml --dockerfile apps/api/Dockerfile`.
+2. **TypeScript at runtime**: workspace packages export
+   `main: ./src/index.ts`; Node can't load TS. Switched the API
+   container to run under `tsx` (a runtime dep) so all workspace TS
+   imports resolve transparently.
+3. **Neon SQL signature**: `@neondatabase/serverless@1.1.0` reserves
+   the bare `sql(...)` callable for tagged-template form only.
+   Updated `platform/storage/src/pool.ts` to use `sql.query(...)` for
+   positional parameters.
+4. **Missing fixture**: `/v1/models` reads
+   `platform/gateway/fixtures/models.yaml` directly. The image only
+   COPYed the api's declared workspace deps; gateway wasn't one.
+   Added `COPY platform/gateway ./platform/gateway` to the Dockerfile.
+
+## Next steps for the user
+
+1. **Rotate the four tokens shared during this deploy**: Neon API key
+   (`napi_...`), Fly access token (`FlyV1 fm2_...`), Vercel token
+   (`vcp_...`), GitHub fine-grained PAT (`github_pat_...`). All four
+   landed in chat history and should be revoked now that the deploy
+   is in place. The CI workflow uses the `FLY_API_TOKEN` repo secret
+   so future deploys keep working without these tokens.
+2. **(Optional) Promote feature branch to production**: change the
+   Vercel project's production branch to
+   `claude/ai-agent-orchestrator-hAmzy`, or merge PR #1 into `main`.
+   This pins a stable `aldo-ai-web.vercel.app` URL.
+3. **(Optional) Set provider keys on Fly**: `flyctl secrets set
+   --app aldo-ai-api GROQ_API_KEY=... GEMINI_API_KEY=...` flips the
+   `available` flag on those models in `/v1/models`.
+4. **Tighten the API's CORS** to match the actual Vercel preview URL
+   pattern (currently allows `https://aldo-ai.vercel.app` +
+   `http://localhost:3000`).
+
+## What's NOT yet wired
+
+- `/v1/runs` is empty because no real agent runs have been recorded
+  yet — the CLI's `aldo run` writes to local registry only; wiring
+  it to Postgres is a wave 5 task.
+- Replay debugger UI (wave 5).
+- Auth on the web (any visitor reaches the dashboard right now).
+- Multi-tenant scoping (single-tenant only).
+- Provider-key management UI (set them via Fly secrets for now).

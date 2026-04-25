@@ -465,3 +465,35 @@ the formatter when CI does a clean checkout. Pushing the fix; CI
 should go green on this commit, and the in-flight deploy-api run
 will either land or fail on its own — if it fails, I re-dispatch
 on the new SHA.
+
+[2026-04-25 08:08 UTC] principal — v0.2 LIVE end-to-end
+Recovered through four real bugs surfaced only by production execution:
+1. Build context: deploy-api.yml ran flyctl from apps/api/ — Dockerfile
+   couldn't COPY ../../platform/*. Fix: run from repo root with explicit
+   --config / --dockerfile flags.
+2. Runtime TypeScript: workspace packages declare main: ./src/index.ts;
+   Node can't load TS. Fix: tsx as runtime dep, drop the build stage,
+   start with `node_modules/.bin/tsx src/index.ts`.
+3. Neon SQL signature: @neondatabase/serverless@1.1.0 requires
+   sql.query(text,params,opts) for positional parameters; bare
+   sql(text,params,opts) was removed. Fix: rewrite both call sites in
+   platform/storage/src/pool.ts.
+4. Missing fixture: /v1/models reads platform/gateway/fixtures/
+   models.yaml; image only COPYed declared workspace deps. Fix: COPY
+   platform/gateway too.
+
+Vercel side: rootDirectory=apps/web with framework=nextjs, all
+build/install commands cleared (Vercel's pnpm + Next.js auto-detection
+handles the workspace correctly). Project's deployment SSO protection
+disabled so preview URLs are publicly reachable. NEXT_PUBLIC_API_BASE
+env added for preview + development targets (was production-only).
+
+Live URLs:
+- Web: https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app
+- API: https://aldo-ai-api.fly.dev
+- /v1/models returns 12 models from gateway fixtures.
+- /runs and /agents render correct empty states.
+
+docs/deploy/live.md captures all the above + the recovery loop +
+next-steps (token rotation, optional production-branch promotion,
+provider keys).
