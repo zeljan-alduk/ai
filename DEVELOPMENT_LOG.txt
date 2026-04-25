@@ -603,3 +603,31 @@ green:
   config/api-contract/web have no tests).
 ~176 tests total. Pushing; CD redeploys API to Fly + Vercel rebuilds
 web.
+
+[2026-04-25 10:51 UTC] principal — wave 5 LIVE end-to-end
+Replay debugger deployed. Live verifies on aldo-ai-api.fly.dev:
+  /health → 200
+  /v1/models → 12 models (registry intact through migration)
+  /v1/runs/r_test/breakpoints → 200 [] (debugger CRUD live)
+  POST /v1/runs/r_test/continue {"mode":"run"} → 204 (commands accepted)
+  GET /v1/runs/r_test/events → 404 with proper ApiError envelope
+    `{"error":{"code":"not_found","message":"run not found: r_test"}}`
+    (route registered + run-existence check working; SSE will stream
+     real frames once runs are persisted by the engine).
+
+Recovery loop fired one more time during wave 5 deploy: splitSqlScript
+in @aldo-ai/storage tracked single-quote and double-quote state but
+ignored SQL `--` line and `/* */` block comments. The new
+002_breakpoints migration's preamble contained "engine's" — the
+apostrophe flipped inSingle=true while the splitter was inside a
+comment line; the literal `'{}'::jsonb` later in the file flipped it
+back off; statement boundaries got scrambled; the Neon HTTP driver
+saw a fragment beginning with "for" and rejected with `42601 syntax
+error`. Fixed by teaching splitSqlScript to skip line + block
+comments, and by removing the apostrophe from the comment as a
+belt-and-braces. Pushed in aea8605, deploy succeeded immediately.
+
+Vercel auto-deploy of the web UI shipped earlier with commit
+e66a61e1; the new /runs/[id]/debug route is live at the latest preview
+URL. With no real persisted runs yet, the UI shows the empty timeline
+and offers controls disabled until a paused state.
