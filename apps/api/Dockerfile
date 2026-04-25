@@ -4,14 +4,20 @@
 #
 # Base image pulled from AWS Public ECR which mirrors Docker Hub Library
 # images. Avoids the Docker Hub auth-endpoint flakiness during builds.
+#
+# Runtime strategy: workspace packages publish `.ts` source (the
+# package.json `main` fields point at `./src/index.ts`). Rather than
+# compiling each platform/* package to `dist/` and rewriting `main`,
+# we run the API under `tsx` so Node can resolve TypeScript imports
+# at runtime. tsx is therefore a *runtime* dependency in apps/api.
 
-# ---- 1. Install all workspace deps (cached) ----
+# ---- 1. Install runtime deps + sources for the api workspace ----
 FROM public.ecr.aws/docker/library/node:22-alpine AS deps
 WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
-# Copy lockfile + workspace metadata only (maximises Docker layer cache).
+# Lockfile + workspace metadata first (best Docker layer caching).
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY platform/api-contract/package.json platform/api-contract/
@@ -19,10 +25,14 @@ COPY platform/registry/package.json platform/registry/
 COPY platform/storage/package.json platform/storage/
 COPY platform/types/package.json platform/types/
 
-RUN pnpm install --frozen-lockfile --filter @aldo-ai/api...
+# `pnpm install` with `--prod=false` so the workspace symlinks resolve
+# devDependencies needed by the API's transitive workspace deps, but we
+# pass `--filter @aldo-ai/api...` so only the api workspace + its
+# dependency closure is materialised.
+RUN pnpm install --frozen-lockfile --prod=false --filter @aldo-ai/api...
 
-# ---- 2. Copy source + build ----
-FROM deps AS build
+# ---- 2. Bring in the actual TypeScript sources ----
+FROM deps AS sources
 WORKDIR /repo
 
 COPY platform/types ./platform/types
@@ -32,28 +42,25 @@ COPY platform/storage ./platform/storage
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 
-RUN pnpm --filter @aldo-ai/api build
-
-# ---- 3. Runtime ----
+# ---- 3. Runtime image ----
 FROM public.ecr.aws/docker/library/node:22-alpine AS runtime
-WORKDIR /app
-
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
 
-# Use the `node` user that ships with the official image (UID 1000).
-# No extra apk install; alpine network-cert issues are skipped.
-COPY --from=build --chown=node:node /repo /repo
+# Copy the materialised workspace from the sources stage.
+COPY --from=sources --chown=node:node /repo /repo
 
 USER node
 WORKDIR /repo/apps/api
 
 EXPOSE 8080
 
-# Pure-Node health check — no wget/curl required inside the image.
+# Pure-Node health check — no wget/curl in the image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||8080)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# Hono on Node honours SIGTERM directly; no need for tini as PID 1.
-CMD ["node", "dist/src/index.js"]
+# tsx is a runtime dep of @aldo-ai/api; the binary is at
+# `node_modules/.bin/tsx` thanks to pnpm's hoisted-bin layout.
+# Honours SIGTERM directly via Node — no tini needed.
+CMD ["node_modules/.bin/tsx", "src/index.ts"]
