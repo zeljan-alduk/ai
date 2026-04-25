@@ -74,6 +74,11 @@ COPY platform/local-discovery ./platform/local-discovery
 COPY platform/engine ./platform/engine
 COPY platform/observability ./platform/observability
 COPY platform/orchestrator ./platform/orchestrator
+# Wave 10: on boot, apps/api walks `agency/` and seeds the canonical
+# `default` tenant's registry from the YAML specs. Without this COPY
+# the seed is silently skipped and every new tenant who calls
+# /v1/tenants/me/seed-default gets `{copied:0,skipped:0}`.
+COPY agency ./agency
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 
