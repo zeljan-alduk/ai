@@ -1,0 +1,45 @@
+# fly.toml — ALDO AI control-plane API on Fly.io
+#
+# Bring-up:
+#   fly launch --copy-config --no-deploy        # registers the app once
+#   fly secrets set DATABASE_URL=postgres://...
+#   fly secrets set ANTHROPIC_API_KEY=... GROQ_API_KEY=... GEMINI_API_KEY=...
+#   fly deploy                                  # builds the Dockerfile + ships
+#
+# Free-tier sizing: shared-cpu-1x with 256MB. Scale up with
+# `fly scale memory 512` once you start seeing OOMs.
+
+app = "aldo-ai-api"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  HOST = "0.0.0.0"
+  NODE_ENV = "production"
+  CORS_ORIGINS = "https://aldo-ai.vercel.app"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

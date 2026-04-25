@@ -1,0 +1,17 @@
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/.cache
+**/.vitest-cache
+**/*.log
+**/.env
+**/.env.*
+.git
+.github
+docs
+agency
+mcp-servers
+examples
+tests

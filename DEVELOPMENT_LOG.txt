@@ -380,3 +380,36 @@ engine 11, observability 21, cli 35, storage 2, aldo-fs 32, api 16;
 types/runtime-config/api-contract/web have no tests). Boot
 commands: `pnpm --filter @aldo-ai/api dev` (port 3001) +
 `pnpm --filter @aldo-ai/web dev` (port 3000). Ready for smoke test.
+
+[2026-04-24 23:25 UTC] principal — smoke test passed + deploy artifacts
+Booted apps/api on :3001 + apps/web on :3000 locally and curled every
+route. Caught one integration bug that unit tests didn't see: Next.js
+webpack couldn't resolve `.js`-suffixed imports against TypeScript
+sources in workspace packages (api-contract uses Node-ESM-style
+`.js` suffixes that don't match a real file). Fixed in
+apps/web/next.config.mjs by adding webpack.resolve.extensionAlias
+mapping `.js` -> `.ts/.tsx/.js` plus transpilePackages for
+@aldo-ai/api-contract and @aldo-ai/types. After the fix every route
+returns 200, /v1/models is populated from fixtures, empty-state
+pagination works, /runs/[bogus] degrades gracefully, CORS preflight
+returns 204 with the right allow-origin, bad cursor returns 400 with
+the ApiError envelope.
+
+Deploy artifacts shipped (option D from the wave 4 menu):
+- apps/api/Dockerfile: multi-stage Node 22 alpine image with tini PID 1,
+  non-root user, /health-based HEALTHCHECK, expects PORT/HOST env.
+- apps/api/.dockerignore: excludes node_modules, dist, .next, docs,
+  agency, mcp-servers, and the rest of the monorepo noise.
+- apps/api/fly.toml: aldo-ai-api app, primary_region=iad, shared-cpu-1x
+  256MB, auto_stop on idle, /health check every 30s, internal port 8080,
+  CORS_ORIGINS preset.
+- apps/web/vercel.json: Next.js framework preset, build command runs
+  the workspace install + filtered build.
+- .github/workflows/deploy-api.yml: triggers `flyctl deploy` on push to
+  main when DEPLOY_API_ENABLED repo variable is `true` and FLY_API_TOKEN
+  secret is set. Concurrency-grouped, 15-min timeout, paths-filtered.
+- docs/deploy/getting-started.md: 30-min click-by-click walkthrough —
+  Neon project, fly launch + secrets, Vercel project + env, CORS update,
+  end-to-end verify.
+- docs/deploy/smoke-test.md: 60-second local verify recipe + the bug we
+  caught the first time.
