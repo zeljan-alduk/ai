@@ -1341,3 +1341,40 @@ matches the wave-8 brief ("when ... actually routes
 successfully") but worth confirming with the security review;
 an alternative would emit on first delta. Not committed —
 orchestrator integrates.
+
+[2026-04-25 17:00 UTC] orchestrator — wave 8 LIVE end-to-end
+Three engineers landed in commit e9c607c; deploy run 24935… completed
+success first try (no Dockerfile recovery needed because Engineer G
+proactively updated the deps + sources stages in the same commit
+that introduced @aldo-ai/local-discovery — wave-6.5 lesson finally
+internalised). Smoke verified:
+
+  GET /v1/models — 15 models (cloud + local + on-prem). First call
+    1.2s (fresh probe of localhost ports inside Fly machine; all four
+    fail closed as expected since there are no sidecars). Subsequent
+    calls within the 30s cache window: 110-190ms.
+  Catalog includes 3 MLX seed entries (mlx-qwen2.5-7b-instruct-4bit,
+    mlx-llama-3.3-70b-instruct-4bit, mlx-mistral-small-3.1-instruct-bf16).
+    Operators on Apple Silicon get an out-of-the-box eval baseline.
+  POST /v1/agents/:name/check — endpoint mounted, returns 404 for
+    unknown agents (registry still empty in prod — same blocker as
+    wave 7.5; resolves the moment any agent is registered).
+
+Wave totals: 14 backend packages, 502 unit tests (+104 from wave 8).
++ 7 e2e tests in apps/web-e2e (untouched). Public API surface is now
+provider-agnostic + capability-routed + privacy-fail-closed end to
+end: a sensitive agent with a cloud-only catalog returns
+HTTP 422 + code privacy_tier_unroutable; the dry-run CLI
+(`aldo agents check`) and API (POST /v1/agents/:name/check) explain
+WHY the routing failed and what to do; auditors can SELECT the
+'routing.privacy_sensitive_resolved' run-events to prove every
+sensitive call landed on a local model.
+
+Decision logged for review: discovery probes run inside the Fly
+machine on every cache-miss even though no local LLM servers are
+reachable there. Net cost is one ~1s burst per 30s window per
+machine. Could be disabled by setting ALDO_LOCAL_DISCOVERY=none as
+a Fly secret. Leaving on for now — keeps prod and dev semantics
+identical, and a future "Fly machine with Ollama sidecar" deploy
+would benefit. Revisit if /v1/models p99 ever shows up in real
+traffic.
