@@ -12,7 +12,7 @@
  */
 
 export { createGateway } from './gateway.js';
-export type { GatewayDeps, GatewayEx, RoutingHints } from './gateway.js';
+export type { GatewayDeps, GatewayEx, GatewayMiddleware, RoutingHints } from './gateway.js';
 
 export { createRouter, isEligible } from './router.js';
 export type { Router, RoutingRequest, RoutingDecision } from './router.js';

@@ -23,7 +23,10 @@ COPY apps/api/package.json apps/api/
 COPY platform/api-contract/package.json platform/api-contract/
 COPY platform/eval/package.json platform/eval/
 COPY platform/gateway/package.json platform/gateway/
+COPY platform/guards/package.json platform/guards/
 COPY platform/registry/package.json platform/registry/
+COPY platform/sandbox/package.json platform/sandbox/
+COPY platform/secrets/package.json platform/secrets/
 COPY platform/storage/package.json platform/storage/
 COPY platform/types/package.json platform/types/
 
@@ -50,6 +53,12 @@ COPY platform/gateway ./platform/gateway
 # sweep runner, promotion gate). Wave 6.5 added the dependency to
 # apps/api/package.json — the image must ship the package source too.
 COPY platform/eval ./platform/eval
+# Wave 7 adds isolation + prompt-injection guards + tenant secrets. The
+# engine ToolHost calls into @aldo-ai/sandbox; the gateway middleware
+# imports @aldo-ai/guards; /v1/secrets/* routes use @aldo-ai/secrets.
+COPY platform/sandbox ./platform/sandbox
+COPY platform/guards ./platform/guards
+COPY platform/secrets ./platform/secrets
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 

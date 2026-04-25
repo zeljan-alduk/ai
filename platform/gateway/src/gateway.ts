@@ -6,6 +6,26 @@ import type { Router } from './router.js';
 import { createRouter } from './router.js';
 
 /**
+ * Hook surface for cross-cutting concerns (guards, redaction, audit). The
+ * gateway owns the seam so that no provider adapter has to know about
+ * spotlighting, quarantine, or scanning. Both hooks are async to leave
+ * room for round-trips (e.g. dual-LLM quarantine) without blocking the
+ * stream.
+ *
+ * `before` is called once per `complete*` invocation, on the inbound
+ * request — this is where tool results live before being fed to the next
+ * model call.
+ *
+ * `after` is called for every Delta the adapter emits, in order. Returning
+ * a modified Delta is allowed; throwing aborts the stream.
+ */
+export interface GatewayMiddleware {
+  readonly name: string;
+  before(req: CompletionRequest, ctx: CallContext): Promise<CompletionRequest>;
+  after(delta: Delta, ctx: CallContext): Promise<Delta>;
+}
+
+/**
  * Composition root. `createGateway` wires a router, a model registry, and an
  * adapter registry into a single `ModelGateway`. Callers inject routing
  * hints (primaryClass + fallbacks) per call; the gateway does not stash
@@ -23,6 +43,12 @@ export interface GatewayDeps {
    * Defaults to reading `providerConfig.apiKeyEnv` out of `process.env`.
    */
   readonly resolveProviderConfig?: (model: RegisteredModel) => ProviderConfig;
+  /**
+   * Optional middleware chain. Each middleware's `before` runs in order on
+   * the inbound request; each `after` runs in order on every outbound delta.
+   * Provider adapters never see middleware — they stay agnostic.
+   */
+  readonly middleware?: readonly GatewayMiddleware[];
 }
 
 /**
@@ -46,6 +72,43 @@ export interface GatewayEx extends ModelGateway {
 export function createGateway(deps: GatewayDeps): GatewayEx {
   const router = deps.router ?? createRouter(deps.models);
   const resolve = deps.resolveProviderConfig ?? defaultResolveProviderConfig;
+  const middleware = deps.middleware ?? [];
+
+  async function* runWithMiddleware(
+    req: CompletionRequest,
+    ctx: CallContext,
+    hints: RoutingHints,
+  ): AsyncIterable<Delta> {
+    let processed = req;
+    for (const mw of middleware) {
+      processed = await mw.before(processed, ctx);
+    }
+
+    // Re-estimate tokens against the *post-middleware* request — guards may
+    // have wrapped tool output, which changes the size.
+    const tokensIn = hints.tokensIn ?? estimateTokensIn(processed);
+    const maxTokensOut = hints.maxTokensOut ?? processed.maxOutputTokens ?? 1024;
+
+    const decision = router.route({
+      ctx,
+      primaryClass: hints.primaryClass,
+      ...(hints.fallbackClasses ? { fallbackClasses: hints.fallbackClasses } : {}),
+      tokensIn,
+      maxTokensOut,
+    });
+
+    const adapter = deps.adapters.get(decision.model.providerKind);
+    if (!adapter) throw new UnknownProviderKindError(decision.model.providerKind);
+
+    const providerConfig = resolve(decision.model);
+    for await (const delta of adapter.complete(processed, decision.model, providerConfig)) {
+      let out = delta;
+      for (const mw of middleware) {
+        out = await mw.after(out, ctx);
+      }
+      yield out;
+    }
+  }
 
   return {
     complete(req, ctx) {
@@ -55,23 +118,7 @@ export function createGateway(deps: GatewayDeps): GatewayEx {
     },
 
     completeWith(req, ctx, hints) {
-      const tokensIn = hints.tokensIn ?? estimateTokensIn(req);
-      const maxTokensOut = hints.maxTokensOut ?? req.maxOutputTokens ?? 1024;
-
-      const decision = router.route({
-        ctx,
-        primaryClass: hints.primaryClass,
-        ...(hints.fallbackClasses ? { fallbackClasses: hints.fallbackClasses } : {}),
-        tokensIn,
-        maxTokensOut,
-      });
-
-      const adapter = deps.adapters.get(decision.model.providerKind);
-      if (!adapter) throw new UnknownProviderKindError(decision.model.providerKind);
-
-      const providerConfig = resolve(decision.model);
-      // Delegate directly — adapter emits Deltas including the `end` marker.
-      return adapter.complete(req, decision.model, providerConfig);
+      return runWithMiddleware(req, ctx, hints);
     },
 
     async embed(req, ctx) {
