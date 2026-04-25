@@ -107,11 +107,7 @@ function wrapWithFsGuard<TArgs, TValue>(
  * symlink is rejected. Throws `SandboxError(OUT_OF_BOUNDS)` if not
  * allowed.
  */
-export function assertPathAllowed(
-  p: string,
-  policy: SandboxPolicy,
-  toolName: string,
-): string {
+export function assertPathAllowed(p: string, policy: SandboxPolicy, toolName: string): string {
   let real: string;
   try {
     real = realpathSync(resolve(p));
@@ -130,7 +126,7 @@ export function assertPathAllowed(
       resolvedRoot = resolve(root);
     }
     if (real === resolvedRoot) return real;
-    if (real.startsWith(resolvedRoot.endsWith('/') ? resolvedRoot : resolvedRoot + '/')) {
+    if (real.startsWith(resolvedRoot.endsWith('/') ? resolvedRoot : `${resolvedRoot}/`)) {
       return real;
     }
   }

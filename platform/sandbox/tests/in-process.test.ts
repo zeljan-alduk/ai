@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InProcessSandbox } from '../src/in-process.js';
-import { SandboxError, type SandboxPolicy, type SandboxRequest } from '../src/types.js';
+import type { SandboxError, SandboxPolicy, SandboxRequest } from '../src/types.js';
 
 const POLICY: SandboxPolicy = {
   cwd: process.cwd(),
@@ -10,7 +10,11 @@ const POLICY: SandboxPolicy = {
   timeoutMs: 1_000,
 };
 
-function req<A>(name: string, args: A, overrides: Partial<SandboxRequest<A>> = {}): SandboxRequest<A> {
+function req<A>(
+  name: string,
+  args: A,
+  overrides: Partial<SandboxRequest<A>> = {},
+): SandboxRequest<A> {
   return { toolName: name, args, policy: POLICY, ...overrides };
 }
 
@@ -39,7 +43,7 @@ describe('InProcessSandbox', () => {
       req('env-check', null),
     );
     expect(r.value).toEqual({ sawFoo: 'bar', sawSecret: undefined });
-    delete process.env.SECRET_LEAK;
+    process.env.SECRET_LEAK = undefined;
   });
 
   it('raises TIMEOUT when the function exceeds the policy', async () => {

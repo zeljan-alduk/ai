@@ -1,12 +1,5 @@
 import { spawn } from 'node:child_process';
-import {
-  existsSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -124,7 +117,7 @@ export class SubprocessSandbox implements SandboxAdapter {
 
     // Send args via stdin so the runner can JSON.parse them.
     try {
-      child.stdin.write(JSON.stringify({ args: req.args }) + '\n');
+      child.stdin.write(`${JSON.stringify({ args: req.args })}\n`);
       child.stdin.end();
     } catch (err) {
       child.kill('SIGKILL');
@@ -184,10 +177,7 @@ export class SubprocessSandbox implements SandboxAdapter {
     // message contains our tag. The runner serialises it into the
     // result envelope, but a hard crash (e.g. the child died before
     // catching) would only put it on stderr — handle both.
-    if (
-      stderr.includes('[ALDO_EGRESS_BLOCKED]') ||
-      (resultJson !== undefined && resultJson.includes('[ALDO_EGRESS_BLOCKED]'))
-    ) {
+    if (stderr.includes('[ALDO_EGRESS_BLOCKED]') || resultJson?.includes('[ALDO_EGRESS_BLOCKED]')) {
       throw new SandboxError({
         code: 'EGRESS_BLOCKED',
         toolName: req.toolName,
@@ -406,4 +396,3 @@ function tryApplyRlimits(
     /* fall through — wall clock is the floor. */
   }
 }
-

@@ -19,6 +19,7 @@ import { runModelsLs } from './commands/models-ls.js';
 import { runRun } from './commands/run.js';
 import { runRunsLs } from './commands/runs-ls.js';
 import { runRunsView } from './commands/runs-view.js';
+import { runSecretsLs, runSecretsRm, runSecretsSet } from './commands/secrets.js';
 import type { CliIO } from './io.js';
 import { defaultIO } from './io.js';
 
@@ -275,6 +276,78 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     .option('--json', 'emit JSON output', false)
     .action((o: { json?: boolean }) => {
       action = () => runMcpLs({ json: o.json === true }, io);
+    });
+
+  // --- secrets --------------------------------------------------------------
+  const secrets = program
+    .command('secrets')
+    .description('manage tenant-scoped secrets via the API');
+
+  secrets
+    .command('ls')
+    .description('list secrets (redacted summaries; values never echoed)')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action((o: { apiBase?: string; json?: boolean }) => {
+      action = () =>
+        runSecretsLs(
+          {
+            ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
+  secrets
+    .command('set <name>')
+    .description('set or rotate a secret; value never echoed back')
+    .option('--value <v>', 'literal value (visible in shell history; dev only)')
+    .option('--from-env <var>', 'read the value from the named env var')
+    .option('--from-file <path>', 'read the value from a file')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action(
+      (
+        name: string,
+        o: {
+          value?: string;
+          fromEnv?: string;
+          fromFile?: string;
+          apiBase?: string;
+          json?: boolean;
+        },
+      ) => {
+        action = () =>
+          runSecretsSet(
+            name,
+            {
+              ...(o.value !== undefined ? { value: o.value } : {}),
+              ...(o.fromEnv !== undefined ? { fromEnv: o.fromEnv } : {}),
+              ...(o.fromFile !== undefined ? { fromFile: o.fromFile } : {}),
+              ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
+
+  secrets
+    .command('rm <name>')
+    .description('delete a secret')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action((name: string, o: { apiBase?: string; json?: boolean }) => {
+      action = () =>
+        runSecretsRm(
+          name,
+          {
+            ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
     });
 
   // --- dev ------------------------------------------------------------------

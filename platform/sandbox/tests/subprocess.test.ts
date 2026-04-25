@@ -1,14 +1,13 @@
-import { mkdtempSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SubprocessSandbox } from '../src/subprocess.js';
-import { SandboxError, type SandboxPolicy, type SandboxRequest } from '../src/types.js';
+import type { SandboxError, SandboxPolicy, SandboxRequest } from '../src/types.js';
 
 const SKIP = process.platform !== 'linux';
 if (SKIP) {
-  // biome-ignore lint/suspicious/noConsole: intentional, ran on CI logs.
   console.log('subprocess.test: skipping rlimit-dependent assertions on non-linux');
 }
 
@@ -25,7 +24,12 @@ function basePolicy(overrides: Partial<SandboxPolicy> = {}): SandboxPolicy {
   };
 }
 
-function req<A>(name: string, args: A, policy: SandboxPolicy, signal?: AbortSignal): SandboxRequest<A> {
+function req<A>(
+  name: string,
+  args: A,
+  policy: SandboxPolicy,
+  signal?: AbortSignal,
+): SandboxRequest<A> {
   return signal !== undefined
     ? { toolName: name, args, policy, signal }
     : { toolName: name, args, policy };
@@ -76,7 +80,7 @@ describe('SubprocessSandbox', () => {
     expect(r.value.env.ALDO_OK).toBe('yes');
     expect(r.value.env.HOST_SECRET).toBeUndefined();
     expect(r.value.env.PATH).toBeDefined();
-    delete process.env.HOST_SECRET;
+    process.env.HOST_SECRET = undefined;
   });
 
   it.skipIf(SKIP)('blocks egress to disallowed hosts', async () => {

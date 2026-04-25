@@ -1,9 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  type SandboxError,
-  SandboxRunner,
-  buildPolicy,
-} from '@aldo-ai/sandbox';
+import { type SandboxError, SandboxRunner, buildPolicy } from '@aldo-ai/sandbox';
 import type {
   AgentRef,
   AgentRegistry,
@@ -459,14 +455,13 @@ export class LeafAgentRun implements InternalAgentRun {
               this.emit({ type: 'tool_call', at: now(), payload: tc });
               const ref: ToolRef = resolveToolRef(this.spec, tc.tool);
               const resolver = this.deps.secretResolver;
-              const argsForTool: unknown =
-                resolver !== undefined && resolver.hasRefs(tc.args)
-                  ? await resolver.resolveInArgs(tc.args, {
-                      tenantId: this.tenant,
-                      caller: this.spec.identity.name,
-                      runId: this.id as unknown as string,
-                    })
-                  : tc.args;
+              const argsForTool: unknown = resolver?.hasRefs(tc.args)
+                ? await resolver.resolveInArgs(tc.args, {
+                    tenantId: this.tenant,
+                    caller: this.spec.identity.name,
+                    runId: this.id as unknown as string,
+                  })
+                : tc.args;
               const r = await this.invokeToolThroughSandbox(ref, argsForTool, ctx);
               result = r.value;
               isError = !r.ok;

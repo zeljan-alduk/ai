@@ -23,9 +23,7 @@ export type SandboxErrorCode =
  * by hostname (no port, no scheme). A hostname is permitted iff it equals
  * an entry exactly or is a subdomain of one. Wildcards aren't supported.
  */
-export type SandboxNetworkPolicy =
-  | 'none'
-  | { readonly allowedHosts: readonly string[] };
+export type SandboxNetworkPolicy = 'none' | { readonly allowedHosts: readonly string[] };
 
 /**
  * Resolved policy a sandbox adapter executes against. Constructed by

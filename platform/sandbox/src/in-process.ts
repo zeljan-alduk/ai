@@ -37,7 +37,7 @@ export class InProcessSandbox implements SandboxAdapter {
       throw new SandboxError({
         code: 'RUNTIME_ERROR',
         toolName: req.toolName,
-        message: `InProcessSandbox cannot run module-mode fn (use SubprocessSandbox)`,
+        message: 'InProcessSandbox cannot run module-mode fn (use SubprocessSandbox)',
       });
     }
 
