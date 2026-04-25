@@ -31,6 +31,17 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@v1
 
+      # Stage runtime secrets so `flyctl deploy` rolls them out atomically
+      # with the new image. `--stage` queues them without forcing a release.
+      # The @aldo-ai/secrets package refuses to boot in production without
+      # ALDO_SECRETS_MASTER_KEY (32-byte base64 NaCl secretbox key).
+      - name: Stage Fly secrets
+        run: |
+          flyctl secrets set --stage --app aldo-ai-api \
+            ALDO_SECRETS_MASTER_KEY="${{ secrets.ALDO_SECRETS_MASTER_KEY }}"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
       - name: Deploy
         run: |
           flyctl deploy \
