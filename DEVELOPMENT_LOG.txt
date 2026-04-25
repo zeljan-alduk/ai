@@ -851,3 +851,31 @@ gateway. Fixed by adding the package's package.json to the deps stage
 + source dir to the sources stage. The Dockerfile now lists 6
 workspace COPY pairs; future waves that add a workspace dep MUST
 update both stages.
+
+[2026-04-25 13:35 UTC] principal — wave 7 launching (sandboxing + guards + secrets)
+Three engineers in parallel against shared api-contract additions:
+- secrets.ts: SecretSummary (name + fingerprint + preview + referencedBy
+  + timestamps; raw values never sent in lists), ListSecretsResponse,
+  SetSecretRequest (SCREAMING_SNAKE_CASE name + value), SetSecretResponse.
+- (guards config is added to agent.v1 by engineer B as an optional
+  `tools.guards` field — non-breaking)
+
+Engineer scopes:
+- A: @aldo-ai/sandbox package — SandboxAdapter interface, in-process
+  fallback adapter, subprocess-with-cwd-jail adapter for rootless
+  local. Wire into engine ToolHost so every MCP tool call goes through
+  a sandbox. Tests for path traversal, env stripping, network
+  allowlist enforcement.
+- B: @aldo-ai/guards package — spotlighting wrapper that delimits
+  untrusted tool output before it returns to the model, regex-based
+  output scanner that flags exfil patterns (URLs to unknown hosts,
+  base64 blobs, prompt-leak markers), optional dual-LLM quarantine
+  pattern that runs sensitive content through a separate model with
+  constrained-only output. Wired via gateway middleware. Adds
+  optional `tools.guards` to agent.v1 spec (registry schema +
+  @aldo-ai/types AgentSpec) — backwards compatible.
+- C: @aldo-ai/secrets package + CLI + API + 004_secrets migration.
+  Encrypted-at-rest in Postgres (NaCl secretbox with a server-side
+  master key), tenant-scoped, audit-logged on every resolve. CLI
+  `aldo secrets {set,get,ls,rm}` POSTs to API. ToolHost resolves
+  `secret://<name>` references at tool-call time only.

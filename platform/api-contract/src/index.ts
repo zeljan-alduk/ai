@@ -16,3 +16,4 @@ export * from './agents.js';
 export * from './models.js';
 export * from './debugger.js';
 export * from './eval.js';
+export * from './secrets.js';
