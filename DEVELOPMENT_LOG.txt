@@ -824,3 +824,30 @@ union doesn't include 'usage' (and didn't include 'paused' from wave
 5 either). Engine code casts to widen. Worth a future janitorial bump
 to formalise both event types in the union with discriminated
 payloads. Adding to the open-items list.
+
+[2026-04-25 13:30 UTC] principal — wave 6.5 LIVE; smoke suite seeded
+deploy-api 24931928058 (with the Dockerfile platform/eval fix) succeeded.
+After Fly's edge transient 503s ('DNS cache overflow' — platform-side,
+not ours) and a manual machine start, the API came up clean.
+
+Smoke suite uploaded:
+  POST /v1/eval/suites with eval/suites/code-reviewer-smoke.yaml (3 cases)
+  -> 200 {"name":"code-reviewer-smoke","version":"0.1.0","caseCount":3}
+  GET  /v1/eval/suites
+  -> shows code-reviewer-smoke v0.1.0 with caseCount=3
+  POST /v1/eval/suites again with same YAML
+  -> 409 {"error":{"code":"conflict","message":"suite code-reviewer-smoke@0.1.0 already exists"}}
+
+The web /eval page now has real content. Replay debugger /runs/[id]/
+debug stays empty until someone runs `aldo run` against the live API
+with DATABASE_URL pointing at Neon — that's a one-line
+GROQ_API_KEY=... aldo run code-reviewer --inputs ... away from a fully
+populated debugger timeline.
+
+Bug 6 of the deploy session: Dockerfile's COPY list was missing
+platform/eval (engineer A added @aldo-ai/eval as a runtime dep but the
+Dockerfile predated wave 6). Same class of bug as wave 5's missing
+gateway. Fixed by adding the package's package.json to the deps stage
++ source dir to the sources stage. The Dockerfile now lists 6
+workspace COPY pairs; future waves that add a workspace dep MUST
+update both stages.
