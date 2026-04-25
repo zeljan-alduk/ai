@@ -723,3 +723,36 @@ pnpm lint clean across 251 files, pnpm -r test 220 passing
 (registry 23 | gateway 20 | engine 17 | observability 21 | storage
 2 | aldo-fs 32 | cli 35 | eval 44 | api 39).
 Pushing; CD redeploys API to Fly + Vercel rebuilds web.
+
+[2026-04-25 11:42 UTC] principal — wave 6 LIVE end-to-end
+deploy-api run 24929860442 succeeded on the FIRST try (no recovery
+needed this wave — the splitSqlScript fix from wave 5 paid off when
+003_eval.sql with its CREATE TABLE / CREATE INDEX statements landed).
+
+Live verifies on aldo-ai-api.fly.dev:
+  /health                                   -> 200
+  /v1/eval/suites                           -> 200 {"suites":[]}
+  /v1/eval/sweeps                           -> 200 {"sweeps":[]}
+  POST /v1/eval/sweeps {"models":[]}        -> 400 with Zod details
+                                                under ApiError envelope
+                                                (validation working,
+                                                two errors: missing
+                                                suiteName + empty models)
+  POST /v1/agents/code-reviewer/promote     -> 404 ApiError "agent not
+    {"version":"0.1.0", ...}                   found: code-reviewer@0.1.0"
+                                                (route + registry lookup
+                                                + agent existence check
+                                                working)
+
+Vercel auto-deploy of /eval and /agents/[name]/promote shipped on push
+to claude/ai-agent-orchestrator-hAmzy as part of the same commit.
+
+Wave 6 wedge proven: cross-model sweeps + promotion gate are end-to-
+end on production. With provider keys + a seeded suite, the user can
+now run `aldo eval sweep agent/code-reviewer --models groq.llama-3.3
+-70b-versatile,ollama.qwen2.5-coder:32b` from their laptop and see
+the comparison matrix render at /eval/sweeps/<id> in the browser.
+
+Net for this session: 6 waves committed and live. Total tests 220 in
+10 packages. Two of the three wedge differentiators (replay debugger
++ eval-gated promotion) are real and clickable on the public web URL.
