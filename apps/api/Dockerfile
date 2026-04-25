@@ -21,6 +21,8 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY platform/api-contract/package.json platform/api-contract/
+COPY platform/eval/package.json platform/eval/
+COPY platform/gateway/package.json platform/gateway/
 COPY platform/registry/package.json platform/registry/
 COPY platform/storage/package.json platform/storage/
 COPY platform/types/package.json platform/types/
@@ -44,6 +46,10 @@ COPY platform/storage ./platform/storage
 # fixtures (and the rest of the gateway package, harmless and small)
 # into the image so /v1/models returns the registry instead of [].
 COPY platform/gateway ./platform/gateway
+# /v1/eval/* routes call into @aldo-ai/eval at runtime (suite parser,
+# sweep runner, promotion gate). Wave 6.5 added the dependency to
+# apps/api/package.json — the image must ship the package source too.
+COPY platform/eval ./platform/eval
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 
