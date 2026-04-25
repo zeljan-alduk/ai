@@ -35,7 +35,7 @@ export interface ResolveContext {
 }
 
 export class UnknownSecretError extends Error {
-  public readonly name = 'UnknownSecretError';
+  public override readonly name = 'UnknownSecretError';
   public readonly secretName: string;
   constructor(secretName: string) {
     super(`unknown secret: ${secretName}`);

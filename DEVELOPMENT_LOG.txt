@@ -879,3 +879,20 @@ Engineer scopes:
   master key), tenant-scoped, audit-logged on every resolve. CLI
   `aldo secrets {set,get,ls,rm}` POSTs to API. ToolHost resolves
   `secret://<name>` references at tool-call time only.
+
+[2026-04-25 14:05 UTC] backend@wave7-engineer-B — @aldo-ai/guards landed
+New workspace package with three layers: spotlighting (Simon-style
+<untrusted-content source="..."> wrappers + a system-prompt prefix that
+tells the model to treat inner text as data), regex output-scanner
+(allowlisted URLs / base64 blobs / 13 curated prompt-leak markers
+sourced from Simon Willison's writeups, OWASP LLM-Top-10 2025, MS PyRIT,
+public DAN/GPTfuzzer corpora), and DualLlmQuarantine that summarises
+oversized tool output through a separate ModelGateway call routed by
+capability class — the privileged path never sees raw tool bytes.
+Wired via a new GatewayMiddleware seam on createGateway: `before`
+rewrites tool_result parts on the inbound CompletionRequest, `after`
+scans every outbound Delta. Added optional `tools.guards` block to
+agent.v1 (types + zod schema, snake-case translation in the loader);
+existing agency YAMLs continue to parse unchanged. 38 new guards tests,
+4 new gateway middleware tests, 5 new registry guards tests; full type-
+check + biome clean across types/gateway/registry/guards.

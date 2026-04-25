@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import {
+  type SandboxError,
+  SandboxRunner,
+  buildPolicy,
+} from '@aldo-ai/sandbox';
 import type {
   AgentRef,
   AgentRegistry,
@@ -17,6 +22,7 @@ import type {
   ToolCallPart,
   ToolHost,
   ToolRef,
+  ToolResult,
   ToolResultPart,
   ToolSchema,
   Tracer,
@@ -45,6 +51,44 @@ export interface AgentRunDeps {
   readonly pauseController?: PauseController;
   /** Optional run-event persistence; absent → events stay in-memory only. */
   readonly runStore?: RunStore;
+  /**
+   * Optional `secret://NAME` resolver. When present, the engine scans
+   * each tool call's args before dispatch and substitutes references
+   * with their plaintext values. The pre-resolve `tool_call` event is
+   * still emitted (the run-event log NEVER sees resolved values), so
+   * the audit trail captures the access without leaking the secret.
+   *
+   * The engine has no compile-time dependency on `@aldo-ai/secrets`;
+   * any callable matching this shape works.
+   */
+  readonly secretResolver?: SecretArgResolver;
+  /**
+   * Optional sandbox runner. Every native + MCP tool invocation is
+   * routed through this — the policy is derived from the AgentSpec's
+   * `tools.permissions`. When absent, the engine builds a default
+   * `SandboxRunner` (in-process driver, no real isolation).
+   */
+  readonly sandbox?: SandboxRunner;
+}
+
+/**
+ * Pluggable resolver for `secret://NAME` substrings inside tool args.
+ * The implementation in `@aldo-ai/secrets` walks the value recursively
+ * and writes one audit row per textual occurrence; the engine doesn't
+ * need to know how it does that.
+ */
+export interface SecretArgResolver {
+  /** Returns true iff `value` contains at least one `secret://` reference. */
+  hasRefs(value: unknown): boolean;
+  /**
+   * Walk a JSON-shaped value, substituting every `secret://NAME`
+   * reference with its plaintext. `caller` and optional `runId`/`tenantId`
+   * are forwarded to the audit log.
+   */
+  resolveInArgs(
+    value: unknown,
+    ctx: { tenantId: TenantId; caller: string; runId?: string },
+  ): Promise<unknown>;
 }
 
 export interface AgentRunOptions {
@@ -408,9 +452,22 @@ export class LeafAgentRun implements InternalAgentRun {
               const tcCp = await this.checkpoint();
               await this.maybePauseAt('before_tool_call', tc.tool, 'tool_call', tcCp);
               if (this.cancelled) return;
+              // Emit the tool_call event with the PRE-resolve args. The
+              // run-event stream and any persisted audit must never see
+              // the resolved plaintext — `secret://NAME` flows through
+              // unchanged. The resolver writes its own audit row(s).
               this.emit({ type: 'tool_call', at: now(), payload: tc });
               const ref: ToolRef = resolveToolRef(this.spec, tc.tool);
-              const r = await this.deps.toolHost.invoke(ref, tc.args, ctx);
+              const resolver = this.deps.secretResolver;
+              const argsForTool: unknown =
+                resolver !== undefined && resolver.hasRefs(tc.args)
+                  ? await resolver.resolveInArgs(tc.args, {
+                      tenantId: this.tenant,
+                      caller: this.spec.identity.name,
+                      runId: this.id as unknown as string,
+                    })
+                  : tc.args;
+              const r = await this.invokeToolThroughSandbox(ref, argsForTool, ctx);
               result = r.value;
               isError = !r.ok;
               this.toolResultsRecord[tc.callId] = result;
@@ -479,6 +536,56 @@ export class LeafAgentRun implements InternalAgentRun {
       agentName: this.spec.identity.name,
       agentVersion: this.spec.identity.version,
     };
+  }
+
+  /**
+   * Route every tool dispatch through the sandbox. The actual
+   * `toolHost.invoke` runs *inside* the sandbox boundary so that
+   * timeouts, env scrub, cwd jail, network egress allowlist, and
+   * cancellation all apply uniformly to native + MCP tools.
+   *
+   * On a `SandboxError`, we surface a structured `ToolResult` with
+   * `ok: false` and a code-tagged error so the loop can let the
+   * model see the failure (rather than crashing the run).
+   */
+  private async invokeToolThroughSandbox(
+    ref: ToolRef,
+    args: unknown,
+    ctx: CallContext,
+  ): Promise<ToolResult> {
+    const sandbox = this.deps.sandbox ?? defaultSandboxRunner();
+    const policy = buildPolicy({ spec: this.spec });
+    try {
+      const result = await sandbox.run<unknown, ToolResult>(
+        {
+          kind: 'inline',
+          inline: async (toolArgs) => {
+            return this.deps.toolHost.invoke(ref, toolArgs, ctx);
+          },
+        },
+        {
+          toolName: ref.mcpServer ? `${ref.mcpServer}.${ref.name}` : ref.name,
+          args,
+          policy,
+          ...(ctx.signal !== undefined ? { signal: ctx.signal } : {}),
+        },
+      );
+      return result.value;
+    } catch (err) {
+      if (isSandboxError(err)) {
+        return {
+          ok: false,
+          value: { error: err.message, sandboxCode: err.code },
+          error: { code: err.code, message: err.message },
+        };
+      }
+      const e = err instanceof Error ? err : new Error(String(err));
+      return {
+        ok: false,
+        value: { error: e.message },
+        error: { code: 'TOOL_ERROR', message: e.message },
+      };
+    }
   }
 
   // ───────────────────────────────────────────────── event stream plumbing
@@ -605,6 +712,23 @@ export class LeafAgentRun implements InternalAgentRun {
 }
 
 // ─────────────────────────────────────────────────── helpers
+
+let cachedDefaultSandbox: SandboxRunner | undefined;
+function defaultSandboxRunner(): SandboxRunner {
+  if (cachedDefaultSandbox) return cachedDefaultSandbox;
+  // The driver respects SANDBOX_DRIVER env (in-process | subprocess).
+  cachedDefaultSandbox = new SandboxRunner();
+  return cachedDefaultSandbox;
+}
+
+function isSandboxError(err: unknown): err is SandboxError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { name?: unknown }).name === 'SandboxError' &&
+    typeof (err as { code?: unknown }).code === 'string'
+  );
+}
 
 function now(): string {
   return new Date().toISOString();

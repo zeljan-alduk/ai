@@ -14,11 +14,13 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@aldo-ai/sandbox": "workspace:*",
     "@aldo-ai/storage": "workspace:*",
     "@aldo-ai/types": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@aldo-ai/secrets": "workspace:*",
     "@electric-sql/pglite": "~0.4.4",
     "@types/node": "^22.10.0",
     "typescript": "^5.6.3",

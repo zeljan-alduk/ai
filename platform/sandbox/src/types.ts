@@ -122,7 +122,7 @@ export interface SandboxScope {
 export class SandboxError extends Error {
   readonly code: SandboxErrorCode;
   readonly toolName: string;
-  readonly cause?: unknown;
+  override readonly cause?: unknown;
   readonly stdout?: string;
   readonly stderr?: string;
   constructor(args: {

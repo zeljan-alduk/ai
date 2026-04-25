@@ -29,6 +29,7 @@ import { evalRoutes } from './routes/eval.js';
 import { healthRoutes } from './routes/health.js';
 import { modelsRoutes } from './routes/models.js';
 import { runsRoutes } from './routes/runs.js';
+import { secretsRoutes } from './routes/secrets.js';
 
 export interface BuildAppOptions {
   /** Disable the request logger (tests pass `false`). */
@@ -63,6 +64,7 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', modelsRoutes(deps));
   app.route('/', debuggerRoutes(deps));
   app.route('/', evalRoutes(deps, deps.evalDeps !== undefined ? { evalDeps: deps.evalDeps } : {}));
+  app.route('/', secretsRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>

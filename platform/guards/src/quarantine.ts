@@ -1,10 +1,4 @@
-import type {
-  CallContext,
-  CompletionRequest,
-  Delta,
-  Message,
-  ModelGateway,
-} from '@aldo-ai/types';
+import type { CallContext, CompletionRequest, Delta, Message, ModelGateway } from '@aldo-ai/types';
 
 /**
  * Dual-LLM quarantine pattern (Simon Willison): a tool result that is large

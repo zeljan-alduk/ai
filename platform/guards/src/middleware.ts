@@ -8,11 +8,7 @@ import type {
 } from '@aldo-ai/types';
 import { type ResolvedGuardsConfig, severityAtLeast } from './config.js';
 import { type ScanResult, scanOutput } from './output-scanner.js';
-import {
-  type QuarantineGateway,
-  type QuarantineResult,
-  DualLlmQuarantine,
-} from './quarantine.js';
+import { DualLlmQuarantine, type QuarantineGateway, type QuarantineResult } from './quarantine.js';
 import { stringifyForSpotlight, wrapUntrustedContent } from './spotlighting.js';
 
 /**
@@ -87,7 +83,7 @@ export function createGuardsMiddleware(opts: GuardsMiddlewareOptions): GatewayMi
 
           // Quarantine path runs first so the scanner+spotlight sees the
           // replacement text instead of the raw bytes.
-          if (quarantine !== undefined && quarantine.shouldQuarantine(raw)) {
+          if (quarantine?.shouldQuarantine(raw)) {
             const qres = await quarantine.run(raw, ctx);
             events?.onQuarantine?.(qres, ctx);
             raw = qres.safeText;

@@ -66,10 +66,19 @@ export interface ScanPolicy {
 // ---------------------------------------------------------------------------
 
 const PROMPT_LEAK_PATTERNS: readonly { readonly pattern: RegExp; readonly label: string }[] = [
-  { pattern: /\bignore (?:all |the )?previous (?:instructions|prompts?)\b/i, label: 'ignore previous' },
-  { pattern: /\bdisregard (?:all |the )?(?:above|previous) (?:instructions|prompts?)\b/i, label: 'disregard above' },
+  {
+    pattern: /\bignore (?:all |the )?previous (?:instructions|prompts?)\b/i,
+    label: 'ignore previous',
+  },
+  {
+    pattern: /\bdisregard (?:all |the )?(?:above|previous) (?:instructions|prompts?)\b/i,
+    label: 'disregard above',
+  },
   { pattern: /\byou are now\b/i, label: 'you are now' },
-  { pattern: /\bact as (?:a |an )?(?:unrestricted|jailbroken|developer-mode)\b/i, label: 'act as unrestricted' },
+  {
+    pattern: /\bact as (?:a |an )?(?:unrestricted|jailbroken|developer-mode)\b/i,
+    label: 'act as unrestricted',
+  },
   { pattern: /\bpretend (?:that )?you (?:are|have)\b/i, label: 'pretend you are' },
   { pattern: /\bsystem prompt\b/i, label: 'system prompt' },
   { pattern: /\bdeveloper mode\b/i, label: 'developer mode' },
@@ -81,7 +90,10 @@ const PROMPT_LEAK_PATTERNS: readonly { readonly pattern: RegExp; readonly label:
   { pattern: /\b<\|im_end\|>\b/i, label: 'im_end token' },
 ];
 
-export function getPromptLeakPatterns(): readonly { readonly label: string; readonly pattern: RegExp }[] {
+export function getPromptLeakPatterns(): readonly {
+  readonly label: string;
+  readonly pattern: RegExp;
+}[] {
   return PROMPT_LEAK_PATTERNS;
 }
 
@@ -141,27 +153,22 @@ const MARKDOWN_LINK_RE = /\[[^\]\n]{1,200}\]\((https?:[^\s)]+)\)/g;
 
 export function scanOutput(text: string, policy: ScanPolicy = {}): ScanResult {
   const findings: ScanFinding[] = [];
-
-  // Rule 1: URLs not in the allowlist.
-  // Always run — empty allowlist means "flag all URLs" (callers can opt in by
-  // listing `https://*` if they truly don't care).
-  {
-    URL_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = URL_RE.exec(text)) !== null) {
-      const host = m[1] ?? '';
-      const path = m[2] ?? '';
-      const allowlist = policy.urlAllowlist ?? [];
-      if (!urlMatchesAllowlist(host, path, allowlist)) {
-        findings.push({
-          kind: 'url_not_allowlisted',
-          severity: 'warn',
-          message: `URL host "${host}" is not in the allowlist`,
-          start: m.index,
-          end: m.index + m[0].length,
-          snippet: clipSnippet(text, m.index, m.index + m[0].length),
-        });
-      }
+  URL_RE.lastIndex = 0;
+  for (;;) {
+    const m = URL_RE.exec(text);
+    if (m === null) break;
+    const host = m[1] ?? '';
+    const path = m[2] ?? '';
+    const allowlist = policy.urlAllowlist ?? [];
+    if (!urlMatchesAllowlist(host, path, allowlist)) {
+      findings.push({
+        kind: 'url_not_allowlisted',
+        severity: 'warn',
+        message: `URL host "${host}" is not in the allowlist`,
+        start: m.index,
+        end: m.index + m[0].length,
+        snippet: clipSnippet(text, m.index, m.index + m[0].length),
+      });
     }
   }
 
@@ -169,8 +176,9 @@ export function scanOutput(text: string, policy: ScanPolicy = {}): ScanResult {
   {
     const minChars = policy.base64MinChars ?? 256;
     BASE64_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = BASE64_RE.exec(text)) !== null) {
+    for (;;) {
+      const m = BASE64_RE.exec(text);
+      if (m === null) break;
       const span = m[0];
       if (span.length >= minChars && isLikelyBase64(span, minChars)) {
         findings.push({
@@ -187,10 +195,14 @@ export function scanOutput(text: string, policy: ScanPolicy = {}): ScanResult {
 
   // Rule 3: prompt-leak markers.
   for (const { pattern, label } of PROMPT_LEAK_PATTERNS) {
-    const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+    const re = new RegExp(
+      pattern.source,
+      pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`,
+    );
     re.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
+    for (;;) {
+      const m = re.exec(text);
+      if (m === null) break;
       findings.push({
         kind: 'prompt_leak_marker',
         severity: 'critical',
@@ -210,8 +222,9 @@ export function scanOutput(text: string, policy: ScanPolicy = {}): ScanResult {
     const perHundred = policy.linkDensity?.per100CharsThreshold ?? 1.5;
     MARKDOWN_LINK_RE.lastIndex = 0;
     const matches: RegExpExecArray[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = MARKDOWN_LINK_RE.exec(text)) !== null) {
+    for (;;) {
+      const m = MARKDOWN_LINK_RE.exec(text);
+      if (m === null) break;
       matches.push(m);
     }
     if (matches.length >= minLinks && text.length > 0) {

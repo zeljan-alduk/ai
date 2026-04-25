@@ -32,6 +32,9 @@ importers:
       '@aldo-ai/registry':
         specifier: workspace:*
         version: link:../../platform/registry
+      '@aldo-ai/secrets':
+        specifier: workspace:*
+        version: link:../../platform/secrets
       '@aldo-ai/storage':
         specifier: workspace:*
         version: link:../../platform/storage
@@ -205,6 +208,9 @@ importers:
 
   platform/engine:
     dependencies:
+      '@aldo-ai/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@aldo-ai/storage':
         specifier: workspace:*
         version: link:../storage
@@ -215,6 +221,9 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@aldo-ai/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@electric-sql/pglite':
         specifier: ~0.4.4
         version: 0.4.4
@@ -274,6 +283,9 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@aldo-ai/guards':
+        specifier: workspace:*
+        version: link:../guards
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17

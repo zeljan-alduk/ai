@@ -15,6 +15,7 @@
     "@aldo-ai/api-contract": "workspace:*",
     "@aldo-ai/eval": "workspace:*",
     "@aldo-ai/registry": "workspace:*",
+    "@aldo-ai/secrets": "workspace:*",
     "@aldo-ai/storage": "workspace:*",
     "@aldo-ai/types": "workspace:*",
     "@hono/node-server": "^1.13.0",

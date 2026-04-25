@@ -13,6 +13,11 @@
  */
 
 import { AgentRegistry, PostgresStorage } from '@aldo-ai/registry';
+import {
+  PostgresSecretStore,
+  type SecretStore,
+  loadMasterKeyFromEnv,
+} from '@aldo-ai/secrets';
 import { type SqlClient, fromDatabaseUrl } from '@aldo-ai/storage';
 import {
   type EngineDebugger,
@@ -30,6 +35,10 @@ export interface Env {
   readonly MODELS_FIXTURE_PATH?: string | undefined;
   /** Server build/version label exposed by /health. */
   readonly API_VERSION?: string | undefined;
+  /** When set, allow `aldo` to start without `ALDO_SECRETS_MASTER_KEY`. */
+  readonly NODE_ENV?: string | undefined;
+  /** 32-byte base64 master key for `@aldo-ai/secrets`. Required in prod. */
+  readonly ALDO_SECRETS_MASTER_KEY?: string | undefined;
   /** Provider key + base-URL env vars. Read by the models route to stamp `available`. */
   readonly [k: string]: string | undefined;
 }
@@ -59,6 +68,15 @@ export interface Deps {
    * Tests inject a stub through this seam.
    */
   readonly evalDeps?: EvalDeps;
+  /**
+   * Secrets surface — store + the tenant id all v0 requests are scoped
+   * to. Empty when the host hasn't wired secrets (in which case
+   * `/v1/secrets` returns 500). Tests can swap an `InMemorySecretStore`
+   * in via `CreateDepsOptions.secrets`.
+   */
+  readonly secrets?: { readonly store: SecretStore };
+  /** v0 single-tenant constant; set per-request once auth lands. */
+  readonly tenantId?: string;
   /** Release the underlying SQL client. */
   close(): Promise<void>;
 }
@@ -72,6 +90,10 @@ export interface CreateDepsOptions {
   readonly engineDebugger?: EngineDebugger;
   /** Inject custom eval deps (tests use this to stub the runner / gate). */
   readonly evalDeps?: EvalDeps;
+  /** Inject a `SecretStore` (tests use `InMemorySecretStore`). */
+  readonly secrets?: { readonly store: SecretStore };
+  /** Override the tenant id used by every v0 request. */
+  readonly tenantId?: string;
 }
 
 export async function createDeps(
@@ -83,12 +105,32 @@ export async function createDeps(
     opts.registry ?? new AgentRegistry({ storage: new PostgresStorage({ client: db }) });
   const version = env.API_VERSION ?? '0.0.0';
   const __defaultDebugger = createInProcessEngineDebugger();
+
+  // Build the secrets store. If the caller supplies one (tests) use it
+  // verbatim; otherwise resolve the master key from env and wire a
+  // `PostgresSecretStore` against the same SqlClient. Production
+  // enforces the env var; dev (`NODE_ENV !== 'production'`) generates
+  // an ephemeral key and warns.
+  const secrets =
+    opts.secrets ?? {
+      store: new PostgresSecretStore({
+        client: db,
+        masterKey: loadMasterKeyFromEnv({
+          env,
+          allowDevFallback: env.NODE_ENV !== 'production',
+        }),
+      }),
+    };
+  const tenantId = opts.tenantId ?? 'tenant-default';
+
   const deps: Deps = {
     db,
     registry,
     env,
     version,
     __defaultDebugger,
+    secrets,
+    tenantId,
     ...(opts.engineDebugger !== undefined ? { engineDebugger: opts.engineDebugger } : {}),
     ...(opts.evalDeps !== undefined ? { evalDeps: opts.evalDeps } : {}),
     async close() {

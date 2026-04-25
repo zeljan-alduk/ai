@@ -66,9 +66,10 @@ function denial(host: string): Error {
 // covers the modern code path; the net/tls patches below catch
 // everything below it.
 
+type FetchInput = string | URL | { url: string };
 const realFetch = globalThis.fetch;
 if (typeof realFetch === 'function') {
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const wrapper = (input: FetchInput, init?: RequestInit): Promise<Response> => {
     let host = 'unknown';
     try {
       const u =
@@ -76,7 +77,7 @@ if (typeof realFetch === 'function') {
           ? new URL(input)
           : input instanceof URL
             ? input
-            : new URL((input as Request).url);
+            : new URL(input.url);
       host = u.hostname;
     } catch {
       // fall through with 'unknown' — denied unless allowed.
@@ -84,8 +85,9 @@ if (typeof realFetch === 'function') {
     if (!isHostAllowed(POLICY, host)) {
       return Promise.reject(denial(host));
     }
-    return realFetch(input as RequestInfo, init);
-  }) as typeof fetch;
+    return (realFetch as (i: FetchInput, init?: RequestInit) => Promise<Response>)(input, init);
+  };
+  (globalThis as unknown as { fetch: unknown }).fetch = wrapper;
 }
 
 // ─────────────────────────────────────────────── net / tls patching

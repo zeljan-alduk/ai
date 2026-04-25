@@ -1,7 +1,14 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
@@ -57,15 +64,12 @@ export class SubprocessSandbox implements SandboxAdapter {
     const runnerPath = join(jail.root, '.aldo-runner.mjs');
     writeFileSync(runnerPath, runnerScript, 'utf8');
 
-    // Egress loader path (resolved from this file).
-    const egressLoaderPath = fileURLToPath(
-      new URL('./internal/egress-loader.js', import.meta.url),
-    );
-    // In dev (no build), the .js doesn't exist — fall back to .ts via
-    // the loader path the workspace tsconfig sets up. Subprocess will
-    // run a transpiled bundle in production; tests inject the .ts path
-    // explicitly via SANDBOX_EGRESS_LOADER.
-    const loader = process.env.SANDBOX_EGRESS_LOADER ?? egressLoaderPath;
+    // Egress loader path (resolved from this file). We ship a `.mjs`
+    // counterpart of the loader so the child doesn't need a TS toolchain;
+    // the .ts version exists for package consumers/types. We probe a
+    // couple of layout shapes so this works whether `subprocess.ts` is
+    // resolved from src/ (vitest) or from dist/ (built packages).
+    const loader = process.env.SANDBOX_EGRESS_LOADER ?? resolveEgressLoader();
 
     const networkEnv = encodeNetworkPolicy(req.policy.network);
 
@@ -361,6 +365,24 @@ function extractEgressMessage(stderr: string, resultJson: string | undefined): s
     }
   }
   return undefined;
+}
+
+function resolveEgressLoader(): string {
+  // 1. sibling: ./internal/egress-loader.mjs (src layout, vitest)
+  const here = fileURLToPath(import.meta.url);
+  const siblingPaths = [
+    join(dirname(here), 'internal', 'egress-loader.mjs'),
+    // 2. one up: ../src/internal/egress-loader.mjs (dist/src/subprocess.js → src/internal/...)
+    join(dirname(here), '..', 'src', 'internal', 'egress-loader.mjs'),
+    // 3. two up: ../../src/internal/egress-loader.mjs
+    join(dirname(here), '..', '..', 'src', 'internal', 'egress-loader.mjs'),
+  ];
+  for (const p of siblingPaths) {
+    if (existsSync(p)) return p;
+  }
+  // Last resort: return the sibling path even if missing — the child
+  // will fail with a clear ENOENT, surfacing as RUNTIME_ERROR.
+  return siblingPaths[0] as string;
 }
 
 function tryApplyRlimits(

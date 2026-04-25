@@ -12,6 +12,7 @@
  */
 
 import { AgentRegistry, PostgresStorage } from '@aldo-ai/registry';
+import { InMemorySecretStore } from '@aldo-ai/secrets';
 import { type SqlClient, fromDatabaseUrl, migrate } from '@aldo-ai/storage';
 import { buildApp } from '../src/app.js';
 import { type Deps, type Env, createDeps } from '../src/deps.js';
@@ -28,7 +29,11 @@ export async function setupTestEnv(envOverrides: Env = {}): Promise<TestEnv> {
   await migrate(db);
   const env: Env = { DATABASE_URL: '', ...envOverrides };
   const registry = new AgentRegistry({ storage: new PostgresStorage({ client: db }) });
-  const deps = await createDeps(env, { db, registry });
+  // Tests use the in-memory secrets store so we never need a master
+  // key in the test env. Tests that exercise persistence semantics can
+  // build a `PostgresSecretStore` directly via the same `db`.
+  const secrets = { store: new InMemorySecretStore() };
+  const deps = await createDeps(env, { db, registry, secrets });
   const app = buildApp(deps, { log: false });
   return {
     deps,

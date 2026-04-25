@@ -35,9 +35,7 @@ export const DEFAULT_GUARDS_CONFIG: ResolvedGuardsConfig = {
 };
 
 /** Apply defaults to a partial agent-spec guards block. */
-export function resolveGuardsConfig(
-  raw: ToolsGuardsConfig | undefined,
-): ResolvedGuardsConfig {
+export function resolveGuardsConfig(raw: ToolsGuardsConfig | undefined): ResolvedGuardsConfig {
   const d = DEFAULT_GUARDS_CONFIG;
   if (raw === undefined) return d;
   return {

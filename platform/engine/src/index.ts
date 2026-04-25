@@ -10,6 +10,7 @@ export type {
   AgentRunDeps,
   AgentRunOptions,
   InternalAgentRun,
+  SecretArgResolver,
 } from './agent-run.js';
 
 export { PlatformRuntime, SpawnNotAllowedError } from './runtime.js';
