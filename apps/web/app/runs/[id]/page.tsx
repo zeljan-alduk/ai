@@ -2,8 +2,11 @@ import { NeutralBadge, StatusBadge } from '@/components/badge';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorView } from '@/components/error-boundary';
 import { PageHeader } from '@/components/page-header';
-import { getRun } from '@/lib/api';
+import { CostRollupCard } from '@/components/runs/cost-rollup-card';
+import { RunTree } from '@/components/runs/run-tree';
+import { ApiClientError, getRun, getRunTree } from '@/lib/api';
 import { formatAbsolute, formatDuration, formatRelativeTime, formatUsd } from '@/lib/format';
+import type { RunTreeNode } from '@aldo-ai/api-contract';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -16,11 +19,29 @@ export default async function RunDetailPage({
   const { id } = await params;
 
   let data: Awaited<ReturnType<typeof getRun>> | null = null;
+  let tree: RunTreeNode | null = null;
   let error: unknown = null;
   try {
     data = await getRun(id);
   } catch (err) {
     error = err;
+  }
+
+  // Tree fetch is best-effort: a child run on a wave-9 server will return
+  // the whole tree; a server that doesn't yet implement /tree returns 404
+  // and we fall back to "no subagent runs" UX. Anything else (including
+  // 422 depth-overflow) bubbles through to the error boundary.
+  if (data !== null) {
+    try {
+      const res = await getRunTree(id);
+      tree = res.tree;
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status === 404) {
+        tree = null;
+      } else {
+        error = err;
+      }
+    }
   }
 
   return (
@@ -40,14 +61,31 @@ export default async function RunDetailPage({
       {error ? (
         <ErrorView error={error} context="this run" />
       ) : data ? (
-        <RunDetailBody run={data.run} />
+        <RunDetailBody run={data.run} tree={tree} currentRunId={id} />
       ) : null}
     </>
   );
 }
 
-function RunDetailBody({ run }: { run: Awaited<ReturnType<typeof getRun>>['run'] }) {
+function RunDetailBody({
+  run,
+  tree,
+  currentRunId,
+}: {
+  run: Awaited<ReturnType<typeof getRun>>['run'];
+  tree: RunTreeNode | null;
+  currentRunId: string;
+}) {
   const totalCost = run.totalUsd;
+  // We render the tree + cost-rollup cards when:
+  //   (a) the API returned a tree with at least one subagent run, OR
+  //   (b) the run has a non-null parentRunId (so we're a CHILD viewing
+  //       up at our siblings/parent — the tree is still useful), OR
+  //   (c) the run's spec advertises a composite block (best-effort —
+  //       AgentDetail.spec is `unknown`, we just dip-and-look).
+  const hasSubagentRuns = tree !== null && countDescendants(tree) > 0;
+  const isChild = run.parentRunId !== null;
+  const showTree = hasSubagentRuns || isChild;
 
   return (
     <div className="flex flex-col gap-6">
@@ -103,6 +141,20 @@ function RunDetailBody({ run }: { run: Awaited<ReturnType<typeof getRun>>['run']
           )}
         </Field>
       </section>
+
+      {showTree ? (
+        tree !== null && countDescendants(tree) > 0 ? (
+          <>
+            <RunTree tree={tree} currentRunId={currentRunId} />
+            <CostRollupCard run={run} tree={tree} />
+          </>
+        ) : (
+          <EmptyState
+            title="No subagent runs."
+            hint="This run isn't part of a composite tree yet."
+          />
+        )
+      ) : null}
 
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -195,6 +247,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="mt-1">{children}</div>
     </div>
   );
+}
+
+function countDescendants(node: RunTreeNode): number {
+  return node.children.reduce((acc, c) => acc + 1 + countDescendants(c), 0);
 }
 
 function summarizePayload(payload: unknown): string {

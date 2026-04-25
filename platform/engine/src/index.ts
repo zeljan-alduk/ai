@@ -13,8 +13,18 @@ export type {
   SecretArgResolver,
 } from './agent-run.js';
 
-export { PlatformRuntime, SpawnNotAllowedError } from './runtime.js';
-export type { RuntimeDeps } from './runtime.js';
+export {
+  PlatformRuntime,
+  SpawnNotAllowedError,
+  CompositeRuntimeMissingError,
+} from './runtime.js';
+export type {
+  RuntimeDeps,
+  CompositeOrchestrator,
+  SupervisorRuntimeAdapter,
+  SpawnedChildHandle as EngineSpawnedChildHandle,
+  SpawnOpts,
+} from './runtime.js';
 
 export { PlatformOrchestrator } from './orchestrator.js';
 export type { OrchestratorDeps } from './orchestrator.js';

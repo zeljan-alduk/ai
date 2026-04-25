@@ -22,6 +22,20 @@ export interface RunStartArgs {
   readonly tenant: TenantId;
   readonly ref: AgentRef;
   readonly parent?: RunId;
+  /**
+   * Wave-9: top-of-tree run id for composite hierarchies. Defaults to
+   * the run's own id (= a non-composite root run). When the run is a
+   * descendant in a composite tree, the orchestrator sets this to the
+   * root supervisor's run id so SELECT * FROM runs WHERE root_run_id =
+   * <id> reconstructs the whole tree in one query.
+   */
+  readonly root?: RunId;
+  /**
+   * Wave-9: which composite strategy spawned this run. NULL for runs
+   * that aren't children of a composite (single-agent runs are
+   * unaffected and continue to write NULL).
+   */
+  readonly compositeStrategy?: 'sequential' | 'parallel' | 'debate' | 'iterative';
 }
 
 export interface RunEndArgs {
@@ -70,7 +84,25 @@ export class InMemoryRunStore implements RunStore {
 
   async recordRunStart(args: RunStartArgs): Promise<void> {
     if (this.runs.has(args.runId)) return;
-    this.runs.set(args.runId, { ...args, status: 'running' });
+    // Default root_run_id to the run's own id when not supplied — keeps
+    // `runs.find(r => r.root === id)` returning the root in single-agent
+    // (non-composite) runs without callers having to special-case it.
+    const root = args.root ?? args.runId;
+    this.runs.set(args.runId, { ...args, root, status: 'running' });
+  }
+
+  /** Read-only access for tests + the orchestrator. */
+  getRun(runId: RunId): (RunStartArgs & { status: string; endedAt?: string }) | undefined {
+    return this.runs.get(runId);
+  }
+
+  /** Walk all runs in a composite tree by root_run_id. */
+  listByRoot(rootRunId: RunId): readonly (RunStartArgs & { status: string })[] {
+    const out: (RunStartArgs & { status: string })[] = [];
+    for (const r of this.runs.values()) {
+      if ((r.root ?? r.runId) === rootRunId) out.push(r);
+    }
+    return out;
   }
 
   async recordRunEnd(args: RunEndArgs): Promise<void> {
@@ -116,12 +148,28 @@ export class PostgresRunStore implements RunStore {
     // ON CONFLICT keeps `recordRunStart` safely idempotent — the engine
     // calls it every time a run spawns, including resumes that share a
     // parent run id.
+    //
+    // Wave-9: also persist root_run_id + composite_strategy. Migration
+    // 005 added the columns; pre-migration databases will reject this
+    // INSERT until the operator runs `pnpm migrate`. Single-agent runs
+    // default root_run_id = id (so `WHERE root_run_id = $1` resolves
+    // every run in O(1) regardless of whether it's part of a tree).
+    const root = args.root ?? args.runId;
     await this.client.query(
       `INSERT INTO runs
-         (id, tenant_id, agent_name, agent_version, parent_run_id, status)
-       VALUES ($1, $2, $3, $4, $5, 'running')
+         (id, tenant_id, agent_name, agent_version,
+          parent_run_id, root_run_id, composite_strategy, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'running')
        ON CONFLICT (id) DO NOTHING`,
-      [args.runId, args.tenant, args.ref.name, args.ref.version ?? '0.0.0', args.parent ?? null],
+      [
+        args.runId,
+        args.tenant,
+        args.ref.name,
+        args.ref.version ?? '0.0.0',
+        args.parent ?? null,
+        root,
+        args.compositeStrategy ?? null,
+      ],
     );
   }
 

@@ -4,7 +4,15 @@ kind: Agent
 identity:
   name: tech-lead
   version: 0.1.0
-  description: Breaks an ADR or initiative into concrete work for the delivery team and owns the outcome.
+  description: >-
+    Breaks an ADR or initiative into concrete work for the delivery team
+    and owns the outcome. Composite: paired-review pipeline that runs
+    code-reviewer first (correctness/style) then security-auditor
+    (threat surface) on the same diff. Picked sequential (not parallel)
+    because the security-auditor benefits from the code-reviewer's
+    annotated summary — running the two in parallel duplicates the diff
+    parse and the security pass loses the structural context that the
+    code review surfaces.
   owner: delivery-team@aldo-tech-labs
   tags: [delivery, leadership, coordination]
 
@@ -52,7 +60,7 @@ tools:
     - server: github
       allow: [pr.read, pr.comment, issue.read, issue.write]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readwrite
 
 memory:
@@ -85,7 +93,8 @@ inputs:
 
 outputs:
   delivery_plan:
-    json_schema_ref: schemas/delivery_plan.json
+    json_schema:
+      $ref: schemas/delivery_plan.json
 
 eval_gate:
   required_suites:
@@ -94,3 +103,16 @@ eval_gate:
     - suite: scope_boundary_v1
       min_score: 0.85
   must_pass_before_promote: true
+
+composite:
+  strategy: sequential
+  subagents:
+    - agent: code-reviewer
+      as: reviewer
+      input_map:
+        diff: input.diff
+    - agent: security-auditor
+      as: security
+      input_map:
+        diff: input.diff
+        review: outputs.reviewer.review

@@ -14,6 +14,8 @@
 import { readFile } from 'node:fs/promises';
 import type {
   AgentSpec,
+  CompositeSpec,
+  CompositeSubagent,
   EscalationRule,
   EvalGate,
   MemoryPolicy,
@@ -206,6 +208,29 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
         )
       : undefined;
 
+  const composite: CompositeSpec | undefined =
+    y.composite !== undefined
+      ? {
+          strategy: y.composite.strategy,
+          subagents: y.composite.subagents.map(
+            (s): CompositeSubagent => ({
+              agent: s.agent,
+              ...(s.as !== undefined ? { as: s.as } : {}),
+              ...(s.input_map !== undefined ? { inputMap: s.input_map } : {}),
+            }),
+          ),
+          ...(y.composite.aggregator !== undefined ? { aggregator: y.composite.aggregator } : {}),
+          ...(y.composite.iteration !== undefined
+            ? {
+                iteration: {
+                  maxRounds: y.composite.iteration.max_rounds,
+                  terminate: y.composite.iteration.terminate,
+                },
+              }
+            : {}),
+        }
+      : undefined;
+
   const sandbox: SandboxConfig | undefined =
     y.sandbox !== undefined
       ? {
@@ -263,6 +288,7 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
     ...(outputs !== undefined ? { outputs } : {}),
     evalGate,
     ...(sandbox !== undefined ? { sandbox } : {}),
+    ...(composite !== undefined ? { composite } : {}),
   };
 
   return spec;

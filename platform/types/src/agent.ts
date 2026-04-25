@@ -130,6 +130,57 @@ export interface EvalGate {
   readonly mustPassBeforePromote: boolean;
 }
 
+/**
+ * Wave-9 composite agents.
+ *
+ * A `composite` block on an `AgentSpec` describes a multi-agent
+ * composition the orchestrator runtime will execute on the parent
+ * agent's behalf. The parent supervisor stays the single addressable
+ * unit (one identity, one privacy_tier, one set of eval gates); the
+ * composite block declares HOW its work breaks into subagents.
+ *
+ * The shape is **purely structural** — it never references a provider
+ * or model id, and it never carries its own privacy_tier. The runtime
+ * cascades the parent supervisor's privacy_tier to every subagent so
+ * an operator who marks a supervisor `sensitive` does not have to
+ * re-mark each subagent (and cannot accidentally leak by forgetting).
+ */
+export type CompositeStrategy = 'sequential' | 'parallel' | 'debate' | 'iterative';
+
+export interface CompositeSubagent {
+  /** Name of an existing AgentSpec the registry can resolve. */
+  readonly agent: string;
+  /** Optional alias used by aggregator/iterator expressions. */
+  readonly as?: string;
+  /**
+   * Optional jsonpath/expression map projecting parent inputs into the
+   * subagent's call. Keys are subagent input names; values are simple
+   * dotted paths the runtime evaluates (e.g. `input.diff`,
+   * `outputs.reviewer.summary`). Kept opaque here — Engineer J's
+   * runtime owns the evaluation grammar.
+   */
+  readonly inputMap?: Readonly<Record<string, string>>;
+}
+
+export interface CompositeIteration {
+  readonly maxRounds: number;
+  /**
+   * Termination predicate evaluated after each round. Format is owned
+   * by the runtime (jsonpath / simple expression); the schema layer
+   * only enforces non-empty.
+   */
+  readonly terminate: string;
+}
+
+export interface CompositeSpec {
+  readonly strategy: CompositeStrategy;
+  readonly subagents: ReadonlyArray<CompositeSubagent>;
+  /** Required iff `strategy === 'debate'`. */
+  readonly aggregator?: string;
+  /** Required iff `strategy === 'iterative'`. */
+  readonly iteration?: CompositeIteration;
+}
+
 /** A fully-parsed agent spec (agent.v1). */
 export interface AgentSpec {
   readonly apiVersion: 'aldo-ai/agent.v1';
@@ -148,6 +199,14 @@ export interface AgentSpec {
   readonly evalGate: EvalGate;
   /** Optional sandbox policy declared on the spec (additive, wave 7.5+). */
   readonly sandbox?: SandboxConfig;
+  /**
+   * Optional composite (multi-agent) specification (additive, wave 9+).
+   * When present, the orchestrator runtime treats this agent as a
+   * supervisor that delegates to the named subagents per `strategy`.
+   * Privacy tier is NOT redeclared here — the runtime cascades the
+   * parent's `modelPolicy.privacyTier` to each subagent call.
+   */
+  readonly composite?: CompositeSpec;
 }
 
 export interface AgentRef {

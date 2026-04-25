@@ -26,6 +26,9 @@ importers:
       '@aldo-ai/api-contract':
         specifier: workspace:*
         version: link:../../platform/api-contract
+      '@aldo-ai/engine':
+        specifier: workspace:*
+        version: link:../../platform/engine
       '@aldo-ai/eval':
         specifier: workspace:*
         version: link:../../platform/eval
@@ -35,6 +38,12 @@ importers:
       '@aldo-ai/local-discovery':
         specifier: workspace:*
         version: link:../../platform/local-discovery
+      '@aldo-ai/observability':
+        specifier: workspace:*
+        version: link:../../platform/observability
+      '@aldo-ai/orchestrator':
+        specifier: workspace:*
+        version: link:../../platform/orchestrator
       '@aldo-ai/registry':
         specifier: workspace:*
         version: link:../../platform/registry
@@ -369,6 +378,28 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.27.0
         version: 1.40.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)
+
+  platform/orchestrator:
+    dependencies:
+      '@aldo-ai/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@aldo-ai/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@aldo-ai/types':
+        specifier: workspace:*
+        version: link:../types
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

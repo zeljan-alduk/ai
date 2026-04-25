@@ -12,8 +12,10 @@ import {
   CreateRunRequest,
   CreateRunResponse,
   GetRunResponse,
+  GetRunTreeResponse,
   ListRunsQuery,
   ListRunsResponse,
+  type RunTreeNode,
 } from '@aldo-ai/api-contract';
 import { type RegisteredModel, createModelRegistry, createRouter } from '@aldo-ai/gateway';
 import type {
@@ -27,7 +29,16 @@ import type {
 } from '@aldo-ai/types';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { decodeCursor, getAgent, getRun, listRuns } from '../db.js';
+import {
+  DEPTH_OVERFLOW_ID,
+  decodeCursor,
+  getAgent,
+  getRun,
+  listRunSubtree,
+  listRuns,
+  projectSubtreeRow,
+  resolveRunRoot,
+} from '../db.js';
 import type { Deps } from '../deps.js';
 import { HttpError, notFound, validationError } from '../middleware/error.js';
 import { loadModelCatalog } from './models.js';
@@ -154,6 +165,91 @@ export function runsRoutes(deps: Deps): Hono {
     return c.json(body);
   });
 
+  /**
+   * `GET /v1/runs/:id/tree` — composite-run tree.
+   *
+   * Resolves the root for any run id (so an operator can drill into a
+   * child page and the tree still renders the whole composition), walks
+   * descendants by `parent_run_id`, and returns the tree shape declared
+   * in @aldo-ai/api-contract. Depth is capped at 10 — a run nested
+   * deeper than that is almost certainly a runtime cycle and the
+   * endpoint refuses with HTTP 422 instead of rendering a partial tree.
+   *
+   * Read-only. The endpoint never writes state and never triggers a
+   * subagent run; rerun affordances live in the engine, not the UI.
+   *
+   * Note the route is defined BEFORE `/v1/runs/:id` so Hono's matcher
+   * picks the more specific path first.
+   */
+  app.get('/v1/runs/:id/tree', async (c) => {
+    const parsed = RunIdParam.safeParse({ id: c.req.param('id') });
+    if (!parsed.success) {
+      throw validationError('invalid run id', parsed.error.issues);
+    }
+    const root = await resolveRunRoot(deps.db, parsed.data.id);
+    if (root === null) {
+      throw notFound(`run not found: ${parsed.data.id}`);
+    }
+    const MAX_DEPTH = 10;
+    const subtree = await listRunSubtree(deps.db, root, MAX_DEPTH);
+    if (subtree.some((r) => r.id === DEPTH_OVERFLOW_ID)) {
+      throw new HttpError(
+        422,
+        'run_tree_too_deep',
+        `composite run tree exceeds the max-depth cap (${MAX_DEPTH})`,
+        { rootRunId: root, maxDepth: MAX_DEPTH },
+      );
+    }
+
+    // Best-effort `classUsed` enrichment: scan the routing audit events
+    // for each node. This is the same data /v1/runs/:id renders, just
+    // bulk-fetched in one query so the tree endpoint stays O(1) trips.
+    const ids = subtree.map((r) => r.id);
+    const classByRun = await loadClassUsedByRun(deps.db, ids);
+
+    // Build the tree from BFS rows. We index by parent_run_id and assemble
+    // recursively from `root`.
+    const projected = subtree.map(projectSubtreeRow);
+    const byParent = new Map<string | null, typeof projected>();
+    for (const r of projected) {
+      const arr = byParent.get(r.parentRunId) ?? [];
+      arr.push(r);
+      byParent.set(r.parentRunId, arr);
+    }
+    const findChildrenOf = (id: string) =>
+      (byParent.get(id) ?? [])
+        .slice()
+        .sort((a, b) => (a.startedAt < b.startedAt ? -1 : a.startedAt > b.startedAt ? 1 : 0));
+    const rootRow = projected.find((r) => r.runId === root);
+    if (rootRow === undefined) {
+      // Should be unreachable because resolveRunRoot returned an existing id.
+      throw notFound(`run not found: ${root}`);
+    }
+
+    const buildNode = (row: (typeof projected)[number]): RunTreeNode => {
+      const children = findChildrenOf(row.runId).map(buildNode);
+      const cls = classByRun.get(row.runId);
+      return {
+        runId: row.runId,
+        agentName: row.agentName,
+        agentVersion: row.agentVersion,
+        status: row.status as RunTreeNode['status'],
+        parentRunId: row.parentRunId,
+        startedAt: row.startedAt,
+        endedAt: row.endedAt,
+        durationMs: row.durationMs,
+        totalUsd: row.totalUsd,
+        lastProvider: row.lastProvider,
+        lastModel: row.lastModel,
+        ...(cls !== undefined ? { classUsed: cls } : {}),
+        children,
+      };
+    };
+
+    const body = GetRunTreeResponse.parse({ tree: buildNode(rootRow) });
+    return c.json(body);
+  });
+
   app.get('/v1/runs/:id', async (c) => {
     const parsed = RunIdParam.safeParse({ id: c.req.param('id') });
     if (!parsed.success) {
@@ -168,6 +264,42 @@ export function runsRoutes(deps: Deps): Hono {
   });
 
   return app;
+}
+
+/**
+ * Look up the `classUsed` value emitted by the wave-8
+ * `routing.privacy_sensitive_resolved` audit row for each run id, when
+ * present. Pre-wave-9 runs (or non-sensitive tiers) won't have the row;
+ * the map simply omits those ids and the wire `classUsed` field stays
+ * undefined.
+ */
+async function loadClassUsedByRun(
+  db: import('@aldo-ai/storage').SqlClient,
+  ids: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  if (ids.length === 0) return new Map();
+  const res = await db.query<{
+    run_id: string;
+    payload_jsonb: unknown;
+    [k: string]: unknown;
+  }>(
+    `SELECT run_id, payload_jsonb FROM run_events
+       WHERE run_id = ANY($1::text[])
+         AND type = 'routing.privacy_sensitive_resolved'`,
+    [[...ids]],
+  );
+  const out = new Map<string, string>();
+  for (const row of res.rows) {
+    const p =
+      typeof row.payload_jsonb === 'string'
+        ? (JSON.parse(row.payload_jsonb) as unknown)
+        : row.payload_jsonb;
+    if (p !== null && typeof p === 'object') {
+      const cls = (p as { classUsed?: unknown }).classUsed;
+      if (typeof cls === 'string') out.set(row.run_id, cls);
+    }
+  }
+  return out;
 }
 
 // --- helpers (shared shape with /v1/agents/:name/check) -------------------

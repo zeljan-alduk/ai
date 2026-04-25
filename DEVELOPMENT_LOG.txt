@@ -1378,3 +1378,249 @@ a Fly secret. Leaving on for now — keeps prod and dev semantics
 identical, and a future "Fly machine with Ollama sidecar" deploy
 would benefit. Revisit if /v1/models p99 ever shows up in real
 traffic.
+
+[2026-04-25 17:45 UTC] Engineer L — wave 9 run-tree UI
+Shipped the read-only operator surface for composite runs. Wire
+schema additions in @aldo-ai/api-contract: `RunTreeNode` (recursive
+Zod via z.lazy) + `GetRunTreeResponse`; additive `hasChildren?:
+boolean` on `RunSummary` so the runs list can render a "composite"
+badge without an N+1 trip; `composite.usage_rollup` added to the
+RunEvent enum so Engineer J's runtime can emit the event the
+cost-rollup card listens for. New API endpoint `GET /v1/runs/:id/tree`
+in apps/api/src/routes/runs.ts: resolves the root for ANY id passed
+in (drill-into-child still renders the whole tree), BFS-walks
+descendants with per-node `total_usd` projected in SQL, enriches
+nodes with `classUsed` from the wave-8 routing audit row, caps depth
+at 10, and returns 422 `run_tree_too_deep` past that. SQL helpers
+live in apps/api/src/db.ts: `resolveRunRoot`, `listRunSubtree`
+(parameterised IN-set walk; pglite + pg both honour `= ANY($1::text[])`).
+The list endpoint now projects `EXISTS (SELECT 1 FROM runs c WHERE
+c.parent_run_id = r.id) AS has_children` on the same SELECT so the
+composite badge in /runs is one query. Web: `apps/web/components/runs/
+run-tree.tsx` (server component, native `<details>` for collapse — no
+client island needed) renders the tree with per-node status badge,
+duration, self-cost, capability class, and opaque `lastModel` string;
+the currently-displayed run gets a `border-2 border-slate-900 ring-1`
+highlight. `apps/web/components/runs/cost-rollup-card.tsx` shows
+self-cost + subagents + grand total with a per-child breakdown; reads
+the `composite.usage_rollup` event from `run.events` first and falls
+back to summing the tree if the event hasn't been emitted yet, with
+a "rollup pending" badge while the run is still in flight. Run-detail
+page `apps/web/app/runs/[id]/page.tsx` fetches the tree alongside the
+detail (best-effort — 404s are swallowed so a pre-wave-9 server still
+renders the page with an empty-state "no subagent runs"); 422s and
+other failures bubble through the existing error boundary. Runs list
+page wires the badge from `r.hasChildren`. Tests: 8 cases in
+apps/api/tests/runs-tree.test.ts — 404 unknown id; lonely-run single
+node; 2-level fixture with rolled-up `totalUsd` + `classUsed` only
+on the child that emitted the audit row; root-resolution from a
+child id; 3-level grandchild nesting; depth-cap (12-deep chain
+returns 422 with details.maxDepth=10); borderline 10-deep chain
+passes; malformed-id-path doesn't 500. apps/api green: 73/73 tests.
+Quality bar: pnpm --filter @aldo-ai/web --filter @aldo-ai/api --filter
+@aldo-ai/api-contract typecheck green; biome lint clean across the 9
+files I touched (orchestrator's pre-existing format errors are J's
+unfinished WIP and untouched). Edge cases handled: (1) run with no
+parent — single-node tree; (2) run with no children but parentRunId
+set — page still renders the tree (via getRunTree on the child id,
+which resolves the root); (3) run mid-flight with no rollup event —
+"rollup pending" badge + sum-the-tree fallback; (4) depth >10 — 422
+`run_tree_too_deep` with rootRunId + maxDepth in details; (5)
+pre-wave-9 server returning 404 from /tree — swallowed, page falls
+back to the "no subagent runs" empty state; (6) classUsed only
+present for nodes that actually emitted the audit row. Decisions to
+flag: (a) The route resolves the root in JS via repeated SELECTs
+rather than using J's new `root_run_id` column from migration 005 —
+wanted to stay backwards-compatible with rows the orchestrator hasn't
+backfilled yet. Once 005 is in prod for ≥one run-creation cycle, the
+walk can collapse to `WHERE root_run_id = (SELECT root_run_id FROM
+runs WHERE id = $1)` — file under future cleanup. (b) The
+`composite.usage_rollup` payload shape is owned by Engineer J's
+runtime; cost-rollup-card.tsx accepts any object exposing the three
+USD fields and ignores everything else, so a future field rename
+won't break the UI. (c) No client island for collapse — used native
+`<details open>` so the tree still streams as part of the server
+component. Feels right for v0; if operators want bulk collapse/expand
+later we can promote to a `'use client'` component. Not committed —
+orchestrator integrates.
+
+[2026-04-25 17:42 UTC] engineer-K — wave 9 composite schema + agency migration
+Added the wave-9 CompositeSpec contract on AgentSpec
+(@aldo-ai/types/agent.ts) — strategy ('sequential' | 'parallel' |
+'debate' | 'iterative'), subagents[{agent, as?, inputMap?}], optional
+aggregator (debate) and iteration{maxRounds,terminate} (iterative).
+The shape is purely structural — no provider names, no privacy_tier
+of its own; J's runtime cascades the parent supervisor's tier. Mirror
+schema in @aldo-ai/registry/schema.ts as `composite:` (snake_case
+input_map / max_rounds, .strict() on every nested object) with a
+.superRefine() that enforces the four cross-field rules: aggregator
+iff debate, iteration iff iterative, iterative requires exactly 1
+subagent, subagents.length >= 1. Loader translates snake -> camel
+(input_map -> inputMap, max_rounds -> maxRounds) in the same
+optional-spread style as the wave-7.5 sandbox/guards translations.
+api-contract: new CompositeWire + CompositeSubagentWire +
+CompositeIterationWire Zod schemas; AgentDetail.composite is
+.nullish() so pre-9 servers omitting the field still parse, and
+GET /v1/agents/:name forwards a `projectComposite(spec)` projection
+alongside the existing guards/sandbox forwarders. Agency migration:
+three supervisors converted, each with the strategy choice
+DOCUMENTED in the spec's identity.description so agency/ stays
+self-explanatory. principal -> sequential delegating to architect
+(direction is causal: principal sets brief, architect coordinates,
+principal closes the loop). architect -> sequential pipeline
+{tech-lead, backend-engineer} (design-then-build is the architect's
+primary loop; review-style architects can clone with strategy:
+debate + aggregator: tech-lead). tech-lead -> sequential paired
+review {code-reviewer, security-auditor} (security-auditor benefits
+from code-reviewer's structural summary; parallel duplicates the
+diff parse). Used `security-auditor` (the actual agency leaf) in
+place of the brief's illustrative `security-reviewer`. While
+migrating I also fixed two pre-existing schema-drift issues in the
+THREE supervisors I touched: `tools.permissions.network:
+egress-allowlist` (rejected by the wave-1 enum) -> `allowlist`, and
+`outputs.<name>.json_schema_ref: <path>` -> `json_schema: { $ref:
+<path> }` (matching the current `outputEntrySchema`). Did NOT touch
+the leaves — the brief was explicit. Tests added: 20 cases in
+platform/registry/tests/composite.test.ts (16 Zod cases including
+all four strategies parsing + all four cross-field rules + strict
+unknown-key rejection + non-positive maxRounds + non-kebab agent
+name; 2 snake/camel round-trip cases; 2 agency-tree cases — one
+that scans every YAML under direction|delivery|support|meta and
+asserts the loader at least produces a structured outcome, one that
+asserts the migrated supervisors carry the right composite blocks
+including the `inputMap` round-trip). 10 cases in
+platform/api-contract/test/composite.test.ts (no-composite, null,
+all four strategies round-trip, two negative-shape rejections,
+GetAgentResponse envelope round-trip, wire forward-only parse of a
+debate composite). Quality bar: pnpm --filter @aldo-ai/types,
+@aldo-ai/registry, @aldo-ai/api-contract, @aldo-ai/api typecheck
+all green; pnpm --filter @aldo-ai/registry test (48 passing, +20 new),
+@aldo-ai/api-contract test (18 passing, +10 new), @aldo-ai/api test
+(73 passing, no regressions). Biome auto-fixed line-wrap formatting
+on the four new/modified files; linter clean for everything I
+touched. Notes for the orchestrator: (1) Engineer J's
+@aldo-ai/orchestrator package is in WIP and currently does not
+typecheck (Cannot find module '@aldo-ai/types' — needs `pnpm
+install`; src/types.ts uses a parameter property override without
+the `override` modifier; src/supervisor.ts imports a non-existent
+`zeroUsage` symbol and uses `result` before assignment). My contract
+shape matches what J already imports: `CompositeSpec`,
+`CompositeStrategy`, `CompositeSubagent` are exported from
+@aldo-ai/types and J re-exports them in
+platform/orchestrator/src/types.ts:15 — no shape reconciliation
+needed. J's `composeInput` in strategies/sequential.ts comments at
+line 60-67 reference reading `inputMap` "at the YAML layer" —
+matches my snake/camel translation. (2) Engineer J's
+platform/api-contract/src/runs.ts had a pre-existing TS7022
+self-referential type error on the new `RunTreeNode` schema; the
+Zod recursion wanted an explicit `z.ZodType<RunTreeNode>` annotation.
+I added the annotation + a 4-line comment in the same file —
+strictly necessary so my own AgentDetail typechecks land cleanly.
+Flagging here because it touches J's wave-9 wire surface; if J
+prefers a different recursion idiom (e.g. moving to z.lazy with
+ReturnType inference) the change is one block to revise. (3) Two
+remaining lint format errors are in J's WIP
+(platform/orchestrator/src/privacy.ts,
+platform/engine/src/runtime.ts) — auto-fixable with biome --write
+on those two files. Not committed — orchestrator integrates.
+
+[2026-04-25 17:55 UTC] Engineer J — wave 9 orchestrator runtime
+Shipped @aldo-ai/orchestrator: a multi-agent supervisor runtime
+the engine delegates to whenever an AgentSpec carries a `composite:`
+block. New package at platform/orchestrator with src/{types,
+supervisor, cost-rollup, jsonpath, limits, privacy, index}.ts plus
+src/strategies/{common,sequential,parallel,debate,iterative}.ts —
+strategy-per-file, common.ts owns spawn-and-await + the
+CompositeChildFailedError envelope. Public surface: `Supervisor`
+class with `runComposite(spec, input, ctx)` returning an
+`OrchestrationResult` ({ ok, output, children, strategy,
+totalUsage, rounds? }). The engine integrates via two structural
+hooks in PlatformRuntime: (a) `RuntimeDeps.orchestrator?:
+CompositeOrchestrator` (or `setOrchestrator()` for the late-bind
+chicken-and-egg), and (b) a new `runtime.runAgent(ref, inputs,
+{parent, root})` entry point that resolves the spec and either
+constructs a `LeafAgentRun` (existing path, unchanged) or wraps
+the Promise<OrchestrationResult> in a tiny `CompositeAgentRun` that
+satisfies the public `AgentRun` surface. Engine ↔ orchestrator
+cycle avoided via a structural `CompositeOrchestrator` interface —
+the engine never imports @aldo-ai/orchestrator. The orchestrator
+calls back into the engine through `runtime.asSupervisorAdapter()`
+which returns a `SupervisorRuntimeAdapter` (`spawnChild` +
+`loadSpec`). Storage migration 005_composite_runs.sql adds
+root_run_id + composite_strategy to the runs table (parent_run_id
+already existed in 001), plus indices `idx_runs_root` and
+`idx_runs_composite_root`; pre-existing rows are backfilled to
+`root_run_id = id` so the index is dense. PostgresRunStore +
+InMemoryRunStore both gained the new columns through a widened
+`RunStartArgs` type; InMemoryRunStore exposes `getRun()` +
+`listByRoot()` for tests + the orchestrator's tree queries.
+LeafAgentRun gained `collectUsage()` — a side-channel that
+captures every UsageRecord the run emits, so the orchestrator's
+cost roll-up can read child usage without competing with the
+single-consumer `events()` async iterable (this fix unblocked
+the wave-8 usage-event tests). Five new RunEvent types added to
+@aldo-ai/types and to the api-contract Zod enum (additive, no
+breaking changes): composite.{child_started, child_completed,
+child_failed, usage_rollup, iteration}. CompositeSpec shape
+settled on (matches the type Engineer K already published in
+@aldo-ai/types): `{ strategy: 'sequential'|'parallel'|'debate'
+|'iterative', subagents: { agent: string, as?: string, inputMap?:
+Record<string,string> }[], aggregator?: string (debate),
+iteration?: { maxRounds: number, terminate: string } (iterative)
+}`. The Supervisor adds a runtime-resolved `SubagentInvocation`
+shape that carries the post-cascade `privacy: PrivacyTier` so
+strategy code never has to peek at AgentSpec.modelPolicy directly.
+Cost roll-up determinism: `sumUsage()` rounds usd to 6 decimals
+(matches NUMERIC(14,6)), takes max(at) lexicographically, and
+collapses divergent provider/model fields to the literal
+`aldo:composite` / `multi` so two replays produce byte-equal
+totalUsage records. Tests by category (45 total in
+platform/orchestrator/tests/): strategy 17 (sequential 5,
+parallel 4, debate 3, iterative 5), cost-rollup 8, linkage 5,
+errors 9 (5 error-propagation + 4 jsonpath terminate eval),
+depth-limit 3, engine-integration 3 (full PlatformRuntime ↔
+Supervisor end-to-end through InMemoryRunStore including
+parent/root linkage on every child + the
+CompositeRuntimeMissingError fail-closed path). Quality bar:
+pnpm -r typecheck green across all 14 backend packages; pnpm
+lint clean (biome --write applied on 5 files for sort-imports +
+delete→assignment-undefined; no remaining errors); pnpm -r test
+green — orchestrator 45 (new), engine 29 (no regressions),
+storage 2 (extended one to round-trip the new columns through
+pglite), api-contract 18, registry 48, api 73, cli 64, all other
+packages unchanged. Apps/api/Dockerfile + apps/api/package.json
+updated to ship @aldo-ai/{engine, observability, orchestrator}
+sources + deps (wave-6.5/7 lesson). Decisions to flag for review:
+(1) The brief asked for OTEL Span Links between parent and child
+runs and `composite.strategy=<name>` span attributes — the engine
+does NOT currently wrap a full agent run in an OTEL span (only
+sub-operations like model_call / tool_call get span() wrappers).
+The composite strategy + parent_run_id are already on every
+RunEvent payload and persisted on the runs row, so the linkage
+exists in the run-event log; adding run-level span wrappers is
+a strictly additive change that I left for a follow-up because
+introducing it for composite runs only would create asymmetry
+with leaf runs (which would then be the only runs without span
+wrappers). Suggestion: wave-10 should add `runtime.runAgent` →
+`tracer.span('agent_run', 'agent', {...})` for BOTH leaf and
+composite paths uniformly. (2) The composite supervisor itself
+spawns NO LeafAgentRun for the supervisor agent's prompt — the
+supervisor is a pure coordinator; its self-usage in the roll-up
+is the canonical zero record. If K's eval gates expect the
+supervisor agent to ALSO have its own model call (a
+"plan-then-delegate" pattern), wave-10 should add a pre-fan-out
+Plan call. The current wiring is intentional — it minimises
+tokens and keeps the cost roll-up purely about subagent work.
+(3) `runtime.spawn(parent=<composite>, fromComposite=true)`
+skips the `parentSpec.spawn.allowed.includes(ref.name)` check
+because the supervisor's `composite.subagents[]` list is the
+source of authority for that fan-out. Existing
+spawn.allowed-gated explicit child spawns are unchanged. (4)
+The engine's CompositeAgentRun returns a closed (immediately-
+done) events() iterator — composite runs surface their children's
+events through the child Run objects (which are first-class).
+The api layer / debugger should walk children via parent_run_id
+to render a tree. Engineer L's frontend tree visualization will
+consume the existing /v1/runs/:id/tree endpoint that K wired in
+wave-9 (it already returns nested run summaries by parent_run_id).
+Not committed — orchestrator integrates.

@@ -46,6 +46,29 @@ describe('migrate()', () => {
     expect(applied.length).toBeGreaterThanOrEqual(1);
     expect(applied[0]?.version).toBe('001');
 
+    // Wave-9: verify migration 005 added the composite columns and that
+    // a row with parent_run_id + root_run_id + composite_strategy round
+    // trips back through a SELECT.
+    expect(applied.some((m) => m.version === '005')).toBe(true);
+    await client.exec(
+      `INSERT INTO runs (id, tenant_id, agent_name, agent_version, parent_run_id,
+                         root_run_id, composite_strategy, status)
+       VALUES ('child-1', 't', 'a', '1', 'root-1', 'root-1', 'sequential', 'running'),
+              ('root-1',  't', 's', '1', NULL,     'root-1', 'sequential', 'running')`,
+    );
+    const treeRows = await client.query<{
+      id: string;
+      parent_run_id: string | null;
+      root_run_id: string;
+      composite_strategy: string | null;
+    }>(`SELECT id, parent_run_id, root_run_id, composite_strategy
+          FROM runs WHERE root_run_id = 'root-1' ORDER BY id ASC`);
+    expect(treeRows.rows).toHaveLength(2);
+    const child = treeRows.rows.find((r) => r.id === 'child-1');
+    expect(child?.parent_run_id).toBe('root-1');
+    expect(child?.composite_strategy).toBe('sequential');
+    expect(child?.root_run_id).toBe('root-1');
+
     await client.close();
   });
 

@@ -16,6 +16,7 @@ import {
   CheckAgentResponse,
   GetAgentResponse,
   GetRunResponse,
+  GetRunTreeResponse,
   type ListAgentsQuery,
   ListAgentsResponse,
   ListModelsResponse,
@@ -144,6 +145,18 @@ export function listRuns(query: Partial<ListRunsQuery> = {}) {
 
 export function getRun(id: string) {
   return request(`/v1/runs/${encodeURIComponent(id)}`, GetRunResponse);
+}
+
+/**
+ * `GET /v1/runs/:id/tree` — composite-run tree.
+ *
+ * Pass any run id (root, intermediate, or leaf); the API resolves the
+ * root and returns the whole tree. Read-only — operators never trigger
+ * subagent reruns from this endpoint. Returns HTTP 422 with code
+ * `run_tree_too_deep` when the tree exceeds the max-depth cap.
+ */
+export function getRunTree(rootRunId: string) {
+  return request(`/v1/runs/${encodeURIComponent(rootRunId)}/tree`, GetRunTreeResponse);
 }
 
 /* ------------------------------- Agents --------------------------------- */

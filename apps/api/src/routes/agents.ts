@@ -17,6 +17,7 @@
 
 import {
   CheckAgentResponse,
+  CompositeWire,
   GetAgentResponse,
   ListAgentsQuery,
   ListAgentsResponse,
@@ -140,6 +141,7 @@ export function agentsRoutes(deps: Deps): Hono {
         spec: detail.spec,
         guards: projectGuards(detail.spec),
         sandbox: projectSandbox(detail.spec),
+        composite: projectComposite(detail.spec),
       },
     });
     return c.json(body);
@@ -171,6 +173,21 @@ function projectSandbox(spec: unknown): z.infer<typeof SandboxConfigWire> | null
   const raw = (spec as Record<string, unknown>).sandbox;
   if (raw === undefined || raw === null) return null;
   const parsed = SandboxConfigWire.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Pull the spec-level `composite` block. Returns `null` when absent so
+ * a future "Composite" panel in the web UI can render the single-agent
+ * empty state without ambiguity. Like the guards/sandbox projections,
+ * we forward only what the spec author declared and re-validate
+ * through the wire schema.
+ */
+function projectComposite(spec: unknown): z.infer<typeof CompositeWire> | null {
+  if (spec === null || typeof spec !== 'object') return null;
+  const raw = (spec as Record<string, unknown>).composite;
+  if (raw === undefined || raw === null) return null;
+  const parsed = CompositeWire.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }
 

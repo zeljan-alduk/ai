@@ -21,10 +21,13 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY platform/api-contract/package.json platform/api-contract/
+COPY platform/engine/package.json platform/engine/
 COPY platform/eval/package.json platform/eval/
 COPY platform/gateway/package.json platform/gateway/
 COPY platform/guards/package.json platform/guards/
 COPY platform/local-discovery/package.json platform/local-discovery/
+COPY platform/observability/package.json platform/observability/
+COPY platform/orchestrator/package.json platform/orchestrator/
 COPY platform/registry/package.json platform/registry/
 COPY platform/sandbox/package.json platform/sandbox/
 COPY platform/secrets/package.json platform/secrets/
@@ -63,6 +66,14 @@ COPY platform/secrets ./platform/secrets
 # Wave 8: /v1/models calls @aldo-ai/local-discovery on each request to
 # probe well-known local-LLM ports and merge results into the response.
 COPY platform/local-discovery ./platform/local-discovery
+# Wave 9: composite (multi-agent) supervisor runtime. The /v1/runs
+# create-run path delegates to the engine, which delegates to the
+# orchestrator when the spec carries a `composite` block. The engine
+# package + observability primitives are needed too — both are
+# transitive deps of @aldo-ai/orchestrator.
+COPY platform/engine ./platform/engine
+COPY platform/observability ./platform/observability
+COPY platform/orchestrator ./platform/orchestrator
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 

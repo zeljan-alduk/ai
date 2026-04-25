@@ -18,7 +18,7 @@ import type {
   RunSummary,
   UsageRow,
 } from '@aldo-ai/api-contract';
-import type { SqlClient } from '@aldo-ai/storage';
+import type { SqlClient, SqlResult } from '@aldo-ai/storage';
 
 // --- cursor helpers --------------------------------------------------------
 
@@ -79,6 +79,8 @@ interface RunListRow {
   readonly total_usd: string | number | null;
   readonly last_provider: string | null;
   readonly last_model: string | null;
+  /** True iff at least one row in `runs` has parent_run_id = this.id. */
+  readonly has_children?: boolean | null;
   readonly [k: string]: unknown;
 }
 
@@ -138,7 +140,8 @@ export async function listRuns(db: SqlClient, opts: ListRunsOptions): Promise<Li
       (SELECT u2.provider FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,
       (SELECT u2.model FROM usage_records u2
-        WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_model
+        WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_model,
+      EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id) AS has_children
     FROM runs r
     LEFT JOIN usage_records u ON u.run_id = r.id
     ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
@@ -180,10 +183,172 @@ function rowToRunSummary(r: RunListRow): RunSummary {
     totalUsd: Number(r.total_usd ?? 0),
     lastProvider: r.last_provider,
     lastModel: r.last_model,
+    ...(r.has_children !== undefined && r.has_children !== null
+      ? { hasChildren: Boolean(r.has_children) }
+      : {}),
   };
 }
 
 type RunDetailRow = RunListRow;
+
+/**
+ * Resolve the root run id for `id`. A run with `parent_run_id = NULL` is
+ * its own root; otherwise we walk parent pointers up to `maxDepth` (the
+ * route enforces the cap). Returns `null` if the id doesn't exist; the
+ * walked id otherwise.
+ *
+ * Implementation note: we walk in JS rather than as a recursive CTE
+ * because pglite (the test driver) supports the latter only patchily.
+ * Production load on this path is low — composites are at most a few
+ * dozen nodes — so the extra round-trips are fine.
+ */
+interface ParentLookupRow {
+  readonly id: string;
+  readonly parent_run_id: string | null;
+  readonly [k: string]: unknown;
+}
+
+export async function resolveRunRoot(
+  db: SqlClient,
+  id: string,
+  maxDepth = 32,
+): Promise<string | null> {
+  let cursor: string = id;
+  let firstRowSeen = false;
+  for (let i = 0; i < maxDepth; i++) {
+    const res: SqlResult<ParentLookupRow> = await db.query<ParentLookupRow>(
+      'SELECT id, parent_run_id FROM runs WHERE id = $1',
+      [cursor],
+    );
+    const row: ParentLookupRow | undefined = res.rows[0];
+    if (row === undefined) return firstRowSeen ? cursor : null;
+    firstRowSeen = true;
+    if (row.parent_run_id === null) return row.id;
+    cursor = row.parent_run_id;
+  }
+  // Cycle / pathological depth — caller decides how to surface it.
+  return cursor;
+}
+
+interface SubtreeRow extends RunListRow {
+  readonly depth: number;
+}
+
+/**
+ * Walk the tree rooted at `rootId`. Returns the rows BFS-ordered with
+ * an explicit depth column so the route can enforce a max-depth cap.
+ * Each row carries the same `total_usd` / `last_provider` projections as
+ * `listRuns` so the client renders cost without a second query.
+ */
+export async function listRunSubtree(
+  db: SqlClient,
+  rootId: string,
+  maxDepth = 10,
+): Promise<readonly SubtreeRow[]> {
+  const out: SubtreeRow[] = [];
+  let frontier: readonly string[] = [rootId];
+  for (let depth = 0; depth <= maxDepth && frontier.length > 0; depth++) {
+    // Postgres + pglite both support `= ANY($1::text[])` for IN-set bind.
+    const res = await db.query<RunListRow>(
+      `
+      SELECT
+        r.id,
+        r.agent_name,
+        r.agent_version,
+        r.parent_run_id,
+        r.status,
+        r.started_at,
+        r.ended_at,
+        COALESCE(SUM(u.usd), 0)::text AS total_usd,
+        (SELECT u2.provider FROM usage_records u2
+          WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,
+        (SELECT u2.model FROM usage_records u2
+          WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_model
+      FROM runs r
+      LEFT JOIN usage_records u ON u.run_id = r.id
+      WHERE r.id = ANY($1::text[])
+      GROUP BY r.id
+      `,
+      [[...frontier]],
+    );
+    for (const row of res.rows) {
+      out.push({ ...row, depth });
+    }
+    if (depth === maxDepth) {
+      // Need to know if there ARE more children — peek one level deeper
+      // so the route can throw 422 instead of silently truncating.
+      const peek = await db.query<{ id: string; [k: string]: unknown }>(
+        'SELECT id FROM runs WHERE parent_run_id = ANY($1::text[]) LIMIT 1',
+        [[...frontier]],
+      );
+      if (peek.rows.length > 0) {
+        // Mark the overflow with a sentinel row so the route can detect
+        // it without re-querying.
+        out.push({
+          id: '__depth_overflow__',
+          agent_name: '',
+          agent_version: '',
+          parent_run_id: null,
+          status: '',
+          started_at: '',
+          ended_at: null,
+          total_usd: '0',
+          last_provider: null,
+          last_model: null,
+          depth: depth + 1,
+        });
+      }
+      break;
+    }
+    const childIds = await db.query<{ id: string; [k: string]: unknown }>(
+      'SELECT id FROM runs WHERE parent_run_id = ANY($1::text[]) ORDER BY started_at ASC, id ASC',
+      [[...frontier]],
+    );
+    frontier = childIds.rows.map((r) => r.id);
+  }
+  return out;
+}
+
+export interface SubtreeNodeProjection {
+  readonly runId: string;
+  readonly agentName: string;
+  readonly agentVersion: string;
+  readonly status: string;
+  readonly parentRunId: string | null;
+  readonly startedAt: string;
+  readonly endedAt: string | null;
+  readonly durationMs: number | null;
+  readonly totalUsd: number;
+  readonly lastProvider: string | null;
+  readonly lastModel: string | null;
+}
+
+export function projectSubtreeRow(r: SubtreeRow): SubtreeNodeProjection {
+  const startedAt = toIso(r.started_at);
+  const endedAt = toIsoOrNull(r.ended_at);
+  const durationMs =
+    endedAt !== null ? new Date(endedAt).getTime() - new Date(startedAt).getTime() : null;
+  return {
+    runId: r.id,
+    agentName: r.agent_name,
+    agentVersion: r.agent_version,
+    status: r.status,
+    parentRunId: r.parent_run_id,
+    startedAt,
+    endedAt,
+    durationMs,
+    totalUsd: Number(r.total_usd ?? 0),
+    lastProvider: r.last_provider,
+    lastModel: r.last_model,
+  };
+}
+
+/**
+ * Sentinel emitted by `listRunSubtree` when the walked tree exceeds the
+ * requested depth cap. Routes use this to switch to a 422 instead of
+ * silently truncating.
+ */
+export const DEPTH_OVERFLOW_ID = '__depth_overflow__';
 
 interface RunEventRow {
   readonly id: string;

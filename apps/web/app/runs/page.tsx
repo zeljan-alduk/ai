@@ -1,4 +1,4 @@
-import { StatusBadge } from '@/components/badge';
+import { NeutralBadge, StatusBadge } from '@/components/badge';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorView } from '@/components/error-boundary';
 import { PageHeader } from '@/components/page-header';
@@ -91,6 +91,14 @@ export default async function RunsPage({
                             {r.agentName}
                           </Link>
                           <span className="ml-1 text-xs text-slate-500">{r.agentVersion}</span>
+                          {r.hasChildren ? (
+                            <span
+                              className="ml-2 inline-flex"
+                              title="This run delegated work to one or more subagents"
+                            >
+                              <NeutralBadge>composite</NeutralBadge>
+                            </span>
+                          ) : null}
                         </td>
                         <td className="text-sm text-slate-600">
                           {r.lastProvider ? (

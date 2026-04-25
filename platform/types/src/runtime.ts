@@ -28,7 +28,25 @@ export interface RunEvent {
      * router approved a sensitive-tier request — independent of the
      * provider that served it.
      */
-    | 'routing.privacy_sensitive_resolved';
+    | 'routing.privacy_sensitive_resolved'
+    /**
+     * Wave-9 composite/orchestrator run events. Emitted by the
+     * `Supervisor` (in @aldo-ai/orchestrator) on the parent run's
+     * event stream when it spawns / awaits / aggregates child runs.
+     * Each child run is itself a first-class Run with its own
+     * event stream — these events surface the linkage on the parent.
+     *
+     *  - composite.child_started   { childRunId, agent, role, strategy }
+     *  - composite.child_completed { childRunId, agent, durationMs, outputSummary }
+     *  - composite.child_failed    { childRunId, agent, errorCode, errorMessage }
+     *  - composite.usage_rollup    { self, children, total }    (UsageRecord shapes)
+     *  - composite.iteration       { round, terminated, terminateReason }
+     */
+    | 'composite.child_started'
+    | 'composite.child_completed'
+    | 'composite.child_failed'
+    | 'composite.usage_rollup'
+    | 'composite.iteration';
   readonly at: string;
   readonly payload: unknown;
 }

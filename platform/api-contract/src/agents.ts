@@ -61,6 +61,45 @@ export type SandboxNetworkMode = z.infer<typeof SandboxNetworkMode>;
 export const SandboxFsPermission = z.enum(['none', 'repo-readonly', 'repo-readwrite', 'full']);
 export type SandboxFsPermission = z.infer<typeof SandboxFsPermission>;
 
+/**
+ * Wave-9 wire shape for the composite (multi-agent) block declared on a
+ * supervisor's spec. The control-plane API surfaces what the YAML
+ * *declares*; the orchestrator runtime owns the semantics. Like the
+ * sandbox/guards projections, the composite block is purely structural —
+ * never a provider name, never a privacy_tier (the runtime cascades the
+ * parent's tier).
+ *
+ * Cross-field rules (`aggregator` iff debate, `iteration` iff iterative,
+ * iterative requires exactly 1 subagent) are enforced server-side by the
+ * registry; the wire schema only forwards what the operator authored, so
+ * pre-9 servers omitting the field continue to parse cleanly.
+ */
+export const CompositeStrategyWire = z.enum(['sequential', 'parallel', 'debate', 'iterative']);
+export type CompositeStrategyWire = z.infer<typeof CompositeStrategyWire>;
+
+export const CompositeSubagentWire = z.object({
+  agent: z.string().min(1),
+  as: z.string().min(1).optional(),
+  inputMap: z.record(z.string().min(1), z.string().min(1)).optional(),
+});
+export type CompositeSubagentWire = z.infer<typeof CompositeSubagentWire>;
+
+export const CompositeIterationWire = z.object({
+  maxRounds: z.number().int().positive(),
+  terminate: z.string().min(1),
+});
+export type CompositeIterationWire = z.infer<typeof CompositeIterationWire>;
+
+export const CompositeWire = z.object({
+  strategy: CompositeStrategyWire,
+  subagents: z.array(CompositeSubagentWire).min(1),
+  /** Required iff strategy === 'debate'. Validated upstream; wire is forward-only. */
+  aggregator: z.string().min(1).optional(),
+  /** Required iff strategy === 'iterative'. */
+  iteration: CompositeIterationWire.optional(),
+});
+export type CompositeWire = z.infer<typeof CompositeWire>;
+
 export const SandboxConfigWire = z.object({
   /** Wall-clock timeout in ms for any tool call. */
   timeoutMs: z.number().int().positive().optional(),
@@ -131,6 +170,12 @@ export const AgentDetail = AgentSummary.extend({
    * timeout, env scrub, and network/fs gating. Additive only.
    */
   sandbox: SandboxConfigWire.nullish(),
+  /**
+   * Projected composite (multi-agent) block from the resolved spec.
+   * `null`/omitted means "single-agent" — the supervisor handles the
+   * call directly. Pre-9 servers simply omit the field. Additive only.
+   */
+  composite: CompositeWire.nullish(),
 });
 export type AgentDetail = z.infer<typeof AgentDetail>;
 

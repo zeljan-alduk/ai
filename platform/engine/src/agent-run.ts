@@ -114,6 +114,13 @@ export interface InternalAgentRun extends AgentRun {
   readonly parent?: RunId;
   readonly ref: AgentRef;
   /**
+   * Wave-9: side-channel access to every UsageRecord emitted by the
+   * run. This is a snapshot — callers should re-call after the run
+   * settles. The orchestrator uses this to roll up cost without
+   * draining the (single-consumer) `events()` async iterable.
+   */
+  collectUsage(): readonly import('@aldo-ai/types').UsageRecord[];
+  /**
    * Edit the text of a message in `checkpointId` (0-based `messageIndex`)
    * and resume from the rewritten checkpoint. Returns the new AgentRun.
    */
@@ -157,6 +164,8 @@ export class LeafAgentRun implements InternalAgentRun {
   private readonly toolResultsRecord: Record<string, unknown>;
   private readonly eventBuffer: RunEvent[] = [];
   private readonly eventWaiters: ((e: RunEvent | null) => void)[] = [];
+  /** Wave-9: every UsageRecord observed in the event stream. */
+  private readonly usageRecords: import('@aldo-ai/types').UsageRecord[] = [];
 
   private readonly abortController = new AbortController();
   private readonly doneDeferred: {
@@ -689,7 +698,21 @@ export class LeafAgentRun implements InternalAgentRun {
     await ctrl.pause(ev);
   }
 
+  collectUsage(): readonly import('@aldo-ai/types').UsageRecord[] {
+    return [...this.usageRecords];
+  }
+
   private emit(e: RunEvent): void {
+    // Wave-9: tee usage records into a side-channel buffer so the
+    // orchestrator's cost-rollup can read them without competing with
+    // any other consumer of `events()` (which is a single-consumer
+    // queue).
+    if (e.type === ('usage' as RunEvent['type'])) {
+      const u = e.payload as import('@aldo-ai/types').UsageRecord;
+      if (u && typeof u === 'object' && typeof u.tokensIn === 'number') {
+        this.usageRecords.push(u);
+      }
+    }
     if (this.deps.runStore) {
       // Fire-and-forget — the runStore is a "side audit log", not
       // load-bearing for the loop. Errors are surfaced as engine-side

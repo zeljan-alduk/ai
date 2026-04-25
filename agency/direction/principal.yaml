@@ -4,7 +4,13 @@ kind: Agent
 identity:
   name: principal
   version: 0.1.0
-  description: Sets direction for the platform and owns the decisions no one else can make.
+  description: >-
+    Sets direction for the platform and owns the decisions no one else can
+    make. Composite: sequential delegation to the architect — the principal
+    sets the brief, the architect coordinates the rest of the org. Picked
+    sequential (not parallel) because direction-setting is causal: the
+    architect cannot start until the principal's brief lands, and the
+    principal observes architect output before closing the loop.
   owner: direction-team@aldo-tech-labs
   tags: [direction, leadership, strategy]
 
@@ -48,7 +54,7 @@ tools:
     - server: github
       allow: [pr.read, issue.read, issue.write, repo.read]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readwrite
 
 memory:
@@ -73,7 +79,8 @@ inputs:
 
 outputs:
   decision:
-    json_schema_ref: schemas/direction_decision.json
+    json_schema:
+      $ref: schemas/direction_decision.json
 
 eval_gate:
   required_suites:
@@ -82,3 +89,11 @@ eval_gate:
     - suite: decision_quality_v1
       min_score: 0.75
   must_pass_before_promote: true
+
+composite:
+  strategy: sequential
+  subagents:
+    - agent: architect
+      as: architect
+      input_map:
+        brief: input.direction_brief

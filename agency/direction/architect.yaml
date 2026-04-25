@@ -4,7 +4,16 @@ kind: Agent
 identity:
   name: architect
   version: 0.1.0
-  description: Owns cross-cutting technical design, ADRs, and the shape of the platform.
+  description: >-
+    Owns cross-cutting technical design, ADRs, and the shape of the
+    platform. Composite: sequential implementation pipeline that hands
+    a design brief to the tech-lead, then to the backend-engineer for a
+    concrete artefact. Picked sequential (not debate or parallel)
+    because the architect's primary loop is design-then-build: scope
+    must land before code starts, and a tech-lead expansion is a
+    prerequisite for engineer execution. Operators who need a
+    review-style architect should clone this spec with strategy: debate
+    and aggregator: tech-lead.
   owner: direction-team@aldo-tech-labs
   tags: [direction, architecture, adr]
 
@@ -73,7 +82,8 @@ inputs:
 
 outputs:
   adr:
-    json_schema_ref: schemas/adr_document.json
+    json_schema:
+      $ref: schemas/adr_document.json
 
 eval_gate:
   required_suites:
@@ -82,3 +92,15 @@ eval_gate:
     - suite: design_consistency_v1
       min_score: 0.88
   must_pass_before_promote: true
+
+composite:
+  strategy: sequential
+  subagents:
+    - agent: tech-lead
+      as: lead
+      input_map:
+        adr: input.adr_document
+    - agent: backend-engineer
+      as: implementer
+      input_map:
+        plan: outputs.lead.delivery_plan
