@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @aldo-ai/web build",
+  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile --prod=false && pnpm --filter @aldo-ai/web build",
   "installCommand": "echo 'install handled in buildCommand'",
   "framework": "nextjs",
   "outputDirectory": ".next",

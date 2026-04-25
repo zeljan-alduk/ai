@@ -413,3 +413,28 @@ Deploy artifacts shipped (option D from the wave 4 menu):
   end-to-end verify.
 - docs/deploy/smoke-test.md: 60-second local verify recipe + the bug we
   caught the first time.
+
+[2026-04-25 07:25 UTC] principal — partial deploy attempt from sandbox
+With user-provided tokens (Neon + Fly + Vercel) tried to deploy the
+v0.2 stack from the sandbox. Results:
+- Neon: full success. Project aldo-ai (super-wind-07291109) created in
+  aws-us-east-2, pooled DATABASE_URL captured to /tmp/aldo-deploy/neon.env.
+- Fly: app aldo-ai-api created on personal org; DATABASE_URL +
+  CORS_ORIGINS secrets staged; image build blocked by sandbox network
+  (Docker Hub auth 503, npm registry TLS, Alpine CDN cert chain — all
+  sandbox-side issues, not config). User completes via `flyctl deploy`
+  from laptop or via the deploy-api.yml GitHub Actions workflow (just
+  needs FLY_API_TOKEN repo secret + DEPLOY_API_ENABLED=true variable).
+- Vercel: project aldo-ai-web created under zeljanalduk-3047s-projects,
+  NEXT_PUBLIC_API_BASE production env set. CLI's `vercel git connect`
+  required a GitHub OAuth login on the Vercel account that the sandbox
+  cannot trigger; tarball-upload deploys hit Vercel's "No Next.js
+  version detected" framework gate because Vercel's CLI uploads only
+  the rootDirectory subtree. Reset project settings to Vercel defaults
+  so a one-click GitHub integration in the dashboard yields a clean
+  auto-deploy. docs/deploy/live.md captures the exact next steps.
+- Dropped two files locally: a temporary root vercel.json and a phantom
+  next dep in root package.json. Those experiments didn't help and
+  were reverted before commit. Hardened apps/api/Dockerfile (ECR mirror
+  base image, drop tini/apk add, Node-native healthcheck) so the
+  laptop / CI build succeeds first try.

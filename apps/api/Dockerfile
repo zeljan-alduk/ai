@@ -1,9 +1,12 @@
-# syntax=docker/dockerfile:1.7
 # Multi-stage build for the @aldo-ai/api Hono server.
 # Built and pushed to ghcr.io by .github/workflows/deploy-api.yml on tag.
+# Uses buildkit's default frontend (no `# syntax=` pin) for portability.
+#
+# Base image pulled from AWS Public ECR which mirrors Docker Hub Library
+# images. Avoids the Docker Hub auth-endpoint flakiness during builds.
 
 # ---- 1. Install all workspace deps (cached) ----
-FROM node:22-alpine AS deps
+FROM public.ecr.aws/docker/library/node:22-alpine AS deps
 WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
@@ -32,27 +35,25 @@ COPY tsconfig.base.json ./
 RUN pnpm --filter @aldo-ai/api build
 
 # ---- 3. Runtime ----
-FROM node:22-alpine AS runtime
+FROM public.ecr.aws/docker/library/node:22-alpine AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
 
-RUN apk add --no-cache tini && \
-    addgroup -g 1001 aldo && \
-    adduser -u 1001 -G aldo -s /bin/sh -D aldo
+# Use the `node` user that ships with the official image (UID 1000).
+# No extra apk install; alpine network-cert issues are skipped.
+COPY --from=build --chown=node:node /repo /repo
 
-# Copy the built workspace.
-COPY --from=build --chown=aldo:aldo /repo /repo
-
-USER aldo
+USER node
 WORKDIR /repo/apps/api
 
 EXPOSE 8080
 
+# Pure-Node health check — no wget/curl required inside the image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
+  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||8080)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-ENTRYPOINT ["/sbin/tini", "--"]
+# Hono on Node honours SIGTERM directly; no need for tini as PID 1.
 CMD ["node", "dist/src/index.js"]
