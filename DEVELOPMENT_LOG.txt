@@ -438,3 +438,13 @@ v0.2 stack from the sandbox. Results:
   were reverted before commit. Hardened apps/api/Dockerfile (ECR mirror
   base image, drop tini/apk add, Node-native healthcheck) so the
   laptop / CI build succeeds first try.
+
+[2026-04-25 07:43 UTC] principal — finished deploy via GitHub-side automation
+User did the Vercel-GitHub OAuth click and provided a fine-grained
+GitHub PAT scoped to zeljan-alduk/ai with admin perms. Used pynacl
+to encrypt the FLY_API_TOKEN with the repo's secrets public key
+(libsodium sealed box) and PUT it via the Actions secrets API; added
+DEPLOY_API_ENABLED=true via the variables API. Triggered the
+deploy-api workflow on the feature branch via workflow_dispatch
+(GitHub run 24925984885). Pushing one more commit so Vercel's GitHub
+integration sees a new ref and kicks off its auto-deploy.
