@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f8fafc;
+  --bg-elevated: #ffffff;
+  --fg: #0f172a;
+  --fg-muted: #475569;
+  --fg-faint: #94a3b8;
+  --border: #e2e8f0;
+  --accent: #2563eb;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    sans-serif;
+  font-feature-settings: "cv11", "ss01", "ss03";
+}
+
+/* Subtle table styling re-used across pages. */
+.aldo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.aldo-table th,
+.aldo-table td {
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.aldo-table th {
+  color: var(--fg-muted);
+  font-weight: 500;
+  background: #f1f5f9;
+}
+.aldo-table tr:last-child td {
+  border-bottom: 0;
+}

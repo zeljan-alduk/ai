@@ -329,3 +329,17 @@ tier visible everywhere (public | internal | sensitive). Models
 endpoint stamps an `available` flag based on which provider keys
 are configured server-side — so the UI can grey out unconfigured
 ones without the contract knowing about specific providers.
+
+[2026-04-25 06:30 UTC] frontend-engineer — apps/web v0 control plane scaffolded
+Next.js 15 App Router + React 19 + Tailwind v3, all data fetching in
+Server Components. lib/api.ts validates every response through the
+@aldo-ai/api-contract Zod schemas and throws ApiClientError on
+parse/non-2xx; ErrorView renders clean failure UI. Routes: /runs (list
++ status/agent filters + cursor paging), /runs/[id] (header, event
+timeline, usage table), /agents + /agents/[name] (raw spec JSON), and
+/models. Privacy-tier badge (green/amber/red) and USD cost are visible
+on every relevant row. No provider name appears as a literal anywhere
+in apps/web — provider strings are opaque. Typecheck + biome lint clean
+across 24 files. Boots via `pnpm --filter @aldo-ai/web dev` against
+NEXT_PUBLIC_API_BASE (default http://localhost:3001); apps/api will
+need CORS for http://localhost:3000 and routes under /v1.
