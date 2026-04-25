@@ -912,3 +912,27 @@ SandboxError surfaces as ok:false ToolResult. 24 sandbox tests +
 fetch wrap + net/tls connect patch (undici dispatcher route avoided —
 not directly importable in Node 22). Wave 8 gap: shared kernel; no
 namespace/seccomp/cgroup isolation — needs Docker/Firecracker.
+
+[2026-04-25 13:55 UTC] backend-engineer C — wave 7 secrets shipped
+@aldo-ai/secrets (crypto/store/parser/resolver), 004_secrets.sql
+(secrets + secret_audit), engine SecretArgResolver hook on
+ToolHost dispatch (pre-resolve tool_call event keeps secret://NAME
+masked; resolved value reaches the tool only), API CRUD at
+/v1/secrets, CLI `aldo secrets {ls,set,rm}` with --value/--from-env/
+--from-file. Master key from ALDO_SECRETS_MASTER_KEY (32-byte
+base64); prod refuses to boot without it, dev generates ephemeral +
+warns. Audit row per textual occurrence (one resolve = one row,
+caller=spec.identity.name, runId attached). Test deltas: secrets 41,
+engine +7, api +10, cli +12; all green; biome clean.
+
+[2026-04-25 13:56 UTC] orchestrator — wave 7 integrated, all gates green
+Three engineers (sandbox/guards/secrets) reported in sequence (B, A, C).
+pnpm install --force; pnpm -r typecheck (16 packages, all clean); pnpm
+lint (307 files, no fixes); pnpm -r test green across the workspace —
+secrets 41, gateway 24 (incl. middleware), engine 26 (incl. sandbox-
+integration + secrets), eval 44, api 53 (incl. /v1/secrets routes),
+cli 54 (incl. aldo secrets cmd). apps/api/Dockerfile COPY list
+updated proactively to include platform/{sandbox,guards,secrets}
+(applying the wave 6.5 lesson before deploy, not after a 502). Five
+WIP commits during the wave; this commit is the clean wave-7 marker.
+Next: push, dispatch deploy-api, smoke-test /v1/secrets in prod.
