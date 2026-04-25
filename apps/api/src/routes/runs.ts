@@ -19,7 +19,6 @@ import {
 } from '@aldo-ai/api-contract';
 import { type RegisteredModel, createModelRegistry, createRouter } from '@aldo-ai/gateway';
 import type {
-  AgentSpec,
   CallContext,
   PrivacyTier,
   ProviderLocality,
@@ -29,10 +28,10 @@ import type {
 } from '@aldo-ai/types';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { getAuth } from '../auth/middleware.js';
 import {
   DEPTH_OVERFLOW_ID,
   decodeCursor,
-  getAgent,
   getRun,
   listRunSubtree,
   listRuns,
@@ -74,14 +73,15 @@ export function runsRoutes(deps: Deps): Hono {
     if (!parsed.success) {
       throw validationError('invalid runs.create body', parsed.error.issues);
     }
-    const detail = await getAgent(deps.db, parsed.data.agentName);
+    // Wave-10: resolve through the tenant-scoped registered-agent store.
+    // A spec with the same name in another tenant returns null here so
+    // we surface 404 — never `cross_tenant_access`.
+    const tenantId = getAuth(c).tenantId;
+    const detail = await deps.agentStore.get(tenantId, parsed.data.agentName);
     if (detail === null) {
       throw notFound(`agent not found: ${parsed.data.agentName}`);
     }
-    const spec = coerceSpec(detail.spec);
-    if (spec === null) {
-      throw validationError('agent spec is unparseable; cannot route');
-    }
+    const spec = detail.spec;
     const catalog = await loadModelCatalog(deps.env);
     const registry = createModelRegistry(
       catalog.models.flatMap((m) => {
@@ -94,7 +94,7 @@ export function runsRoutes(deps: Deps): Hono {
       required: spec.modelPolicy.capabilityRequirements,
       privacy: spec.modelPolicy.privacyTier,
       budget: spec.modelPolicy.budget,
-      tenant: (deps.tenantId ?? 'tenant-default') as TenantId,
+      tenant: tenantId as TenantId,
       runId: 'pre-flight' as RunId,
       traceId: 'pre-flight' as TraceId,
       agentName: spec.identity.name,
@@ -147,12 +147,14 @@ export function runsRoutes(deps: Deps): Hono {
     if (!parsed.success) {
       throw validationError('invalid query', parsed.error.issues);
     }
+    const tenantId = getAuth(c).tenantId;
     const q = parsed.data;
     const cursor = q.cursor !== undefined ? decodeCursor(q.cursor) : undefined;
     if (q.cursor !== undefined && cursor === null) {
       throw validationError('invalid cursor');
     }
     const result = await listRuns(deps.db, {
+      tenantId,
       ...(q.agentName !== undefined ? { agentName: q.agentName } : {}),
       ...(q.status !== undefined ? { status: q.status } : {}),
       limit: q.limit,
@@ -186,12 +188,13 @@ export function runsRoutes(deps: Deps): Hono {
     if (!parsed.success) {
       throw validationError('invalid run id', parsed.error.issues);
     }
-    const root = await resolveRunRoot(deps.db, parsed.data.id);
+    const tenantId = getAuth(c).tenantId;
+    const root = await resolveRunRoot(deps.db, tenantId, parsed.data.id);
     if (root === null) {
       throw notFound(`run not found: ${parsed.data.id}`);
     }
     const MAX_DEPTH = 10;
-    const subtree = await listRunSubtree(deps.db, root, MAX_DEPTH);
+    const subtree = await listRunSubtree(deps.db, tenantId, root, MAX_DEPTH);
     if (subtree.some((r) => r.id === DEPTH_OVERFLOW_ID)) {
       throw new HttpError(
         422,
@@ -255,7 +258,8 @@ export function runsRoutes(deps: Deps): Hono {
     if (!parsed.success) {
       throw validationError('invalid run id', parsed.error.issues);
     }
-    const run = await getRun(deps.db, parsed.data.id);
+    const tenantId = getAuth(c).tenantId;
+    const run = await getRun(deps.db, tenantId, parsed.data.id);
     if (run === null) {
       throw notFound(`run not found: ${parsed.data.id}`);
     }
@@ -303,14 +307,6 @@ async function loadClassUsedByRun(
 }
 
 // --- helpers (shared shape with /v1/agents/:name/check) -------------------
-
-/** Narrow the persisted JSON spec into an `AgentSpec`. Mirrors agents.ts. */
-function coerceSpec(raw: unknown): AgentSpec | null {
-  if (raw === null || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  if (o.modelPolicy === undefined || o.identity === undefined) return null;
-  return raw as AgentSpec;
-}
 
 interface CatalogModel {
   readonly id: string;

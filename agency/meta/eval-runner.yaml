@@ -50,7 +50,7 @@ tools:
     - server: repo-fs
       allow: [fs.read]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readonly
 
 memory:
@@ -75,7 +75,7 @@ inputs:
 
 outputs:
   eval_report:
-    json_schema_ref: schemas/eval_report.json
+    json_schema: schemas/eval_report.json
 
 eval_gate:
   required_suites:

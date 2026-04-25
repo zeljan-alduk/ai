@@ -19,7 +19,8 @@ describe('migrate()', () => {
     expect(first.length).toBeGreaterThan(0);
     expect(first.some((m) => m.version === '001')).toBe(true);
 
-    // Sanity-check that the eight expected tables now exist.
+    // Sanity-check that the eight expected tables (plus the wave-10
+    // tenancy tables) now exist.
     const expectedTables = [
       'tenants',
       'agents',
@@ -29,6 +30,9 @@ describe('migrate()', () => {
       'run_events',
       'usage_records',
       'span_events',
+      // Wave 10:
+      'users',
+      'tenant_members',
     ];
     for (const t of expectedTables) {
       const r = await client.query<{ count: string | number }>(
@@ -49,12 +53,17 @@ describe('migrate()', () => {
     // Wave-9: verify migration 005 added the composite columns and that
     // a row with parent_run_id + root_run_id + composite_strategy round
     // trips back through a SELECT.
+    //
+    // Wave-10: rows now must reference a real tenant — the migration
+    // seeds the canonical default tenant id so we use that here.
     expect(applied.some((m) => m.version === '005')).toBe(true);
+    expect(applied.some((m) => m.version === '006')).toBe(true);
+    const DEFAULT_TENANT_UUID = '00000000-0000-0000-0000-000000000000';
     await client.exec(
       `INSERT INTO runs (id, tenant_id, agent_name, agent_version, parent_run_id,
                          root_run_id, composite_strategy, status)
-       VALUES ('child-1', 't', 'a', '1', 'root-1', 'root-1', 'sequential', 'running'),
-              ('root-1',  't', 's', '1', NULL,     'root-1', 'sequential', 'running')`,
+       VALUES ('child-1', '${DEFAULT_TENANT_UUID}', 'a', '1', 'root-1', 'root-1', 'sequential', 'running'),
+              ('root-1',  '${DEFAULT_TENANT_UUID}', 's', '1', NULL,     'root-1', 'sequential', 'running')`,
     );
     const treeRows = await client.query<{
       id: string;
@@ -68,6 +77,61 @@ describe('migrate()', () => {
     expect(child?.parent_run_id).toBe('root-1');
     expect(child?.composite_strategy).toBe('sequential');
     expect(child?.root_run_id).toBe('root-1');
+
+    // Wave-10: verify the seeded default tenant exists with slug
+    // `default`, that users + tenant_members round-trip, and that
+    // run_events / breakpoints / checkpoints all carry tenant_id.
+    const seedRows = await client.query<{ id: string; slug: string; name: string }>(
+      'SELECT id, slug, name FROM tenants WHERE id = $1',
+      [DEFAULT_TENANT_UUID],
+    );
+    expect(seedRows.rows).toHaveLength(1);
+    expect(seedRows.rows[0]?.slug).toBe('default');
+
+    await client.exec(`INSERT INTO users (id, email, password_hash) VALUES ('u-1', 'a@b', 'hash')`);
+    await client.exec(
+      `INSERT INTO tenant_members (tenant_id, user_id, role)
+         VALUES ('${DEFAULT_TENANT_UUID}', 'u-1', 'owner')`,
+    );
+    const memRows = await client.query<{ role: string }>(
+      'SELECT role FROM tenant_members WHERE tenant_id = $1 AND user_id = $2',
+      [DEFAULT_TENANT_UUID, 'u-1'],
+    );
+    expect(memRows.rows[0]?.role).toBe('owner');
+
+    // run_events must carry tenant_id NOT NULL.
+    await client.exec(
+      `INSERT INTO run_events (id, run_id, tenant_id, type, payload_jsonb)
+       VALUES ('e-1', 'root-1', '${DEFAULT_TENANT_UUID}', 'run.started', '{}'::jsonb)`,
+    );
+    const evRows = await client.query<{ tenant_id: string }>(
+      `SELECT tenant_id FROM run_events WHERE id = 'e-1'`,
+    );
+    expect(evRows.rows[0]?.tenant_id).toBe(DEFAULT_TENANT_UUID);
+
+    // Wave-10: migration 007 — registered_agents + registered_agent_pointer
+    // round-trip a (tenant, name, version) row and the version pointer.
+    expect(applied.some((m) => m.version === '007')).toBe(true);
+    await client.exec(
+      `INSERT INTO registered_agents (id, tenant_id, name, version, spec_yaml)
+       VALUES ('ra-1', '${DEFAULT_TENANT_UUID}', 'sample', '0.1.0', 'apiVersion: aldo-ai/agent.v1\n')`,
+    );
+    await client.exec(
+      `INSERT INTO registered_agent_pointer (tenant_id, name, current_version)
+       VALUES ('${DEFAULT_TENANT_UUID}', 'sample', '0.1.0')`,
+    );
+    const raRows = await client.query<{ tenant_id: string; name: string; version: string }>(
+      'SELECT tenant_id, name, version FROM registered_agents WHERE tenant_id = $1',
+      [DEFAULT_TENANT_UUID],
+    );
+    expect(raRows.rows).toHaveLength(1);
+    expect(raRows.rows[0]?.name).toBe('sample');
+    const ptrRows = await client.query<{ current_version: string | null }>(
+      `SELECT current_version FROM registered_agent_pointer
+       WHERE tenant_id = $1 AND name = $2`,
+      [DEFAULT_TENANT_UUID, 'sample'],
+    );
+    expect(ptrRows.rows[0]?.current_version).toBe('0.1.0');
 
     await client.close();
   });

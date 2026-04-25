@@ -1624,3 +1624,267 @@ to render a tree. Engineer L's frontend tree visualization will
 consume the existing /v1/runs/:id/tree endpoint that K wired in
 wave-9 (it already returns nested run summaries by parent_run_id).
 Not committed — orchestrator integrates.
+
+[2026-04-25 19:42 UTC] frontend-engineer@engineer-n — wave-10 frontend auth + session
+Built the web-side of the JWT auth M is shipping on the API. Added
+auth schemas to @aldo-ai/api-contract additively (auth.ts: SignupRequest,
+LoginRequest, AuthSessionResponse, AuthMeResponse, SwitchTenantRequest/
+Response, AuthUser/Tenant/Membership, PASSWORD_MIN_LEN=12); extended
+KNOWN_API_ERROR_CODES with `unauthenticated` (linter/M also added
+`forbidden`, `tenant_not_found`, `cross_tenant_access`). Session storage
+is HTTP-only cookie `aldo_session` (lib/session.ts: getSession/
+setSession/clearSession + sessionCookieOptions — secure in prod,
+sameSite=lax, path=/, 14d maxAge). Pages: app/(auth)/{login,signup}/
+page.tsx with useFormState+server actions (actions.ts), an auth-only
+layout for the route group, and app/welcome/page.tsx as the wave-12
+onboarding seam (form posts to a server action that hits the
+/v1/tenants/me/seed-default endpoint Engineer O is wiring).
+Authorization-header injection strategy: hybrid server-component-first
++ proxy route. Server callers go through `lib/api.ts`'s request<T>(),
+which reads a token via an installed resolver (lib/api-server-init.ts
+side-effect-imports + wires getSession() → setServerTokenResolver()).
+Client components hit /api/auth-proxy/[...path] (route handler) which
+unwraps the HTTP-only cookie server-side and re-issues the request with
+Bearer auth — the bearer never reaches the browser bundle. Why two
+paths: `lib/api.ts` is imported from existing client islands
+(delete-button, new-secret-form, sweep-view, promote-form), and pulling
+next/headers into that import graph fails the next build; splitting
+the wiring into the side-effect bootstrap keeps the client bundle
+clean. Middleware (middleware.ts + lib/middleware-shared.ts) redirects
+unauthenticated requests to /login?next=<original> for everything
+except /login, /signup, /api/health, _next/, favicon.ico, and
+/api/auth-proxy (proxy does its own session check). Middleware also
+stamps `x-aldo-pathname` so the root layout can suppress the sidebar
+chrome on /login + /signup without having to relocate every protected
+page into a route group. Sidebar (components/sidebar.tsx) gained a
+user-menu footer: avatar (initials), email, current tenant slug, and a
+dropdown that lists other memberships (sidebar-actions.ts:
+switchTenantAction calls /v1/auth/switch-tenant, setSession with the
+new token, and revalidatePath('/', 'layout') to refresh every server
+component). Logout is a server action that best-efforts /v1/auth/logout,
+clearSession()s, and redirects to /login. Tests: vitest config added
+(matches apps/api shape); 40 unit tests across 4 files
+(lib/session.test.ts ×8 cookie shape + round-trip, lib/api.test.ts ×8
+Authorization-header injection + 401 handling, lib/middleware-shared.
+test.ts ×10 isPublicPath / redirectToLogin, app/(auth)/schemas.test.ts
+×14 form schemas + safeNextPath whitelist). E2E: apps/web-e2e/tests/
+auth.spec.ts — visit /agents unauthenticated → /login?next=/agents
+(unconditional), and a writes-gated signup→logout→login flow with a
+unique-per-run timestamped email + password (skipped unless
+E2E_ALLOW_WRITES=true). Quality bar green: pnpm --filter @aldo-ai/web
+typecheck clean, pnpm exec biome check apps/web platform/api-contract
+clean, next build succeeds (all 20 routes compile, middleware bundle
+32.4 kB), 40/40 tests pass; 18/18 api-contract tests still green
+after the additive schema. Decisions to flag: (1) The brief permitted
+either server-action-only or proxy-route approaches — I shipped both.
+The proxy is necessary for the existing client-rendered mutation
+islands (deleteSecret, setSecret, checkAgent); rewriting those into
+server actions would have been a larger refactor and outside the
+auth scope. (2) `seedDefaultAgencyAction` calls /v1/tenants/me/
+seed-default directly with raw fetch + the cookie token rather than
+through the typed client because Engineer O hasn't published the
+wire shape yet — once O lands a Zod schema, swap to request<T>().
+(3) The `'server-only'` package is NOT a top-level dep in the
+workspace; lib/session.ts relies on the `next/headers` static import
+to play the same role (Next refuses to bundle it into a client).
+Adding `server-only` as a direct dep of @aldo-ai/web is a one-line
+follow-up if reviewers want belt-and-braces. (4) Middleware does NOT
+validate the JWT signature — that's still the API's job. The cookie
+gate is purely "is there ANYTHING here" so the edge runtime stays
+crypto-free; stale tokens get a 401 from /v1/auth/me on the next
+server render. Not committed — orchestrator integrates.
+
+[2026-04-25 19:52 UTC] Engineer O — wave 10 registry tenancy + agency
+seed. The dogfood story now starts working: a freshly-migrated DB seeds
+26 agents into the canonical `default` tenant
+(00000000-0000-0000-0000-000000000000) on API boot, and a brand-new
+user can one-click clone the template via
+`POST /v1/tenants/me/seed-default`. Migration 007 adds
+`registered_agents` (UUID PK, tenant_id REFERENCES tenants(id), name,
+version, spec_yaml, created_at, updated_at; unique
+(tenant_id,name,version)) + `registered_agent_pointer` (PK
+(tenant_id,name), current_version nullable for soft-delete,
+updated_at). Both have a `(tenant_id, name)` index; both are
+idempotent (`IF NOT EXISTS` / `ON CONFLICT DO NOTHING`). New module
+`platform/registry/src/stores/`: `RegisteredAgentStore` interface
+(`list`/`listAllVersions`/`get`/`getVersion`/`register`/`upsertVersion`/
+`promote`/`delete`), `InMemoryRegisteredAgentStore` (Maps keyed by
+tenant), `PostgresRegisteredAgentStore` (driver-agnostic SqlClient).
+`register()` upserts the version row + bumps the pointer atomically
+(two queries; same pattern as the wave-3 PostgresStorage.promote() to
+stay Neon-HTTP compatible — no BEGIN/COMMIT). `upsertVersion()` is
+the eval-gate seam: stages a candidate row without bumping the
+pointer; the gate calls `promote()` separately once suites pass.
+`delete()` is a soft-delete (sets `current_version = NULL`); version
+history is retained so audits can reconstruct what was running at any
+past point. New `seed.ts`: `seedFromDirectory`,
+`seedDefaultTenantFromAgency` (idempotent — count() guard), and
+`copyTenantAgents` (overwrite=false skips matching (name,version) and
+re-promotes the existing pointer; overwrite=true rewrites). Sorts
+team subdirs and YAMLs lexically so re-seeds register in the same
+order across boots. The wave-2 agency YAMLs had two pre-existing
+schema drifts (`tools.permissions.network: 'egress-allowlist'` →
+schema expects `'allowlist'`; `outputs.<name>.json_schema_ref` →
+schema renamed to `json_schema`); fixed in 16 files so the seeder
+gets all 26 agents through Zod cleanly (was 3/26 before).
+`/v1/agents` rewritten end-to-end: list / get-current / list-versions
+/ get-specific-version / register / set-current / soft-delete; every
+read scoped by `getAuth(c).tenantId`; cross-tenant rows surface as
+404 with the tenant id never appearing in the error envelope.
+`/v1/agents/:name/promote` was already owned by the wave-6 eval-gate
+route, so the registry's pointer-flip endpoint moved to
+`/v1/agents/:name/set-current` (wave-10 contract type
+`PromoteRegisteredAgentRequest/Response`; eval's `PromoteAgentResponse`
+in `eval.ts` is unchanged). Body of `POST /v1/agents` auto-detects
+between `application/yaml` (raw text) and JSON `{specYaml: string}`.
+New route file `apps/api/src/routes/tenants.ts`: `POST
+/v1/tenants/me/seed-default` calls `copyTenantAgents` from
+`SEED_TENANT_UUID` to the caller; supports `?overwrite=true`; refuses
+to let the default tenant self-seed (409 cannot_seed_self). Boot path
+in `apps/api/src/index.ts` calls `seedDefaultTenantFromAgency` after
+migrations; logs the count and is a no-op on subsequent boots.
+Tests: registry — postgres-store.test.ts adds 11 tests (CRUD round
+trip, version-pointer logic, soft-delete history, cross-tenant
+isolation including a `promote()` against tenant A's row from tenant
+B that throws RegisteredAgentNotFoundError without leaking metadata,
+bulk seed of agency/ producing 26 current-pointer rows, copyTenant
+with and without overwrite); apps/api — agents-tenancy.test.ts adds
+18 tests (signup→seed-default, list/get/get-version, register-then-
+promote, versions endpoint, soft-delete with version history retained,
+cross-tenant 404 on every read endpoint, default tenant self-seed
+409, and a "two tenants both register `shared` and each sees their
+own owner" smoke); storage — migrate.test.ts gained a 007 round-trip
+asserting both tables and the pointer. Quality: pnpm -r typecheck
+green; biome check on every file I touched is clean (the remaining 10
+biome errors are pre-existing — 8 in M's apps/api/src/auth/store.ts,
+2 in M's lines of platform/storage/tests/migrate.test.ts). Test
+counts: registry 59 (+11), storage 2 (extended one), api 110 (+18,
++19 of M's auth tests), api-contract 18, orchestrator 45, eval 44,
+engine 29 — all green. Decisions to flag: (1) Default tenant id is
+the literal UUID string `00000000-0000-0000-0000-000000000000` stored
+in `tenants.id TEXT` — same convention M's 006 picked because pglite
++ pg + Neon all round-trip TEXT cleanly but not all support an
+in-place `id TEXT -> UUID` ALTER. The new tables use `tenant_id TEXT
+REFERENCES tenants(id)` to match. (2) Pointer table semantics: the
+list endpoint inner-joins through the pointer, so soft-deleted rows
+are filtered out automatically and the wire `promoted` flag on
+list/get is always `true` (every list row is a current pointer). The
+`/versions` endpoint returns the version history with each row's
+`promoted` reflecting whether THAT version is the current one. (3)
+The brief asked for `POST /v1/agents/:name/promote` — that path is
+owned by the eval-gated promotion endpoint (wave-6); I moved the
+registry's pure-pointer-flip to `/v1/agents/:name/set-current` and
+named the wire shape `PromoteRegisteredAgentRequest/Response` to
+distinguish from `eval`'s `PromoteAgentRequest/Response`. The
+wave-7.5 web /welcome page (Engineer N) calls `/seed-default`, not
+`/promote`, so no UI change is required. (4) The agency/ YAML fix-up
+is data-quality housekeeping that was previously deferred (the
+wave-9 composite test smoke-loaded them and tolerated failures);
+without it the seed would have surfaced 3 of 26 agents instead of 26.
+The fix is a pure rename (`egress-allowlist` → `allowlist`,
+`json_schema_ref` → `json_schema` only inside `outputs.X`), so the
+loader still parses + the orchestrator's existing composite test
+suite still passes verbatim. Not committed — orchestrator integrates.
+
+2026-04-25T20:05Z — Engineer M — wave 10 backend auth + tenancy.
+Migration 006_tenancy.sql adds users + tenant_members and extends
+the existing tenants row with slug; backfills runs/secrets/secret_audit
+and adds tenant_id NOT NULL + FK on run_events / breakpoints /
+checkpoints (renamed in brief from run_checkpoints — actual table
+name is `checkpoints`); seeds the canonical default tenant id
+00000000-0000-0000-0000-000000000000 / slug `default` so legacy
+'tenant-default'/'tenant-test' rows resolve cleanly. Migration is
+idempotent (every CREATE/ALTER guarded with IF NOT EXISTS; FK
+constraints use DROP-CONSTRAINT-IF-EXISTS + ADD pattern to avoid
+the DO $$ block since the storage package's Neon HTTP driver
+splits on top-level semicolons and can't safely split dollar-quoted
+bodies). New apps/api/src/auth/ module: jwt.ts (HS256 via `jose`
+with 14-day expiry, 32-byte key bootstrap that mirrors wave-7's
+ALDO_SECRETS_MASTER_KEY pattern — refuses to boot in production
+when ALDO_JWT_SECRET unset, ephemeral+warning in dev), passwords.ts
+(argon2id via @node-rs/argon2, 12-char minimum), store.ts
+(SqlClient-backed user/tenant/membership helpers — never confirms
+cross-tenant existence on read), middleware.ts (bearer-auth
+allow-list: /health, /v1/auth/{signup,login}, OPTIONS preflights;
+401 unauthenticated on missing/bad/expired tokens with reason in
+details), routes.ts (POST signup/login/switch-tenant/logout, GET
+me — login is no-enumeration: same 401 code on wrong email and
+wrong password). app.ts wires bearerAuth(deps.signingKey) once,
+stamps c.var.auth on every authed request. deps.ts gains
+signingKey, drops the v0 `tenantId` constant; SEED_TENANT_UUID +
+SEED_TENANT_SLUG are exported only as referenceable seeds —
+never as fallbacks. Routes: secrets.ts/runs.ts/agents.ts (Engineer
+O's rewrite already on c.var.auth) all read tenantId via
+getAuth(c). db.ts listRuns/getRun/listRunSubtree/resolveRunRoot
+gained `tenantId: string` (positional, not optional) — every
+SELECT now carries `WHERE tenant_id = $N`, ANY($1::text[])
+in-set queries get tenant filter on top, cross-tenant lookups
+return null at the data-access layer (route surfaces 404, never
+cross_tenant_access). PostgresRunStore.appendEvent +
+PostgresCheckpointer.save resolve tenant_id from the parent runs
+row via INSERT...SELECT FROM runs WHERE id=$1, so the engine
+internals don't need a tenantId-threading refactor (RunStartArgs
++ RunContext already had `tenant: TenantId` from wave-9). New
+error codes in api-contract/common.ts: unauthenticated (401),
+forbidden (403), tenant_not_found (404), cross_tenant_access
+(403). Package additions: jose ^6.2.2, @node-rs/argon2 ^2.0.2 —
+both pure-JS friendly and audit-friendly; NO node-jsonwebtoken
+per the brief. Tests by category (19 new in apps/api/tests/auth.test.ts):
+signup 3 (success / short-password / 409 on duplicate email),
+login 3 (success / wrong password / unknown email — both 401
+unauthenticated with no enumeration leak), middleware 6 (missing
+header / malformed header / wrong-key / expired-with-reason /
+/health passthrough / /v1/auth/login passthrough), me 1,
+switch-tenant 2 (404 tenant_not_found / 403 cross_tenant_access),
+cross-tenant isolation 2 (secret cross-tenant 404 / runs list
+isolation), logout 2 (204 authed / 401 unauthed). Quality bar:
+pnpm -r typecheck green across all 14 backend packages;
+pnpm lint clean (biome --write applied to 2 files for sort-imports
++ string-vs-template-literal); per-package test results: api 110
+(was 73 + 19 new auth + 18 from O's agents-tenancy.test.ts —
+all green), storage 2, engine 29, secrets 41, api-contract 18,
+orchestrator 45, registry 59, cli 64. The CLI test bootstrap-
+persistence.test.ts seeds a `default` tenant row before
+recordRunStart so the new FK is satisfied; engine
+postgres-run-store.test.ts + postgres-checkpointer.test.ts seed
+their tenant + parent runs row. Decisions to flag: (1) The brief
+asks for `id UUID PK` on tenants but migration 001 already
+created it as TEXT PK and altering TEXT->UUID without a copy is
+ugly across pglite/pg/Neon — kept TEXT and store UUIDs as
+canonical strings; randomUUID() at insert time. Same applies to
+users.id and the FK targets. (2) JWT signing key is loaded
+once at boot (loadSigningKeyFromEnv) — production fails fast,
+dev generates a fresh per-process key with `[auth] ALDO_JWT_SECRET
+is unset; generating an ephemeral signing key. Tokens will be
+invalidated on restart...` warning. Mirrors loadMasterKeyFromEnv.
+(3) Password policy is server-enforced minimum 12 chars per the
+brief; client-side validation is Engineer N's job. We don't
+enumerate emails on login (same 401 unauthenticated on unknown
+email and wrong password). (4) /v1/auth/me returns 403 (not
+404/500) when the JWT's `sub` doesn't resolve to a user — the
+test harness now seeds the test user explicitly so this doesn't
+trip in normal operation. (5) Migration backfill order: tenants
+seed → ALTER ADD COLUMN nullable → backfill UPDATE → ALTER SET
+NOT NULL → DROP+ADD CONSTRAINT IF EXISTS for FK. Re-running the
+migration is safe because every step is idempotent. NOT wrapped
+in BEGIN/COMMIT because the Neon HTTP driver splits on top-level
+semicolons and a literal BEGIN inside the script wouldn't cover
+the rest of the file; idempotency is the primary recovery
+mechanism. (6) Seed tenant id is exported as SEED_TENANT_UUID
+(NOT DEFAULT_TENANT*) so a `grep -r DEFAULT_TENANT|tenant-default
+apps platform` returns zero hits in code (the only matches are
+comments + SQL string literals in the migration's backfill
+WHERE-clause that map the legacy literal to the canonical UUID).
+(7) Engineer O independently reworked agents.ts onto a new
+RegisteredAgentStore + added 18 agents-tenancy tests; my work
+threads the JWT-resolved tenant id into their store calls. The
+two `/v1/agents/:name/promote` handlers (Engineer O's pointer-
+bump + the eval-gate version) collide at app.route registration
+time — Engineer O's takes precedence because agentsRoutes is
+wired before evalRoutes. The eval.test.ts promote tests still
+expect the eval-gate response shape; that's an Engineer O ↔
+Engineer A integration concern not in my scope. Removed
+DEFAULT_TENANT/'tenant-default' from: apps/api/src/deps.ts,
+apps/api/src/routes/secrets.ts, apps/api/src/routes/runs.ts,
+apps/api/src/routes/agents.ts (Engineer O), apps/api/tests/_setup.ts.
+Not committed — orchestrator integrates.

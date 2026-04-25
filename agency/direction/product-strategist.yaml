@@ -43,7 +43,7 @@ tools:
     - server: aldo-memory
       allow: [memory.read, memory.write, memory.scan]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readwrite
 
 memory:
@@ -68,7 +68,7 @@ inputs:
 
 outputs:
   proposal:
-    json_schema_ref: schemas/product_proposal.json
+    json_schema: schemas/product_proposal.json
 
 eval_gate:
   required_suites:

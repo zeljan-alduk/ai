@@ -24,11 +24,20 @@ import {
   textCompletion,
 } from './mocks/index.js';
 
-const TENANT = 'tenant-a' as TenantId;
+// Wave-10: every runs/run_events row now carries a NOT NULL tenant_id
+// with a FK to tenants(id). The test inserts a fixed tenant row up
+// front so the engine's INSERTs satisfy the constraint without
+// running the full auth flow.
+const TENANT = '00000000-0000-0000-0000-000000000001' as TenantId;
 
 const clientP = (async () => {
   const c = await fromDatabaseUrl({ driver: 'pglite' });
   await migrate(c);
+  await c.query(
+    `INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO NOTHING`,
+    [TENANT, 'tenant-a', 'Tenant A'],
+  );
   return c;
 })();
 

@@ -47,7 +47,7 @@ tools:
     - server: github
       allow: [pr.read, pr.write]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readwrite
 
 memory:
@@ -72,7 +72,7 @@ inputs:
 
 outputs:
   docs_change:
-    json_schema_ref: schemas/docs_change.json
+    json_schema: schemas/docs_change.json
 
 eval_gate:
   required_suites:

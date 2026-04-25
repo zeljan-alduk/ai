@@ -72,7 +72,7 @@ inputs:
 
 outputs:
   roster_change:
-    json_schema_ref: schemas/roster_change.json
+    json_schema: schemas/roster_change.json
 
 eval_gate:
   required_suites:

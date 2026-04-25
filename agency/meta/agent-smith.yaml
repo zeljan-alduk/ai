@@ -78,7 +78,7 @@ inputs:
 
 outputs:
   spec_change:
-    json_schema_ref: schemas/agent_spec_change.json
+    json_schema: schemas/agent_spec_change.json
 
 eval_gate:
   required_suites:

@@ -5,10 +5,10 @@
  *   POST   /v1/secrets          → SetSecretResponse    (one summary)
  *   DELETE /v1/secrets/:name    → 204
  *
- * Auth is intentionally absent in v0; tenant scoping lands with the
- * orchestrator wave. Until then every request is treated as the same
- * `tenant-default` tenant — same convention every other v0 route
- * follows.
+ * Wave 10: every request now runs through the bearer-token middleware,
+ * which stamps `c.var.auth.tenantId` before this route sees the
+ * request. The route reads its tenant strictly from the session — no
+ * platform fallback, no env override.
  *
  * The raw secret value flows in only through the `POST` body and never
  * back. List + Set responses carry the redacted summary
@@ -29,6 +29,7 @@ import {
 import type { SecretStore } from '@aldo-ai/secrets';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { getAuth } from '../auth/middleware.js';
 import type { Deps } from '../deps.js';
 import { notFound, validationError } from '../middleware/error.js';
 
@@ -38,15 +39,12 @@ const SecretNameParam = z.object({
   }),
 });
 
-/** v0 single-tenant constant. Flips to a real tenant-id once auth lands. */
-const DEFAULT_TENANT = 'tenant-default';
-
 export function secretsRoutes(deps: Deps): Hono {
   const app = new Hono();
-  const tenantId = deps.tenantId ?? DEFAULT_TENANT;
 
   app.get('/v1/secrets', async (c) => {
     const store = requireStore(deps);
+    const tenantId = getAuth(c).tenantId;
     const summaries = await store.list(tenantId);
     const body = ListSecretsResponse.parse({
       secrets: summaries.map(toWireSummary),
@@ -56,6 +54,7 @@ export function secretsRoutes(deps: Deps): Hono {
 
   app.post('/v1/secrets', async (c) => {
     const store = requireStore(deps);
+    const tenantId = getAuth(c).tenantId;
     const raw = await safeJson(c.req.raw);
     const parsed = SetSecretRequest.safeParse(raw);
     if (!parsed.success) {
@@ -68,12 +67,18 @@ export function secretsRoutes(deps: Deps): Hono {
 
   app.delete('/v1/secrets/:name', async (c) => {
     const store = requireStore(deps);
+    const tenantId = getAuth(c).tenantId;
     const parsed = SecretNameParam.safeParse({ name: c.req.param('name') });
     if (!parsed.success) {
       throw validationError('invalid secret name', parsed.error.issues);
     }
     const removed = await store.delete(tenantId, parsed.data.name);
     if (!removed) {
+      // Cross-tenant reads also surface as 404 (the safer
+      // disclosure stance — never confirm a secret belongs to another
+      // tenant). The `delete` returns false for both "no such row in
+      // any tenant" and "row exists but belongs to a different
+      // tenant" because the WHERE clause filters on tenant_id.
       throw notFound(`secret not found: ${parsed.data.name}`);
     }
     return c.body(null, 204);

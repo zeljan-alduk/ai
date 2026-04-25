@@ -35,10 +35,13 @@ jobs:
       # with the new image. `--stage` queues them without forcing a release.
       # The @aldo-ai/secrets package refuses to boot in production without
       # ALDO_SECRETS_MASTER_KEY (32-byte base64 NaCl secretbox key).
+      # Wave 10 added ALDO_JWT_SECRET (32-byte base64 HS256 key) — the auth
+      # module refuses to boot in production without it.
       - name: Stage Fly secrets
         run: |
           flyctl secrets set --stage --app aldo-ai-api \
-            ALDO_SECRETS_MASTER_KEY="${{ secrets.ALDO_SECRETS_MASTER_KEY }}"
+            ALDO_SECRETS_MASTER_KEY="${{ secrets.ALDO_SECRETS_MASTER_KEY }}" \
+            ALDO_JWT_SECRET="${{ secrets.ALDO_JWT_SECRET }}"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 

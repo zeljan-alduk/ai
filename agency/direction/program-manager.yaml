@@ -49,7 +49,7 @@ tools:
     - server: github
       allow: [issue.read, issue.write, pr.read]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readwrite
 
 memory:
@@ -74,7 +74,7 @@ inputs:
 
 outputs:
   status:
-    json_schema_ref: schemas/program_status.json
+    json_schema: schemas/program_status.json
 
 eval_gate:
   required_suites:

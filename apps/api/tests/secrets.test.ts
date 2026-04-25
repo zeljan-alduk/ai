@@ -7,6 +7,10 @@
  *
  * Validation errors (bad name, bad body) and missing-secret 404s use
  * the shared `ApiError` envelope.
+ *
+ * Wave-10: every request now goes through the bearer-token middleware,
+ * so each `app.request()` includes `env.authHeader`. Cross-tenant
+ * isolation is asserted in `auth.test.ts`.
  */
 
 import { ApiError, ListSecretsResponse, SetSecretResponse } from '@aldo-ai/api-contract';
@@ -25,7 +29,7 @@ afterAll(async () => {
 
 describe('GET /v1/secrets', () => {
   it('returns the empty list on a fresh store', async () => {
-    const res = await env.app.request('/v1/secrets');
+    const res = await env.app.request('/v1/secrets', { headers: env.authHeader });
     expect(res.status).toBe(200);
     const body = ListSecretsResponse.parse(await res.json());
     expect(body.secrets).toEqual([]);
@@ -36,7 +40,7 @@ describe('POST /v1/secrets', () => {
   it('creates a secret and returns its summary (no value)', async () => {
     const res = await env.app.request('/v1/secrets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...env.authHeader },
       body: JSON.stringify({ name: 'API_KEY', value: 'sk-not-real-1234' }),
     });
     expect(res.status).toBe(200);
@@ -49,7 +53,7 @@ describe('POST /v1/secrets', () => {
   });
 
   it('subsequent list shows the new secret (without the value)', async () => {
-    const res = await env.app.request('/v1/secrets');
+    const res = await env.app.request('/v1/secrets', { headers: env.authHeader });
     const body = ListSecretsResponse.parse(await res.json());
     expect(body.secrets.find((s) => s.name === 'API_KEY')).toBeDefined();
     expect(JSON.stringify(body)).not.toContain('sk-not-real-1234');
@@ -58,7 +62,7 @@ describe('POST /v1/secrets', () => {
   it('updates an existing secret on duplicate POST', async () => {
     const res = await env.app.request('/v1/secrets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...env.authHeader },
       body: JSON.stringify({ name: 'API_KEY', value: 'sk-rotated-zzzz' }),
     });
     expect(res.status).toBe(200);
@@ -69,7 +73,7 @@ describe('POST /v1/secrets', () => {
   it('400s on malformed body', async () => {
     const res = await env.app.request('/v1/secrets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...env.authHeader },
       body: 'not-json',
     });
     expect(res.status).toBe(400);
@@ -80,7 +84,7 @@ describe('POST /v1/secrets', () => {
   it('400s on lowercase / non-conforming name', async () => {
     const res = await env.app.request('/v1/secrets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...env.authHeader },
       body: JSON.stringify({ name: 'lower_case', value: 'x' }),
     });
     expect(res.status).toBe(400);
@@ -91,7 +95,7 @@ describe('POST /v1/secrets', () => {
   it('400s when value is missing', async () => {
     const res = await env.app.request('/v1/secrets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...env.authHeader },
       body: JSON.stringify({ name: 'NEEDS_VALUE' }),
     });
     expect(res.status).toBe(400);
@@ -103,24 +107,33 @@ describe('DELETE /v1/secrets/:name', () => {
     // Create one first so we know it exists.
     await env.app.request('/v1/secrets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...env.authHeader },
       body: JSON.stringify({ name: 'GONER', value: 'plaintext-1234' }),
     });
-    const res = await env.app.request('/v1/secrets/GONER', { method: 'DELETE' });
+    const res = await env.app.request('/v1/secrets/GONER', {
+      method: 'DELETE',
+      headers: env.authHeader,
+    });
     expect(res.status).toBe(204);
     // Body must be empty.
     expect(await res.text()).toBe('');
   });
 
   it('404s on an unknown secret', async () => {
-    const res = await env.app.request('/v1/secrets/NEVER_SET', { method: 'DELETE' });
+    const res = await env.app.request('/v1/secrets/NEVER_SET', {
+      method: 'DELETE',
+      headers: env.authHeader,
+    });
     expect(res.status).toBe(404);
     const err = ApiError.parse(await res.json());
     expect(err.error.code).toBe('not_found');
   });
 
   it('400s on a malformed name (lower-case)', async () => {
-    const res = await env.app.request('/v1/secrets/lower', { method: 'DELETE' });
+    const res = await env.app.request('/v1/secrets/lower', {
+      method: 'DELETE',
+      headers: env.authHeader,
+    });
     expect(res.status).toBe(400);
   });
 });

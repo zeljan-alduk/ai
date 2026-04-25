@@ -85,6 +85,7 @@ interface RunListRow {
 }
 
 export interface ListRunsOptions {
+  readonly tenantId: string;
   readonly agentName?: string | undefined;
   readonly status?: string | undefined;
   readonly limit: number;
@@ -105,6 +106,12 @@ export interface ListRunsResult {
 export async function listRuns(db: SqlClient, opts: ListRunsOptions): Promise<ListRunsResult> {
   const params: unknown[] = [];
   const where: string[] = [];
+
+  // Wave-10: every list/range query is tenant-scoped. Always the FIRST
+  // predicate so the index on (tenant_id) is used; per-tenant filters
+  // are layered on top.
+  params.push(opts.tenantId);
+  where.push(`r.tenant_id = $${params.length}`);
 
   if (opts.agentName !== undefined) {
     params.push(opts.agentName);
@@ -144,7 +151,7 @@ export async function listRuns(db: SqlClient, opts: ListRunsOptions): Promise<Li
       EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id) AS has_children
     FROM runs r
     LEFT JOIN usage_records u ON u.run_id = r.id
-    ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+    WHERE ${where.join(' AND ')}
     GROUP BY r.id
     ORDER BY r.started_at DESC, r.id DESC
     LIMIT $${limitIdx}
@@ -210,15 +217,19 @@ interface ParentLookupRow {
 
 export async function resolveRunRoot(
   db: SqlClient,
+  tenantId: string,
   id: string,
   maxDepth = 32,
 ): Promise<string | null> {
   let cursor: string = id;
   let firstRowSeen = false;
   for (let i = 0; i < maxDepth; i++) {
+    // Wave-10: tenant-scoped lookup. A run id that exists in another
+    // tenant returns no row here, so the function returns null and
+    // the caller surfaces a 404 — never a cross-tenant disclosure.
     const res: SqlResult<ParentLookupRow> = await db.query<ParentLookupRow>(
-      'SELECT id, parent_run_id FROM runs WHERE id = $1',
-      [cursor],
+      'SELECT id, parent_run_id FROM runs WHERE id = $1 AND tenant_id = $2',
+      [cursor, tenantId],
     );
     const row: ParentLookupRow | undefined = res.rows[0];
     if (row === undefined) return firstRowSeen ? cursor : null;
@@ -242,13 +253,15 @@ interface SubtreeRow extends RunListRow {
  */
 export async function listRunSubtree(
   db: SqlClient,
+  tenantId: string,
   rootId: string,
   maxDepth = 10,
 ): Promise<readonly SubtreeRow[]> {
   const out: SubtreeRow[] = [];
   let frontier: readonly string[] = [rootId];
   for (let depth = 0; depth <= maxDepth && frontier.length > 0; depth++) {
-    // Postgres + pglite both support `= ANY($1::text[])` for IN-set bind.
+    // Wave-10: tenant filter on every read. ANY($1::text[]) is the
+    // cross-driver IN-set bind shape (pg + pglite + Neon).
     const res = await db.query<RunListRow>(
       `
       SELECT
@@ -267,9 +280,10 @@ export async function listRunSubtree(
       FROM runs r
       LEFT JOIN usage_records u ON u.run_id = r.id
       WHERE r.id = ANY($1::text[])
+        AND r.tenant_id = $2
       GROUP BY r.id
       `,
-      [[...frontier]],
+      [[...frontier], tenantId],
     );
     for (const row of res.rows) {
       out.push({ ...row, depth });
@@ -278,8 +292,8 @@ export async function listRunSubtree(
       // Need to know if there ARE more children — peek one level deeper
       // so the route can throw 422 instead of silently truncating.
       const peek = await db.query<{ id: string; [k: string]: unknown }>(
-        'SELECT id FROM runs WHERE parent_run_id = ANY($1::text[]) LIMIT 1',
-        [[...frontier]],
+        'SELECT id FROM runs WHERE parent_run_id = ANY($1::text[]) AND tenant_id = $2 LIMIT 1',
+        [[...frontier], tenantId],
       );
       if (peek.rows.length > 0) {
         // Mark the overflow with a sentinel row so the route can detect
@@ -301,8 +315,11 @@ export async function listRunSubtree(
       break;
     }
     const childIds = await db.query<{ id: string; [k: string]: unknown }>(
-      'SELECT id FROM runs WHERE parent_run_id = ANY($1::text[]) ORDER BY started_at ASC, id ASC',
-      [[...frontier]],
+      `SELECT id FROM runs
+        WHERE parent_run_id = ANY($1::text[])
+          AND tenant_id = $2
+        ORDER BY started_at ASC, id ASC`,
+      [[...frontier], tenantId],
     );
     frontier = childIds.rows.map((r) => r.id);
   }
@@ -368,8 +385,18 @@ interface UsageRecordRow {
   readonly [k: string]: unknown;
 }
 
-/** Fetch a run by id, including its full event timeline + usage records. */
-export async function getRun(db: SqlClient, id: string): Promise<RunDetail | null> {
+/**
+ * Fetch a run by id, including its full event timeline + usage records.
+ *
+ * Wave-10: tenant-scoped. A run id that exists in tenant B returns
+ * null when looked up by tenant A — same disclosure surface as a
+ * non-existent id, never `cross_tenant_access`.
+ */
+export async function getRun(
+  db: SqlClient,
+  tenantId: string,
+  id: string,
+): Promise<RunDetail | null> {
   const headSql = `
     SELECT
       r.id,
@@ -386,10 +413,10 @@ export async function getRun(db: SqlClient, id: string): Promise<RunDetail | nul
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_model
     FROM runs r
     LEFT JOIN usage_records u ON u.run_id = r.id
-    WHERE r.id = $1
+    WHERE r.id = $1 AND r.tenant_id = $2
     GROUP BY r.id
   `;
-  const head = await db.query<RunDetailRow>(headSql, [id]);
+  const head = await db.query<RunDetailRow>(headSql, [id, tenantId]);
   const row = head.rows[0];
   if (row === undefined) return null;
 

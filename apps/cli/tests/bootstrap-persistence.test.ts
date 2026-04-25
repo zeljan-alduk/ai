@@ -30,6 +30,14 @@ const FIXTURE_MODELS = fileURLToPath(new URL('./fixtures/models.test.yaml', impo
 const clientP = (async (): Promise<SqlClient> => {
   const c = await fromDatabaseUrl({ driver: 'pglite' });
   await migrate(c);
+  // Wave-10: runs.tenant_id now FKs to tenants(id). The CLI's
+  // default tenant id is the literal 'default' (not a UUID); seed
+  // a corresponding row so the FK is satisfied. Production callers
+  // pass a real tenant via auth; the CLI is dev-mode-only here.
+  await c.query(
+    `INSERT INTO tenants (id, slug, name) VALUES ('default', 'cli-default', 'CLI Default')
+     ON CONFLICT (id) DO NOTHING`,
+  );
   return c;
 })();
 

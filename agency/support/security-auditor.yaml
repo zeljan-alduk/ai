@@ -78,7 +78,7 @@ inputs:
 
 outputs:
   audit:
-    json_schema_ref: schemas/security_audit.json
+    json_schema: schemas/security_audit.json
 
 eval_gate:
   required_suites:

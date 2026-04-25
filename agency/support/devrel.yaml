@@ -45,7 +45,7 @@ tools:
     - server: github
       allow: [issue.read, issue.write, pr.read]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readwrite
 
 memory:
@@ -70,7 +70,7 @@ inputs:
 
 outputs:
   artefact:
-    json_schema_ref: schemas/devrel_artefact.json
+    json_schema: schemas/devrel_artefact.json
 
 eval_gate:
   required_suites:

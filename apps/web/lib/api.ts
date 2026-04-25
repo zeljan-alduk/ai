@@ -13,6 +13,8 @@
 
 import {
   ApiError,
+  AuthMeResponse,
+  AuthSessionResponse,
   CheckAgentResponse,
   GetAgentResponse,
   GetRunResponse,
@@ -23,12 +25,56 @@ import {
   type ListRunsQuery,
   ListRunsResponse,
   ListSecretsResponse,
+  type LoginRequest,
   type SetSecretRequest,
   SetSecretResponse,
+  type SignupRequest,
+  type SwitchTenantRequest,
+  SwitchTenantResponse,
 } from '@aldo-ai/api-contract';
 import type { z } from 'zod';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3001';
+
+/**
+ * Path prefix the Next.js auth-proxy route handler serves on. Client
+ * components that call `request<T>()` are rewritten to hit this prefix
+ * instead of `API_BASE` directly so the HTTP-only `aldo_session`
+ * cookie can be unwrapped server-side and injected as
+ * `Authorization: Bearer <token>`. The browser bundle never sees the
+ * raw token. See `apps/web/app/api/auth-proxy/[...path]/route.ts`.
+ */
+export const AUTH_PROXY_PREFIX = '/api/auth-proxy';
+
+/**
+ * Server-side bearer-token resolver, installed at runtime by the root
+ * layout (or any other server-only boundary). Pulling
+ * `getSession()` directly into this module would force the client
+ * bundle to depend on `next/headers`; instead we accept a setter so
+ * the wiring stays one-way (server -> module). When unset (e.g.
+ * during pre-render or in a client bundle) `request<T>()` skips the
+ * Authorization header.
+ */
+let serverTokenResolver: (() => Promise<string | null>) | null = null;
+
+/**
+ * Install the server-side token resolver. Idempotent. Called by the
+ * top-level layout before it fetches anything through `request<T>()`.
+ * Safe to call from a server component.
+ */
+export function setServerTokenResolver(fn: () => Promise<string | null>): void {
+  serverTokenResolver = fn;
+}
+
+async function readServerToken(): Promise<string | null> {
+  if (typeof window !== 'undefined') return null;
+  if (!serverTokenResolver) return null;
+  try {
+    return await serverTokenResolver();
+  } catch {
+    return null;
+  }
+}
 
 export type ApiClientErrorKind = 'network' | 'http_4xx' | 'http_5xx' | 'parse' | 'envelope';
 
@@ -59,7 +105,22 @@ export class ApiClientError extends Error {
 }
 
 function buildUrl(path: string, query?: Record<string, string | number | undefined>): string {
-  const url = new URL(path.startsWith('/') ? path : `/${path}`, API_BASE);
+  const normalised = path.startsWith('/') ? path : `/${path}`;
+  // In the browser, route through the Next auth-proxy so the
+  // HTTP-only session cookie can be unwrapped server-side. On the
+  // server we hit the API directly and inject the Authorization
+  // header inline (see `request()`).
+  if (typeof window !== 'undefined') {
+    const proxyUrl = new URL(`${AUTH_PROXY_PREFIX}${normalised}`, window.location.origin);
+    if (query) {
+      for (const [k, v] of Object.entries(query)) {
+        if (v === undefined || v === '') continue;
+        proxyUrl.searchParams.set(k, String(v));
+      }
+    }
+    return proxyUrl.toString();
+  }
+  const url = new URL(normalised, API_BASE);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v === undefined || v === '') continue;
@@ -67,6 +128,37 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
     }
   }
   return url.toString();
+}
+
+/**
+ * Build the per-request header bag, injecting `Authorization: Bearer
+ * <token>` when running server-side and a session cookie is present.
+ * Exported for unit testing.
+ */
+export async function buildRequestHeaders(
+  base: HeadersInit | undefined,
+): Promise<Record<string, string>> {
+  const merged: Record<string, string> = {
+    accept: 'application/json',
+  };
+  if (base) {
+    if (base instanceof Headers) {
+      base.forEach((v, k) => {
+        merged[k.toLowerCase()] = v;
+      });
+    } else if (Array.isArray(base)) {
+      for (const [k, v] of base) merged[k.toLowerCase()] = v;
+    } else {
+      for (const [k, v] of Object.entries(base)) merged[k.toLowerCase()] = String(v);
+    }
+  }
+  // Skip token injection in the browser — the proxy route handler
+  // attaches it from the cookie there.
+  if (typeof window === 'undefined') {
+    const token = await readServerToken();
+    if (token) merged.authorization = `Bearer ${token}`;
+  }
+  return merged;
 }
 
 async function request<T>(
@@ -77,16 +169,18 @@ async function request<T>(
   const { query, ...rest } = init;
   const url = buildUrl(path, query);
 
+  const headers = await buildRequestHeaders(rest.headers);
+
   let res: Response;
   try {
     res = await fetch(url, {
       ...rest,
-      headers: {
-        accept: 'application/json',
-        ...(rest.headers ?? {}),
-      },
+      headers,
       // Server components: fresh fetches; keep cache off for v0.
       cache: 'no-store',
+      // Browser path goes through the same-origin auth-proxy; ensure
+      // the `aldo_session` cookie rides along on every request.
+      credentials: typeof window === 'undefined' ? 'omit' : 'include',
     });
   } catch (err) {
     throw new ApiClientError('network', `Network error contacting API at ${url}`, {
@@ -210,12 +304,14 @@ export function setSecret(req: SetSecretRequest) {
  */
 export async function deleteSecret(name: string): Promise<void> {
   const url = buildUrl(`/v1/secrets/${encodeURIComponent(name)}`);
+  const headers = await buildRequestHeaders(undefined);
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'DELETE',
-      headers: { accept: 'application/json' },
+      headers,
       cache: 'no-store',
+      credentials: typeof window === 'undefined' ? 'omit' : 'include',
     });
   } catch (err) {
     throw new ApiClientError('network', `Network error contacting API at ${url}`, {
@@ -259,4 +355,69 @@ export async function deleteSecret(name: string): Promise<void> {
   }
 
   // 2xx other than 204 — accept silently.
+}
+
+/* -------------------------------- Auth ---------------------------------- */
+
+/**
+ * `POST /v1/auth/signup` — create a new user + tenant. The returned
+ * token is the new session credential; callers store it via
+ * `lib/session.setSession()`.
+ */
+export function signup(req: SignupRequest) {
+  return request('/v1/auth/signup', AuthSessionResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/** `POST /v1/auth/login`. */
+export function login(req: LoginRequest) {
+  return request('/v1/auth/login', AuthSessionResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/**
+ * `GET /v1/auth/me` — server-side session probe. Used by pages that
+ * need the current user/tenant in their render. A 401 here means the
+ * cookie is stale; pages bubble the `ApiClientError` up to the
+ * middleware-friendly redirect path.
+ */
+export function getAuthMe() {
+  return request('/v1/auth/me', AuthMeResponse);
+}
+
+/** `POST /v1/auth/switch-tenant`. Returns a fresh JWT scoped to the new tenant. */
+export function switchTenant(req: SwitchTenantRequest) {
+  return request('/v1/auth/switch-tenant', SwitchTenantResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/**
+ * `POST /v1/auth/logout` — best-effort server-side invalidation.
+ * Returns 204; the cookie is cleared regardless of whether this
+ * succeeds (the server may already consider the JWT expired).
+ */
+export async function logout(): Promise<void> {
+  const url = buildUrl('/v1/auth/logout');
+  const headers = await buildRequestHeaders({ 'content-type': 'application/json' });
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers,
+      cache: 'no-store',
+      credentials: typeof window === 'undefined' ? 'omit' : 'include',
+    });
+  } catch {
+    // Network errors during logout should never block the client; the
+    // cookie clear in `clearSession()` is what actually matters for the
+    // user.
+  }
 }

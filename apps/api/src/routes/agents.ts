@@ -1,26 +1,43 @@
 /**
- * `/v1/agents` — list and detail.
+ * `/v1/agents` — tenant-scoped registered-agent CRUD.
  *
- * The detail endpoint hands the spec back as `unknown` per the
- * `AgentDetail` contract; clients re-validate via `@aldo-ai/registry`
- * if they need a typed `AgentSpec`. We never re-shape the spec on the
- * server because the contract already declares it opaque.
+ * Wave 10 rewires this route to the new `RegisteredAgentStore`:
  *
- * Wave 7.5: we additionally project two policy slices (`tools.guards`
- * and the spec-level `sandbox` block) onto the response envelope so the
- * web client can render the safety panels without walking an `unknown`
- * payload. Both projections are best-effort — if the persisted spec
- * doesn't carry the field we emit `null` and the UI shows the
- * "default sandbox" / "no guards" empty states. We never *invent*
- * values; the projection only forwards what the agent author declared.
+ *   GET    /v1/agents                            — list current versions
+ *   GET    /v1/agents/:name                      — agent detail (current)
+ *   GET    /v1/agents/:name/versions             — version history
+ *   GET    /v1/agents/:name/versions/:version    — one specific version
+ *   POST   /v1/agents                            — register a new spec
+ *   POST   /v1/agents/:name/promote {version}    — bump the live pointer
+ *   POST   /v1/agents/:name/check                — routing dry-run (wave 8)
+ *   DELETE /v1/agents/:name                      — soft-delete (pointer NULL)
+ *
+ * Every read/write resolves the request's tenant id through `getAuth(c)`
+ * (stamped onto the request by the wave-10 bearer-token middleware).
+ * Routes return 404 when a row exists for a different tenant — never
+ * leaking existence across tenant boundaries.
+ *
+ * Wave 7.5 projections (`tools.guards`, top-level `sandbox`,
+ * `composite`) still ride on the detail response — they're cheap and the
+ * web UI relies on them. The projection helpers re-validate against the
+ * wire schema and fall back to `null` when the spec doesn't carry the
+ * field.
+ *
+ * LLM-agnostic: provider names never appear here; agents declare
+ * capability classes + privacy_tier and the gateway picks the model.
  */
 
 import {
   CheckAgentResponse,
   CompositeWire,
   GetAgentResponse,
+  ListAgentVersionsResponse,
   ListAgentsQuery,
   ListAgentsResponse,
+  PromoteRegisteredAgentRequest,
+  PromoteRegisteredAgentResponse,
+  RegisterAgentJsonRequest,
+  RegisterAgentResponse,
   SandboxConfigWire,
   ToolsGuardsWire,
 } from '@aldo-ai/api-contract';
@@ -30,6 +47,12 @@ import {
   createModelRegistry,
   createRouter,
 } from '@aldo-ai/gateway';
+import {
+  type RegisteredAgent,
+  RegisteredAgentNotFoundError,
+  type RegisteredAgentStore,
+  parseYaml,
+} from '@aldo-ai/registry';
 import type {
   AgentSpec,
   CallContext,
@@ -41,16 +64,28 @@ import type {
 } from '@aldo-ai/types';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { decodeCursor, getAgent, listAgents } from '../db.js';
+import { getAuth } from '../auth/middleware.js';
 import type { Deps, Env } from '../deps.js';
 import { notFound, validationError } from '../middleware/error.js';
 import { loadModelCatalog } from './models.js';
 
 const AgentNameParam = z.object({ name: z.string().min(1) });
+const AgentNameVersionParam = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1),
+});
+
+// Tenant id resolution: every authenticated request carries one in the
+// JWT (stamped onto `c.var.auth.tenantId` by the bearer-token middleware
+// in `app.ts`). The route handlers read it through `getAuth(c)` so a
+// missing session 401s before the route body runs.
 
 export function agentsRoutes(deps: Deps): Hono {
   const app = new Hono();
 
+  // ------------------------------------------------------------------
+  // List: current version of every agent for the request's tenant.
+  // ------------------------------------------------------------------
   app.get('/v1/agents', async (c) => {
     const parsed = ListAgentsQuery.safeParse(
       Object.fromEntries(new URL(c.req.url).searchParams.entries()),
@@ -59,36 +94,73 @@ export function agentsRoutes(deps: Deps): Hono {
       throw validationError('invalid query', parsed.error.issues);
     }
     const q = parsed.data;
-    const cursor = q.cursor !== undefined ? decodeCursor(q.cursor) : undefined;
-    if (q.cursor !== undefined && cursor === null) {
-      throw validationError('invalid cursor');
-    }
-    const result = await listAgents(deps.db, {
-      ...(q.team !== undefined ? { team: q.team } : {}),
-      ...(q.owner !== undefined ? { owner: q.owner } : {}),
-      limit: q.limit,
-      ...(cursor !== undefined && cursor !== null ? { cursor } : {}),
+    const tenantId = getAuth(c).tenantId;
+    const all = await deps.agentStore.list(tenantId);
+    const filtered = all.filter((a) => {
+      if (q.team !== undefined && a.spec.role.team !== q.team) return false;
+      if (q.owner !== undefined && a.spec.identity.owner !== q.owner) return false;
+      return true;
     });
+
+    // Pagination is in the contract but the new store returns the full
+    // list (cheap — 26 agents in the dogfood org); we slice + emit a
+    // null cursor. The contract still requires the `meta` envelope so
+    // pre-9 clients keep working.
+    const limited = filtered.slice(0, q.limit);
     const body = ListAgentsResponse.parse({
-      agents: result.agents,
-      meta: { nextCursor: result.nextCursor, hasMore: result.hasMore },
+      agents: limited.map((a) => toSummary(a)),
+      meta: { nextCursor: null, hasMore: filtered.length > q.limit },
     });
     return c.json(body);
   });
 
+  // ------------------------------------------------------------------
+  // POST /v1/agents — register a new spec.
+  //
+  // Body is YAML when Content-Type is `application/yaml` or `text/yaml`,
+  // else JSON `{ specYaml: "..." }`. The shared registry parser owns
+  // validation; the route forwards the spec verbatim into the store.
+  // ------------------------------------------------------------------
+  app.post('/v1/agents', async (c) => {
+    const tenantId = getAuth(c).tenantId;
+    const yamlText = await readAgentBody(c.req);
+    if (yamlText === null) {
+      throw validationError('expected YAML body or {specYaml: string}');
+    }
+    const res = parseYaml(yamlText);
+    if (!res.ok || res.spec === undefined) {
+      throw validationError('agent spec failed schema validation', res.errors);
+    }
+    const spec = res.spec;
+    const stored = await deps.agentStore.register(tenantId, spec, yamlText);
+    const body = RegisterAgentResponse.parse({
+      agent: {
+        name: stored.name,
+        version: stored.version,
+        promoted: true,
+      },
+    });
+    return c.json(body, 201);
+  });
+
+  // ------------------------------------------------------------------
+  // POST /v1/agents/:name/check — wave 8 routing dry-run.
+  //
+  // Lookup walks the new store. The simulator builds an in-memory
+  // model registry from the YAML catalog; nothing actually calls a
+  // provider.
+  // ------------------------------------------------------------------
   app.post('/v1/agents/:name/check', async (c) => {
     const parsed = AgentNameParam.safeParse({ name: c.req.param('name') });
     if (!parsed.success) {
       throw validationError('invalid agent name', parsed.error.issues);
     }
-    const detail = await getAgent(deps.db, parsed.data.name);
-    if (detail === null) {
+    const tenantId = getAuth(c).tenantId;
+    const agent = await deps.agentStore.get(tenantId, parsed.data.name);
+    if (agent === null) {
       throw notFound(`agent not found: ${parsed.data.name}`);
     }
-    const spec = coerceSpec(detail.spec);
-    if (spec === null) {
-      throw validationError('agent spec is unparseable; cannot dry-run');
-    }
+    const spec = agent.spec;
     const catalog = await loadModelCatalog(deps.env);
     const registry = createModelRegistry(
       catalog.models.flatMap((m) => {
@@ -101,7 +173,7 @@ export function agentsRoutes(deps: Deps): Hono {
       required: spec.modelPolicy.capabilityRequirements,
       privacy: spec.modelPolicy.privacyTier,
       budget: spec.modelPolicy.budget,
-      tenant: (deps.tenantId ?? 'tenant-default') as TenantId,
+      tenant: tenantId as TenantId,
       runId: 'dry-run' as RunId,
       traceId: 'dry-run' as TraceId,
       agentName: spec.identity.name,
@@ -118,31 +190,132 @@ export function agentsRoutes(deps: Deps): Hono {
     return c.json(body);
   });
 
+  // ------------------------------------------------------------------
+  // GET /v1/agents/:name/versions
+  // GET /v1/agents/:name/versions/:version
+  //
+  // Routes are declared BEFORE `/v1/agents/:name` because Hono matches
+  // longest-prefix-first only within a single segment; the /versions
+  // suffix needs its own handler so the parameterised `:name` route
+  // doesn't swallow it.
+  // ------------------------------------------------------------------
+  app.get('/v1/agents/:name/versions', async (c) => {
+    const parsed = AgentNameParam.safeParse({ name: c.req.param('name') });
+    if (!parsed.success) {
+      throw validationError('invalid agent name', parsed.error.issues);
+    }
+    const tenantId = getAuth(c).tenantId;
+    const versions = await deps.agentStore.listAllVersions(tenantId, parsed.data.name);
+    if (versions.length === 0) {
+      // 404 when the agent doesn't exist in this tenant — never leak
+      // that a row of the same name exists in another tenant.
+      throw notFound(`agent not found: ${parsed.data.name}`);
+    }
+    const current = await deps.agentStore.get(tenantId, parsed.data.name);
+    const body = ListAgentVersionsResponse.parse({
+      name: parsed.data.name,
+      current: current?.version ?? null,
+      versions: versions.map((v) => ({
+        version: v.version,
+        promoted: current?.version === v.version,
+        createdAt: v.createdAt,
+      })),
+    });
+    return c.json(body);
+  });
+
+  app.get('/v1/agents/:name/versions/:version', async (c) => {
+    const parsed = AgentNameVersionParam.safeParse({
+      name: c.req.param('name'),
+      version: c.req.param('version'),
+    });
+    if (!parsed.success) {
+      throw validationError('invalid agent name/version', parsed.error.issues);
+    }
+    const tenantId = getAuth(c).tenantId;
+    const row = await deps.agentStore.getVersion(tenantId, parsed.data.name, parsed.data.version);
+    if (row === null) {
+      throw notFound(`agent not found: ${parsed.data.name}@${parsed.data.version}`);
+    }
+    const current = await deps.agentStore.get(tenantId, parsed.data.name);
+    const body = GetAgentResponse.parse({
+      agent: buildAgentDetailBody(row, current?.version ?? null, [row]),
+    });
+    return c.json(body);
+  });
+
+  // ------------------------------------------------------------------
+  // POST /v1/agents/:name/set-current — bump the live pointer.
+  //
+  // Distinct from `/v1/agents/:name/promote` (the eval-gated promotion
+  // endpoint defined in routes/eval.ts) — this one is a pure pointer
+  // flip used by the registry CRUD surface, with no eval suite run.
+  // The wave-10 brief originally called this `/promote` but the eval
+  // route already owned that path; we rename here to avoid the
+  // collision. Eval-gated promotion stays at `/promote`; explicit
+  // pointer flips (CLI, web admin) go through `/set-current`.
+  // ------------------------------------------------------------------
+  app.post('/v1/agents/:name/set-current', async (c) => {
+    const param = AgentNameParam.safeParse({ name: c.req.param('name') });
+    if (!param.success) {
+      throw validationError('invalid agent name', param.error.issues);
+    }
+    const body = PromoteRegisteredAgentRequest.safeParse(await safeJson(c.req));
+    if (!body.success) {
+      throw validationError('invalid promote body', body.error.issues);
+    }
+    const tenantId = getAuth(c).tenantId;
+    try {
+      await deps.agentStore.promote(tenantId, param.data.name, body.data.version);
+    } catch (e) {
+      if (e instanceof RegisteredAgentNotFoundError) {
+        throw notFound(`agent not found: ${param.data.name}@${body.data.version}`);
+      }
+      throw e;
+    }
+    const out = PromoteRegisteredAgentResponse.parse({
+      name: param.data.name,
+      current: body.data.version,
+    });
+    return c.json(out);
+  });
+
+  // ------------------------------------------------------------------
+  // DELETE /v1/agents/:name — soft delete (pointer NULL).
+  // ------------------------------------------------------------------
+  app.delete('/v1/agents/:name', async (c) => {
+    const parsed = AgentNameParam.safeParse({ name: c.req.param('name') });
+    if (!parsed.success) {
+      throw validationError('invalid agent name', parsed.error.issues);
+    }
+    const tenantId = getAuth(c).tenantId;
+    const existing = await deps.agentStore.get(tenantId, parsed.data.name);
+    if (existing === null) {
+      throw notFound(`agent not found: ${parsed.data.name}`);
+    }
+    await deps.agentStore.delete(tenantId, parsed.data.name);
+    return c.body(null, 204);
+  });
+
+  // ------------------------------------------------------------------
+  // GET /v1/agents/:name — agent detail (current version).
+  //
+  // Declared LAST among GET handlers so the more-specific `/versions`
+  // routes above match first.
+  // ------------------------------------------------------------------
   app.get('/v1/agents/:name', async (c) => {
     const parsed = AgentNameParam.safeParse({ name: c.req.param('name') });
     if (!parsed.success) {
       throw validationError('invalid agent name', parsed.error.issues);
     }
-    const detail = await getAgent(deps.db, parsed.data.name);
-    if (detail === null) {
+    const tenantId = getAuth(c).tenantId;
+    const agent = await deps.agentStore.get(tenantId, parsed.data.name);
+    if (agent === null) {
       throw notFound(`agent not found: ${parsed.data.name}`);
     }
+    const versions = await deps.agentStore.listAllVersions(tenantId, parsed.data.name);
     const body = GetAgentResponse.parse({
-      agent: {
-        name: detail.name,
-        owner: detail.owner,
-        latestVersion: detail.latestVersion,
-        promoted: detail.latestPromoted,
-        description: detail.description,
-        privacyTier: detail.privacyTier,
-        team: detail.team,
-        tags: detail.tags,
-        versions: detail.versions,
-        spec: detail.spec,
-        guards: projectGuards(detail.spec),
-        sandbox: projectSandbox(detail.spec),
-        composite: projectComposite(detail.spec),
-      },
+      agent: buildAgentDetailBody(agent, agent.version, versions),
     });
     return c.json(body);
   });
@@ -150,11 +323,96 @@ export function agentsRoutes(deps: Deps): Hono {
   return app;
 }
 
-/**
- * Pull `tools.guards` off the persisted spec and re-validate it
- * through the wire schema. Returns `null` when the spec doesn't
- * declare a guards block — matches the optional contract field.
- */
+// ---------------------------------------------------------------------------
+// Body parsing helpers.
+
+async function readAgentBody(req: {
+  header: (n: string) => string | undefined;
+  text: () => Promise<string>;
+  json: () => Promise<unknown>;
+}): Promise<string | null> {
+  const ct = (req.header('content-type') ?? '').toLowerCase();
+  if (ct.includes('yaml')) {
+    const text = await req.text();
+    if (text.length === 0) return null;
+    return text;
+  }
+  // Default: JSON envelope `{specYaml: "..."}`.
+  try {
+    const j = await req.json();
+    const parsed = RegisterAgentJsonRequest.safeParse(j);
+    if (!parsed.success) return null;
+    return parsed.data.specYaml;
+  } catch {
+    return null;
+  }
+}
+
+async function safeJson(req: { json: () => Promise<unknown> }): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Response shaping.
+
+function toSummary(a: RegisteredAgent): {
+  readonly name: string;
+  readonly owner: string;
+  readonly latestVersion: string;
+  readonly promoted: boolean;
+  readonly description: string;
+  readonly privacyTier: PrivacyTier;
+  readonly team: string;
+  readonly tags: readonly string[];
+} {
+  return {
+    name: a.name,
+    owner: a.spec.identity.owner,
+    latestVersion: a.version,
+    // The new store's "current pointer" is conceptually always the
+    // promoted version — list() filters out NULL pointers — so we
+    // return promoted=true for every row in the list response.
+    promoted: true,
+    description: a.spec.identity.description,
+    privacyTier: a.spec.modelPolicy.privacyTier,
+    team: a.spec.role.team,
+    tags: [...a.spec.identity.tags],
+  };
+}
+
+function buildAgentDetailBody(
+  resolved: RegisteredAgent,
+  currentVersion: string | null,
+  history: readonly RegisteredAgent[],
+): unknown {
+  return {
+    name: resolved.name,
+    owner: resolved.spec.identity.owner,
+    latestVersion: resolved.version,
+    promoted: currentVersion === resolved.version,
+    description: resolved.spec.identity.description,
+    privacyTier: resolved.spec.modelPolicy.privacyTier,
+    team: resolved.spec.role.team,
+    tags: [...resolved.spec.identity.tags],
+    versions: history
+      .slice()
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .map((v) => ({
+        version: v.version,
+        promoted: currentVersion === v.version,
+        createdAt: v.createdAt,
+      })),
+    spec: resolved.spec,
+    guards: projectGuards(resolved.spec),
+    sandbox: projectSandbox(resolved.spec),
+    composite: projectComposite(resolved.spec),
+  };
+}
+
 function projectGuards(spec: unknown): z.infer<typeof ToolsGuardsWire> | null {
   const tools = readObject(spec, 'tools');
   const raw = tools !== null ? (tools as Record<string, unknown>).guards : undefined;
@@ -163,11 +421,6 @@ function projectGuards(spec: unknown): z.infer<typeof ToolsGuardsWire> | null {
   return parsed.success ? parsed.data : null;
 }
 
-/**
- * Pull the spec-level `sandbox` block. Returns `null` when absent so
- * the web client can render its "running in default sandbox" empty
- * state without ambiguity.
- */
 function projectSandbox(spec: unknown): z.infer<typeof SandboxConfigWire> | null {
   if (spec === null || typeof spec !== 'object') return null;
   const raw = (spec as Record<string, unknown>).sandbox;
@@ -176,13 +429,6 @@ function projectSandbox(spec: unknown): z.infer<typeof SandboxConfigWire> | null
   return parsed.success ? parsed.data : null;
 }
 
-/**
- * Pull the spec-level `composite` block. Returns `null` when absent so
- * a future "Composite" panel in the web UI can render the single-agent
- * empty state without ambiguity. Like the guards/sandbox projections,
- * we forward only what the spec author declared and re-validate
- * through the wire schema.
- */
 function projectComposite(spec: unknown): z.infer<typeof CompositeWire> | null {
   if (spec === null || typeof spec !== 'object') return null;
   const raw = (spec as Record<string, unknown>).composite;
@@ -201,26 +447,6 @@ function readObject(spec: unknown, key: string): Record<string, unknown> | null 
 
 // ---------------------------------------------------------------------------
 // `POST /v1/agents/:name/check` helpers.
-//
-// The check endpoint reuses the gateway's `simulate()` against a registry
-// it builds on the fly from the YAML catalog. We deliberately do NOT
-// touch any provider adapter — simulate is route+filter only — so the
-// endpoint stays cheap and side-effect free.
-
-/**
- * Coerce the persisted spec JSON into a typed `AgentSpec`. The DB stores
- * it as JSON because the YAML loader has already validated it, so this
- * is a structural narrowing rather than a re-parse. We return null when
- * the persisted document doesn't carry the wave-1 fields the simulator
- * needs — that's a 400 to the caller, not a 500.
- */
-function coerceSpec(raw: unknown): AgentSpec | null {
-  if (raw === null || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  if (o.modelPolicy === undefined || o.identity === undefined) return null;
-  // The shape was validated by `@aldo-ai/registry` at write time.
-  return raw as AgentSpec;
-}
 
 interface CatalogModel {
   readonly id: string;
@@ -235,11 +461,6 @@ interface CatalogModel {
   readonly providerConfig?: { readonly baseUrl?: string; readonly apiKeyEnv?: string };
 }
 
-/**
- * Translate a YAML-shaped catalog row into the in-memory `RegisteredModel`
- * the gateway router consumes. Returns null for malformed rows — fail
- * closed; we never invent privacy or capability data.
- */
 function catalogEntryToRegisteredModel(m: CatalogModel): RegisteredModel | null {
   if (m.locality !== 'cloud' && m.locality !== 'on-prem' && m.locality !== 'local') return null;
   const privacyAllowed = (m.privacyAllowed ?? []).filter(
@@ -263,12 +484,6 @@ function catalogEntryToRegisteredModel(m: CatalogModel): RegisteredModel | null 
   return reg;
 }
 
-/**
- * Mirror the FIX heuristic from `apps/cli/src/commands/agents-check.ts`.
- * Kept intentionally aligned: an operator who runs the CLI then clicks
- * the web button on the same agent must see the same suggested fix —
- * otherwise the two surfaces lie about each other.
- */
 function suggestFixForApi(spec: AgentSpec, sim: RoutingSimulation): string | null {
   const last = sim.trace[sim.trace.length - 1];
   if (last === undefined) return null;
@@ -330,6 +545,7 @@ function buildCheckBody(spec: AgentSpec, sim: RoutingSimulation): unknown {
   };
 }
 
-// Mark the `Env` import as used so TypeScript doesn't strip it (the
-// helpers above pull `deps.env` indirectly through `loadModelCatalog`).
 void (undefined as unknown as Env);
+// `RegisteredAgent` is intentionally re-exported here so the projection
+// helpers can be type-checked without importing through the deeper path.
+void (undefined as unknown as RegisteredAgent);

@@ -31,6 +31,27 @@ export const KNOWN_API_ERROR_CODES = [
   'http_error',
   'internal_error',
   'privacy_tier_unroutable',
+  // Wave 10 — auth.
+  // `unauthenticated` is the canonical 401 code: the request has no
+  // valid bearer token. The web middleware turns this into a redirect
+  // to /login?next=<path>; CLI clients prompt for a login.
+  'unauthenticated',
+  // `forbidden` is the canonical 403 code: the caller is authenticated
+  // but the current tenant/role can't reach the resource. Distinct from
+  // `unauthenticated` so clients don't bounce a logged-in user back to
+  // /login on a routine permission check.
+  'forbidden',
+  // `tenant_not_found` (404) — a tenant slug couldn't be resolved
+  // (e.g. `POST /v1/auth/switch-tenant` against a slug the user has
+  // never been a member of, or a typo on the CLI).
+  'tenant_not_found',
+  // `cross_tenant_access` (403) — caller authenticated as tenant A
+  // attempted to read/write a row that belongs to tenant B by id.
+  // Most cross-tenant lookups return 404 ("the row does not exist
+  // for you" — the safer disclosure stance), but a small set of
+  // endpoints where the slug/id is part of the URL itself surface
+  // this code so the client can report a real "wrong tenant" UI.
+  'cross_tenant_access',
 ] as const;
 export type KnownApiErrorCode = (typeof KNOWN_API_ERROR_CODES)[number];
 

@@ -182,11 +182,20 @@ export class PostgresRunStore implements RunStore {
 
   async appendEvent(runId: RunId, event: RunEvent): Promise<void> {
     const id = randomUUID();
+    // Wave-10: run_events is now tenant-scoped (see migration 006). We
+    // resolve the tenant from the parent runs row in the same INSERT
+    // so callers don't have to thread tenantId through every emission
+    // path. INSERT ... SELECT FROM runs WHERE id = $1 looks up the
+    // canonical tenant for this run; the FK is satisfied because the
+    // run row was written by `recordRunStart` before any event lands.
+    //
     // The `at` column has a server-side default; we still pass the engine's
     // ISO timestamp so ordering matches the in-memory event stream exactly.
     await this.client.query(
-      `INSERT INTO run_events (id, run_id, type, payload_jsonb, at)
-       VALUES ($1, $2, $3, $4::jsonb, $5)`,
+      `INSERT INTO run_events (id, run_id, tenant_id, type, payload_jsonb, at)
+       SELECT $1, $2, r.tenant_id, $3, $4::jsonb, $5
+         FROM runs r
+        WHERE r.id = $2`,
       [id, runId, event.type, JSON.stringify(event.payload ?? null), event.at],
     );
   }

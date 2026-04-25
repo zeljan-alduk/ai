@@ -72,7 +72,7 @@ inputs:
 
 outputs:
   compliance_review:
-    json_schema_ref: schemas/compliance_review.json
+    json_schema: schemas/compliance_review.json
 
 eval_gate:
   required_suites:

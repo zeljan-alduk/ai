@@ -31,6 +31,17 @@ async function inMemHarness(): Promise<Harness> {
 async function pgliteHarness(): Promise<Harness> {
   const db: SqlClient = await fromDatabaseUrl({ driver: 'pglite' });
   await migrate(db);
+  // Wave-10: secrets.tenant_id now FKs to tenants(id). The legacy
+  // string ids 'tenant-A' / 'tenant-B' the existing tests use don't
+  // exist in the tenants table; seed rows for them so the FK is
+  // satisfied. Tenancy semantics under test here are about the
+  // SecretStore's filtering, not about the tenants table itself.
+  await db.query(
+    `INSERT INTO tenants (id, slug, name) VALUES
+       ('tenant-A', 'tenant-a', 'Tenant A'),
+       ('tenant-B', 'tenant-b', 'Tenant B')
+     ON CONFLICT (id) DO NOTHING`,
+  );
   const store = new PostgresSecretStore({ client: db, masterKey: generateMasterKey() });
   return {
     store,

@@ -9,17 +9,19 @@
  *  - request logger (one-line per request),
  *  - CORS for the local web origin (and any extras configured via
  *    `CORS_ORIGINS`),
+ *  - bearer-token auth (HS256 JWT) — validates Authorization on every
+ *    request EXCEPT the public allow-list (`/health`, `/v1/auth/signup`,
+ *    `/v1/auth/login`, OPTIONS preflights),
  *  - central error handler that emits the typed `ApiError` envelope.
  *
- * Auth is intentionally absent in v0; tenant scoping lands with the
- * orchestrator wave.
+ * Order matters: cors must run before auth so OPTIONS preflights
+ * skip auth via the allow-list.
  */
-
-// TODO(v1): require auth — every route must run through a tenant-aware
-// session middleware before it can read storage.
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bearerAuth } from './auth/middleware.js';
+import { authRoutes } from './auth/routes.js';
 import type { Deps } from './deps.js';
 import { errorHandler } from './middleware/error.js';
 import { logger } from './middleware/logger.js';
@@ -30,6 +32,7 @@ import { healthRoutes } from './routes/health.js';
 import { modelsRoutes } from './routes/models.js';
 import { runsRoutes } from './routes/runs.js';
 import { secretsRoutes } from './routes/secrets.js';
+import { tenantsRoutes } from './routes/tenants.js';
 
 export interface BuildAppOptions {
   /** Disable the request logger (tests pass `false`). */
@@ -58,13 +61,20 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
     }),
   );
 
+  // Bearer-token middleware. Runs on every request, but skips the
+  // public allow-list (health + signup/login + OPTIONS). Stamps
+  // `c.var.auth` for downstream routes.
+  app.use('*', bearerAuth(deps.signingKey));
+
   app.route('/', healthRoutes(deps));
+  app.route('/', authRoutes({ db: deps.db, signingKey: deps.signingKey }));
   app.route('/', runsRoutes(deps));
   app.route('/', agentsRoutes(deps));
   app.route('/', modelsRoutes(deps));
   app.route('/', debuggerRoutes(deps));
   app.route('/', evalRoutes(deps, deps.evalDeps !== undefined ? { evalDeps: deps.evalDeps } : {}));
   app.route('/', secretsRoutes(deps));
+  app.route('/', tenantsRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>

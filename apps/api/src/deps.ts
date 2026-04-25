@@ -10,17 +10,43 @@
  * Routes get a typed bag of dependencies via Hono's per-request context;
  * tests build their own `Deps` directly so they never touch a port and
  * never read environment outside the harness.
+ *
+ * Wave 10: deps grew a `signingKey` (32-byte HS256 secret for JWT) and
+ * lost its v0 `tenantId` constant. Tenant id is now per-request, set by
+ * the auth middleware on `c.var.auth.tenantId`. There is no platform
+ * fallback: a route that runs without an authenticated session 401s
+ * before the route body executes.
  */
 
-import { AgentRegistry, PostgresStorage } from '@aldo-ai/registry';
+import {
+  AgentRegistry,
+  PostgresRegisteredAgentStore,
+  PostgresStorage,
+  type RegisteredAgentStore,
+} from '@aldo-ai/registry';
 import { PostgresSecretStore, type SecretStore, loadMasterKeyFromEnv } from '@aldo-ai/secrets';
 import { type SqlClient, fromDatabaseUrl } from '@aldo-ai/storage';
+import { loadSigningKeyFromEnv } from './auth/jwt.js';
 import {
   type EngineDebugger,
   type InProcessEngineDebugger,
   createInProcessEngineDebugger,
 } from './routes/debugger.js';
 import type { EvalDeps } from './routes/eval.js';
+
+/**
+ * Canonical "default" tenant id. Migration 006 seeds a row in `tenants`
+ * with this id and `slug = 'default'`; pre-wave-10 rows whose
+ * `tenant_id` was the literal string `tenant-default` get backfilled
+ * to this UUID so old runs/secrets keep their FK targets.
+ *
+ * The constant is intentionally NOT a fallback for missing auth — every
+ * route reads its tenant id from `c.var.auth.tenantId` populated by
+ * the bearer-token middleware. The seed UUID is exported so test
+ * harnesses can stamp it into a synthesised JWT.
+ */
+export const SEED_TENANT_UUID = '00000000-0000-0000-0000-000000000000';
+export const SEED_TENANT_SLUG = 'default';
 
 export interface Env {
   /** Postgres URL. Empty / unset / `pglite:` / `memory://` -> in-process pglite. */
@@ -35,6 +61,13 @@ export interface Env {
   readonly NODE_ENV?: string | undefined;
   /** 32-byte base64 master key for `@aldo-ai/secrets`. Required in prod. */
   readonly ALDO_SECRETS_MASTER_KEY?: string | undefined;
+  /**
+   * 32-byte base64 (or hex) HS256 signing key for session JWTs. Required
+   * in production; in dev (`NODE_ENV !== 'production'`) the api boots
+   * with an ephemeral key and a console warning, mirroring the wave-7
+   * `ALDO_SECRETS_MASTER_KEY` pattern.
+   */
+  readonly ALDO_JWT_SECRET?: string | undefined;
   /** Provider key + base-URL env vars. Read by the models route to stamp `available`. */
   readonly [k: string]: string | undefined;
 }
@@ -44,6 +77,8 @@ export interface Deps {
   readonly registry: AgentRegistry;
   readonly env: Env;
   readonly version: string;
+  /** 32-byte HS256 secret used to sign + verify session JWTs. */
+  readonly signingKey: Uint8Array;
   /**
    * Default in-process debugger surface. Always present so the debugger
    * routes can boot without an explicit injection. Tests reach in via
@@ -65,14 +100,21 @@ export interface Deps {
    */
   readonly evalDeps?: EvalDeps;
   /**
-   * Secrets surface — store + the tenant id all v0 requests are scoped
-   * to. Empty when the host hasn't wired secrets (in which case
-   * `/v1/secrets` returns 500). Tests can swap an `InMemorySecretStore`
-   * in via `CreateDepsOptions.secrets`.
+   * Secrets surface — store. Empty when the host hasn't wired secrets
+   * (in which case `/v1/secrets` returns 500). Tests can swap an
+   * `InMemorySecretStore` in via `CreateDepsOptions.secrets`.
+   *
+   * The tenant id used for SecretStore reads is pulled from the
+   * authenticated session per request, not from the deps bag.
    */
   readonly secrets?: { readonly store: SecretStore };
-  /** v0 single-tenant constant; set per-request once auth lands. */
-  readonly tenantId?: string;
+  /**
+   * Wave-10 tenant-scoped registered-agent store. Backs the rewritten
+   * `/v1/agents` route + `POST /v1/tenants/me/seed-default`. Wired
+   * automatically when `createDeps()` runs; tests can inject an
+   * in-memory implementation through `CreateDepsOptions.agentStore`.
+   */
+  readonly agentStore: RegisteredAgentStore;
   /** Release the underlying SQL client. */
   close(): Promise<void>;
 }
@@ -88,8 +130,18 @@ export interface CreateDepsOptions {
   readonly evalDeps?: EvalDeps;
   /** Inject a `SecretStore` (tests use `InMemorySecretStore`). */
   readonly secrets?: { readonly store: SecretStore };
-  /** Override the tenant id used by every v0 request. */
-  readonly tenantId?: string;
+  /**
+   * Inject a `RegisteredAgentStore` (tests use the in-memory variant
+   * to assert tenant-isolation semantics without a SQL round trip).
+   */
+  readonly agentStore?: RegisteredAgentStore;
+  /**
+   * Override the JWT signing key (tests pass an explicit 32-byte
+   * Uint8Array so they don't have to thread an env var through every
+   * setup helper). Production callers leave this unset and let
+   * `loadSigningKeyFromEnv` resolve it.
+   */
+  readonly signingKey?: Uint8Array;
 }
 
 export async function createDeps(
@@ -116,16 +168,28 @@ export async function createDeps(
       }),
     }),
   };
-  const tenantId = opts.tenantId ?? 'tenant-default';
+
+  // JWT signing key. The brief mandates production refuses to boot
+  // without ALDO_JWT_SECRET; in dev we generate ephemeral with a
+  // warning. Callers can override via opts.signingKey for tests.
+  const signingKey =
+    opts.signingKey ??
+    loadSigningKeyFromEnv({
+      env,
+      allowDevFallback: env.NODE_ENV !== 'production',
+    }).key;
+
+  const agentStore = opts.agentStore ?? new PostgresRegisteredAgentStore({ client: db });
 
   const deps: Deps = {
     db,
     registry,
     env,
     version,
+    signingKey,
     __defaultDebugger,
     secrets,
-    tenantId,
+    agentStore,
     ...(opts.engineDebugger !== undefined ? { engineDebugger: opts.engineDebugger } : {}),
     ...(opts.evalDeps !== undefined ? { evalDeps: opts.evalDeps } : {}),
     async close() {

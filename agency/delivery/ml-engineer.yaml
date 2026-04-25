@@ -48,7 +48,7 @@ tools:
     - server: aldo-memory
       allow: [memory.read, memory.write, memory.scan]
   permissions:
-    network: egress-allowlist
+    network: allowlist
     filesystem: repo-readwrite
 
 memory:
@@ -73,7 +73,7 @@ inputs:
 
 outputs:
   model_report:
-    json_schema_ref: schemas/model_report.json
+    json_schema: schemas/model_report.json
 
 eval_gate:
   required_suites:

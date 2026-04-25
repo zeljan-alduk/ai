@@ -52,9 +52,17 @@ export class PostgresCheckpointer implements Checkpointer {
     // column) and serialise. Drivers vary in how they coerce JSON, so
     // we always pass a string and cast to jsonb explicitly.
     const payload: CheckpointPayload = cp;
+    // Wave-10: checkpoints rows now carry a NOT NULL tenant_id column.
+    // We resolve it from the parent runs row in the same INSERT so
+    // callers don't need to thread it through. The FK is satisfied
+    // because the runs row is created by `recordRunStart` before any
+    // checkpoint lands; tests that bypass `recordRunStart` need to
+    // INSERT into `runs` first (the test harness covers this).
     await this.client.query(
-      `INSERT INTO checkpoints (id, run_id, node_path, payload_jsonb)
-       VALUES ($1, $2, $3, $4::jsonb)`,
+      `INSERT INTO checkpoints (id, run_id, tenant_id, node_path, payload_jsonb)
+       SELECT $1, $2, r.tenant_id, $3, $4::jsonb
+         FROM runs r
+        WHERE r.id = $2`,
       [id, cp.runId, nodePath, JSON.stringify(payload)],
     );
     return id;

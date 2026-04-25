@@ -22,3 +22,23 @@ export {
   type RegistryOptions,
 } from './registry.js';
 export { assertValid, isValid, compare, latest, InvalidSemverError } from './semver.js';
+
+// Wave 10: tenant-scoped registered-agent store.
+export {
+  InMemoryRegisteredAgentStore,
+  PostgresRegisteredAgentStore,
+  RegisteredAgentNotFoundError,
+  type PostgresRegisteredAgentStoreOptions,
+  type RegisteredAgent,
+  type RegisteredAgentStore,
+} from './stores/index.js';
+export {
+  copyTenantAgents,
+  seedDefaultTenantFromAgency,
+  seedFromDirectory,
+  type CopyTenantOptions,
+  type CopyTenantResult,
+  type SeedDefaultTenantOptions,
+  type SeedFromDirectoryOptions,
+  type SeedResult,
+} from './seed.js';

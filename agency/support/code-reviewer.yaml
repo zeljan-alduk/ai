@@ -76,7 +76,7 @@ inputs:
 
 outputs:
   review:
-    json_schema_ref: schemas/pr_review.json
+    json_schema: schemas/pr_review.json
 
 eval_gate:
   required_suites:

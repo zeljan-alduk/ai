@@ -8,6 +8,7 @@
  * `PostgresSweepStore` against pglite, exactly as production does.
  */
 
+import { randomBytes } from 'node:crypto';
 import {
   ApiError,
   CreateSuiteResponse,
@@ -24,7 +25,8 @@ import { type SqlClient, fromDatabaseUrl, migrate } from '@aldo-ai/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import YAML from 'yaml';
 import { buildApp } from '../src/app.js';
-import { type Deps, createDeps } from '../src/deps.js';
+import { signSessionToken } from '../src/auth/jwt.js';
+import { type Deps, SEED_TENANT_UUID, createDeps } from '../src/deps.js';
 import { PostgresSweepStore } from '../src/eval-store.js';
 import type {
   EvalDeps,
@@ -83,8 +85,30 @@ async function setupEvalEnv(): Promise<EvalEnv> {
   };
 
   const registry = new AgentRegistry({ storage: new PostgresStorage({ client: db }) });
-  const deps = await createDeps({ DATABASE_URL: '' }, { db, registry, evalDeps });
-  const app = buildApp(deps, { log: false });
+  const signingKey = new Uint8Array(randomBytes(32));
+  const deps = await createDeps({ DATABASE_URL: '' }, { db, registry, evalDeps, signingKey });
+  const rawApp = buildApp(deps, { log: false });
+  // Mint a default token for the seeded tenant so this suite's
+  // requests pass the bearer-token middleware. We wrap `rawApp.request`
+  // to auto-inject the Authorization header — eval tests don't care
+  // about auth semantics, they care about the eval endpoint contracts.
+  const token = await signSessionToken(
+    { sub: 'eval-test-user', tid: SEED_TENANT_UUID, slug: 'default', role: 'owner' },
+    signingKey,
+  );
+  const app = {
+    request: async (path: string, init: RequestInit = {}): Promise<Response> => {
+      const headers: Record<string, string> = {};
+      const provided = (init.headers ?? {}) as Record<string, string>;
+      for (const [k, v] of Object.entries(provided)) {
+        if (typeof v === 'string') headers[k] = v;
+      }
+      if (headers.Authorization === undefined && headers.authorization === undefined) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      return rawApp.request(path, { ...init, headers });
+    },
+  } as unknown as ReturnType<typeof buildApp>;
 
   return {
     deps,

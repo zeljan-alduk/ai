@@ -233,3 +233,59 @@ export const CheckAgentResponse = z.object({
   fix: z.string().nullable(),
 });
 export type CheckAgentResponse = z.infer<typeof CheckAgentResponse>;
+
+// ---------------------------------------------------------------------------
+// Wave 10 — tenant-scoped registered-agent CRUD.
+//
+// Request bodies are POST'd as either YAML (Content-Type:
+// application/yaml or text/yaml) or JSON (default). The server
+// auto-detects via Content-Type and parses through the same Zod
+// schema as the static loader.
+
+/** Body for POST /v1/agents when Content-Type is application/json. */
+export const RegisterAgentJsonRequest = z.object({
+  /** Raw YAML text. The server runs it through @aldo-ai/registry. */
+  specYaml: z.string().min(1),
+});
+export type RegisterAgentJsonRequest = z.infer<typeof RegisterAgentJsonRequest>;
+
+export const RegisterAgentResponse = z.object({
+  agent: z.object({
+    name: z.string(),
+    version: z.string(),
+    promoted: z.boolean(),
+  }),
+});
+export type RegisterAgentResponse = z.infer<typeof RegisterAgentResponse>;
+
+export const ListAgentVersionsResponse = z.object({
+  name: z.string(),
+  current: z.string().nullable(),
+  versions: z.array(AgentVersionEntry),
+});
+export type ListAgentVersionsResponse = z.infer<typeof ListAgentVersionsResponse>;
+
+/**
+ * `POST /v1/agents/:name/promote` — wave-10 explicit-pointer bump.
+ * Distinct from the eval-gated `PromoteAgentRequest` in `./eval.ts`,
+ * which runs eval suites first; this one is a pure pointer flip used
+ * by operators who already know the candidate version is good (e.g.
+ * the eval gate just signed off and is calling the registry directly).
+ */
+export const PromoteRegisteredAgentRequest = z.object({
+  version: z.string().min(1),
+});
+export type PromoteRegisteredAgentRequest = z.infer<typeof PromoteRegisteredAgentRequest>;
+
+export const PromoteRegisteredAgentResponse = z.object({
+  name: z.string(),
+  current: z.string(),
+});
+export type PromoteRegisteredAgentResponse = z.infer<typeof PromoteRegisteredAgentResponse>;
+
+/** Result of `POST /v1/tenants/me/seed-default`. */
+export const SeedDefaultResponse = z.object({
+  copied: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+});
+export type SeedDefaultResponse = z.infer<typeof SeedDefaultResponse>;
