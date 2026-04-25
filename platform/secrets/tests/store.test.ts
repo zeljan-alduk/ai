@@ -14,14 +14,10 @@
  *  - audit rows survive a round-trip and order newest-first.
  */
 
-import { fromDatabaseUrl, migrate, type SqlClient } from '@aldo-ai/storage';
+import { type SqlClient, fromDatabaseUrl, migrate } from '@aldo-ai/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../src/crypto.js';
-import {
-  InMemorySecretStore,
-  PostgresSecretStore,
-  type SecretStore,
-} from '../src/store.js';
+import { InMemorySecretStore, PostgresSecretStore, type SecretStore } from '../src/store.js';
 
 interface Harness {
   readonly store: SecretStore;
@@ -89,7 +85,7 @@ for (const [label, build] of flavors) {
       expect(res).toBeNull();
     });
 
-    it('list returns only the calling tenant\'s secrets', async () => {
+    it("list returns only the calling tenant's secrets", async () => {
       await h.store.set('tenant-A', 'SHARED_NAME', 'A-value');
       await h.store.set('tenant-B', 'SHARED_NAME', 'B-value');
       const a = await h.store.list('tenant-A');

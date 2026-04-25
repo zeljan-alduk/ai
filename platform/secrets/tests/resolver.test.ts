@@ -6,11 +6,11 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  hasRefs,
   InMemorySecretStore,
+  UnknownSecretError,
+  hasRefs,
   resolveInArgs,
   resolveRefs,
-  UnknownSecretError,
 } from '../src/index.js';
 
 describe('resolveRefs', () => {

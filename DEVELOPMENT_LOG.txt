@@ -896,3 +896,19 @@ agent.v1 (types + zod schema, snake-case translation in the loader);
 existing agency YAMLs continue to parse unchanged. 38 new guards tests,
 4 new gateway middleware tests, 5 new registry guards tests; full type-
 check + biome clean across types/gateway/registry/guards.
+
+[2026-04-25 13:51 UTC] backend-engineer-A — wave 7 sandbox package + engine wiring
+New @aldo-ai/sandbox: SandboxPolicy/Request/Result/Error vocab,
+InProcessSandbox (timeout + env scrub + AbortSignal cancel),
+SubprocessSandbox (cwd jail via mkdtemp+symlinks, env scrub, fetch
+wrapper + node:net/tls patches via `node --import` egress-loader.mjs,
+prlimit-best-effort cpu/mem caps), buildPolicy(spec)→typed policy,
+SandboxRunner (driver=in-process|subprocess, SANDBOX_DRIVER env).
+Engine: AgentRunDeps.sandbox + RuntimeDeps.sandbox optional; every
+toolHost.invoke now routes through invokeToolThroughSandbox so
+SandboxError surfaces as ok:false ToolResult. 24 sandbox tests +
+5 engine integration tests (OUT_OF_BOUNDS / TIMEOUT / EGRESS_BLOCKED
++ default-runner fallback + adapter pass-through). Egress mechanism:
+fetch wrap + net/tls connect patch (undici dispatcher route avoided —
+not directly importable in Node 22). Wave 8 gap: shared kernel; no
+namespace/seccomp/cgroup isolation — needs Docker/Firecracker.

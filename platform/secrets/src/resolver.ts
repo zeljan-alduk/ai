@@ -22,7 +22,7 @@
  * pre-resolve args are what gets emitted in `tool_call` events.
  */
 
-import { findRefs, type SecretRefMatch } from './parser.js';
+import { type SecretRefMatch, findRefs } from './parser.js';
 import type { SecretStore } from './store.js';
 
 /** Caller context for audit purposes. */

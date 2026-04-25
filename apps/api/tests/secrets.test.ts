@@ -9,11 +9,7 @@
  * the shared `ApiError` envelope.
  */
 
-import {
-  ApiError,
-  ListSecretsResponse,
-  SetSecretResponse,
-} from '@aldo-ai/api-contract';
+import { ApiError, ListSecretsResponse, SetSecretResponse } from '@aldo-ai/api-contract';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type TestEnv, setupTestEnv } from './_setup.js';
 

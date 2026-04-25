@@ -12,15 +12,15 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  MASTER_KEY_BYTES,
   decodeMasterKey,
   decrypt,
-  derivePreview,
   deriveFingerprint,
+  derivePreview,
   encodeMasterKey,
   encrypt,
   generateMasterKey,
   loadMasterKeyFromEnv,
-  MASTER_KEY_BYTES,
 } from '../src/crypto.js';
 
 describe('crypto', () => {

@@ -143,6 +143,6 @@ export function loadMasterKeyFromEnv(opts: LoadMasterKeyOptions = {}): Uint8Arra
   }
   throw new Error(
     'ALDO_SECRETS_MASTER_KEY is required: 32-byte key, base64-encoded. ' +
-      'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"',
+      "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
   );
 }

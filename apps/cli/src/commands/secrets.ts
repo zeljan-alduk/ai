@@ -20,8 +20,8 @@ import { resolve as resolvePath } from 'node:path';
 import {
   ApiError,
   ListSecretsResponse,
-  SetSecretResponse,
   type SecretSummary,
+  SetSecretResponse,
 } from '@aldo-ai/api-contract';
 import type { CliIO } from '../io.js';
 import { writeErr, writeJson, writeLine } from '../io.js';
@@ -142,7 +142,11 @@ async function pickValue(
   opts: SecretsSetOptions,
   hooks: SecretsHooks,
 ): Promise<{ ok: true; value: string } | { ok: false; reason: string }> {
-  const sources = [opts.value !== undefined, opts.fromEnv !== undefined, opts.fromFile !== undefined];
+  const sources = [
+    opts.value !== undefined,
+    opts.fromEnv !== undefined,
+    opts.fromFile !== undefined,
+  ];
   const supplied = sources.filter(Boolean).length;
   if (supplied === 0) {
     return { ok: false, reason: 'one of --value, --from-env, --from-file is required' };
@@ -217,7 +221,10 @@ export async function runSecretsSet(
     return 0;
   }
   // Never echo the value. Show the summary instead.
-  writeLine(io, `set ${parsed.data.name} (****${parsed.data.preview}, ${parsed.data.fingerprint.slice(0, 8)})`);
+  writeLine(
+    io,
+    `set ${parsed.data.name} (****${parsed.data.preview}, ${parsed.data.fingerprint.slice(0, 8)})`,
+  );
   return 0;
 }
 

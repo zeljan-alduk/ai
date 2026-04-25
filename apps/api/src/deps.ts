@@ -13,11 +13,7 @@
  */
 
 import { AgentRegistry, PostgresStorage } from '@aldo-ai/registry';
-import {
-  PostgresSecretStore,
-  type SecretStore,
-  loadMasterKeyFromEnv,
-} from '@aldo-ai/secrets';
+import { PostgresSecretStore, type SecretStore, loadMasterKeyFromEnv } from '@aldo-ai/secrets';
 import { type SqlClient, fromDatabaseUrl } from '@aldo-ai/storage';
 import {
   type EngineDebugger,
@@ -111,16 +107,15 @@ export async function createDeps(
   // `PostgresSecretStore` against the same SqlClient. Production
   // enforces the env var; dev (`NODE_ENV !== 'production'`) generates
   // an ephemeral key and warns.
-  const secrets =
-    opts.secrets ?? {
-      store: new PostgresSecretStore({
-        client: db,
-        masterKey: loadMasterKeyFromEnv({
-          env,
-          allowDevFallback: env.NODE_ENV !== 'production',
-        }),
+  const secrets = opts.secrets ?? {
+    store: new PostgresSecretStore({
+      client: db,
+      masterKey: loadMasterKeyFromEnv({
+        env,
+        allowDevFallback: env.NODE_ENV !== 'production',
       }),
-    };
+    }),
+  };
   const tenantId = opts.tenantId ?? 'tenant-default';
 
   const deps: Deps = {
