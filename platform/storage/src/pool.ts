@@ -157,8 +157,11 @@ async function createNeonClient(url: string, prebuilt: unknown): Promise<SqlClie
   return {
     driver: 'neon',
     async query<R extends SqlRow>(text: string, params: readonly unknown[] = []) {
-      // Neon's tagged-template `sql` can also be called as `sql(query, params, opts)`.
-      const rows = (await sql(text, params as unknown[], {
+      // @neondatabase/serverless >=1.0 reserves bare `sql(...)` for the
+      // tagged-template form and exposes the positional-parameter call as
+      // `sql.query(text, params, opts)`. The older `sql(text, params, opts)`
+      // signature was removed.
+      const rows = (await sql.query(text, params as unknown[], {
         arrayMode: false,
         fullResults: false,
       })) as readonly R[];
@@ -167,7 +170,7 @@ async function createNeonClient(url: string, prebuilt: unknown): Promise<SqlClie
     async exec(text: string) {
       // Neon HTTP doesn't support multi-statement, so split on bare semicolons.
       for (const stmt of splitSqlScript(text)) {
-        await sql(stmt, [], { arrayMode: false, fullResults: false });
+        await sql.query(stmt, [], { arrayMode: false, fullResults: false });
       }
     },
     async close() {
