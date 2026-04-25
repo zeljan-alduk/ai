@@ -1079,3 +1079,41 @@ clean on the new files (added playwright-report/test-results to
 biome.json's ignore list). LLM-agnostic verified: no provider name
 appears in any spec or asserter. Not committed — orchestrator
 integrates.
+
+[2026-04-25 15:55 UTC] orchestrator — wave 7.5 LIVE end-to-end
+Three engineers (D=secrets UI, E=policy panels, F=Playwright e2e)
+landed in commit 2c5e91f; deploy-api workflow run 24934659914 +
+Vercel preview rebuild both succeeded. Smoke verified:
+
+  Web (https://aldo-ai-web-git-claude-ai-age-c0b147-…vercel.app)
+    /secrets                  HTTP 200, sidebar lists Secrets entry,
+                              empty-state copy "tenant-scoped" + CTA.
+    /secrets/new              HTTP 200.
+  API (https://aldo-ai-api.fly.dev)
+    POST /v1/secrets          200 with redacted summary (preview=e-v2).
+    GET  /v1/secrets          200 with count=1.
+    DELETE /v1/secrets/:name  204 (recovery-#8 rowCount fix still in
+                              place after schema additions).
+    /v1/agents/code-reviewer  404 — production registry still empty,
+                              expected; the new `guards` + `sandbox`
+                              projection waits for an agent to be
+                              registered. Schemas are unit-tested in
+                              api-contract + apps/api so the wire is
+                              covered today.
+
+Test totals after the wave: 398 across 13 packages (398 = 32 fs +
+2 storage + 8 api-contract + 21 observability + 38 guards + 24
+sandbox + 28 registry + 24 gateway + 41 secrets + 26 engine + 44
+eval + 56 api + 54 cli). +7 Playwright e2e (6 pass, 1 write-gated
+skip when E2E_ALLOW_WRITES=false against prod) — these run in CI on
+PRs labelled `e2e` or touching apps/web/**.
+
+Lesson reinforced: when integration touches a Postgres-backed test
+file, never run `pnpm -r test` while another stale `pnpm -r test`
+is alive — pglite + concurrent migrations hang one of the workers.
+Killed the stale tree (pid 4482, then 8777) and the second run
+finished in ~80s.
+
+Wave 7.5 closes the v0 control-plane UI gap. Next platform wave
+(8 — local-model adapters: Ollama/vLLM/llama.cpp/MLX) ready to spawn
+on the next "go".
