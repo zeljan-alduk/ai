@@ -359,6 +359,7 @@ export class LeafAgentRun implements InternalAgentRun {
         const toolCalls: ToolCallPart[] = [];
         let finishReason: 'stop' | 'length' | 'tool_use' | 'error' = 'stop';
         let endUsage: import('@aldo-ai/types').UsageRecord | undefined;
+        let endModel: import('@aldo-ai/types').ModelDescriptor | undefined;
 
         try {
           for await (const delta of this.deps.modelGateway.complete(
@@ -371,6 +372,7 @@ export class LeafAgentRun implements InternalAgentRun {
             if (delta.end !== undefined) {
               finishReason = delta.end.finishReason;
               endUsage = delta.end.usage;
+              endModel = delta.end.model;
             }
           }
         } catch (err) {
@@ -417,6 +419,33 @@ export class LeafAgentRun implements InternalAgentRun {
             at: now(),
             payload: usagePayload,
           } as unknown as RunEvent);
+
+          // Wave-8 audit row. The platform's CLAUDE.md non-negotiable #3
+          // says a sensitive-tier agent must be physically incapable of
+          // reaching a cloud model — the router enforces it; here we
+          // emit a tamper-evident audit row every time the router
+          // *approved* a sensitive request, so an operator can grep
+          // the run-event log for `routing.privacy_sensitive_resolved`
+          // and reconstruct the audit trail.
+          //
+          // We emit it OUTSIDE the cancellation guard above so a
+          // cancellation race (run.cancel() during a streaming
+          // response) doesn't drop the audit row — the model already
+          // produced output by the time `endUsage` is set.
+          if (this.spec.modelPolicy.privacyTier === 'sensitive') {
+            const classUsed =
+              endModel?.capabilityClass ?? this.spec.modelPolicy.primary.capabilityClass;
+            this.emit({
+              type: 'routing.privacy_sensitive_resolved',
+              at: now(),
+              payload: {
+                agent: this.spec.identity.name,
+                model: endUsage.model,
+                provider: endUsage.provider,
+                classUsed,
+              },
+            });
+          }
         }
 
         // Post-turn checkpoint (outputs + usage stashed on messages already).

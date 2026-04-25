@@ -18,7 +18,17 @@ export interface RunEvent {
     | 'policy_decision'
     | 'error'
     | 'run.completed'
-    | 'run.cancelled';
+    | 'run.cancelled'
+    /**
+     * Wave-8 audit row: emitted by the engine when a successful model
+     * call resolved on behalf of an agent whose `privacy_tier === 'sensitive'`.
+     * Payload is `{ agent: string, model: string, classUsed: string }`. The
+     * engine emits this immediately after the terminal `usage` event so
+     * the run-event log carries an explicit audit trail every time the
+     * router approved a sensitive-tier request — independent of the
+     * provider that served it.
+     */
+    | 'routing.privacy_sensitive_resolved';
   readonly at: string;
   readonly payload: unknown;
 }

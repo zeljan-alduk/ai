@@ -32,6 +32,7 @@ export type ProviderKind =
   | 'google'
   | 'bedrock'
   | 'xai'
+  | 'mlx'
   | 'mock'
   | (string & {});
 

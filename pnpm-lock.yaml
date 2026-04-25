@@ -29,6 +29,12 @@ importers:
       '@aldo-ai/eval':
         specifier: workspace:*
         version: link:../../platform/eval
+      '@aldo-ai/gateway':
+        specifier: workspace:*
+        version: link:../../platform/gateway
+      '@aldo-ai/local-discovery':
+        specifier: workspace:*
+        version: link:../../platform/local-discovery
       '@aldo-ai/registry':
         specifier: workspace:*
         version: link:../../platform/registry
@@ -84,6 +90,9 @@ importers:
       '@aldo-ai/gateway':
         specifier: workspace:*
         version: link:../../platform/gateway
+      '@aldo-ai/local-discovery':
+        specifier: workspace:*
+        version: link:../../platform/local-discovery
       '@aldo-ai/observability':
         specifier: workspace:*
         version: link:../../platform/observability
@@ -310,6 +319,25 @@ importers:
 
   platform/guards:
     dependencies:
+      '@aldo-ai/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)
+
+  platform/local-discovery:
+    dependencies:
+      '@aldo-ai/gateway':
+        specifier: workspace:*
+        version: link:../gateway
       '@aldo-ai/types':
         specifier: workspace:*
         version: link:../types

@@ -1,0 +1,27 @@
+apiVersion: aldo/models.v1
+kind: ModelCatalog
+
+# Cloud-only fixture: no model lists `sensitive` in privacyAllowed and
+# every entry has locality=cloud. Used by `aldo agents check` tests to
+# pin the failure-path output for a sensitive-tier agent.
+models:
+  - id: cloud-medium-fixture
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+      - reasoning
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://example.invalid/v1
+      apiKeyEnv: GROQ_API_KEY

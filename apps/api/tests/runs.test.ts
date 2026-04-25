@@ -1,6 +1,16 @@
-import { ApiError, GetRunResponse, ListRunsResponse } from '@aldo-ai/api-contract';
+import { fileURLToPath } from 'node:url';
+import {
+  ApiError,
+  CreateRunResponse,
+  GetRunResponse,
+  ListRunsResponse,
+} from '@aldo-ai/api-contract';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type TestEnv, seedRun, setupTestEnv } from './_setup.js';
+import { type TestEnv, seedAgent, seedRun, setupTestEnv } from './_setup.js';
+
+const CLOUD_ONLY_FIXTURE = fileURLToPath(
+  new URL('./fixtures/models.cloud-only.yaml', import.meta.url),
+);
 
 let env: TestEnv;
 
@@ -160,5 +170,108 @@ describe('GET /v1/runs/:id', () => {
     expect(body.run.usage[0]?.tokensIn).toBe(1000);
     expect(body.run.totalUsd).toBeCloseTo(0.123456, 6);
     expect(body.run.durationMs).toBe(42_000);
+  });
+});
+
+describe('POST /v1/runs (wave 8 fail-closed pre-flight)', () => {
+  let cloudOnly: TestEnv;
+
+  beforeAll(async () => {
+    cloudOnly = await setupTestEnv({ MODELS_FIXTURE_PATH: CLOUD_ONLY_FIXTURE });
+    await seedAgent(cloudOnly.db, {
+      name: 'security-reviewer',
+      owner: 'support@aldo',
+      version: '0.1.0',
+      team: 'support',
+      privacyTier: 'sensitive',
+      promoted: true,
+      createdAt: '2026-04-25T09:00:00.000Z',
+      extraSpec: {
+        modelPolicy: {
+          privacyTier: 'sensitive',
+          capabilityRequirements: ['tool-use', 'structured-output'],
+          primary: { capabilityClass: 'reasoning-medium' },
+          fallbacks: [{ capabilityClass: 'local-reasoning' }],
+          budget: { usdMax: 1, usdGrace: 0 },
+          decoding: { mode: 'free' },
+        },
+      },
+    });
+    await seedAgent(cloudOnly.db, {
+      name: 'public-helper',
+      owner: 'support@aldo',
+      version: '0.1.0',
+      team: 'support',
+      privacyTier: 'public',
+      promoted: true,
+      createdAt: '2026-04-25T09:01:00.000Z',
+      extraSpec: {
+        modelPolicy: {
+          privacyTier: 'public',
+          capabilityRequirements: ['tool-use'],
+          primary: { capabilityClass: 'reasoning-medium' },
+          fallbacks: [],
+          budget: { usdMax: 1, usdGrace: 0 },
+          decoding: { mode: 'free' },
+        },
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await cloudOnly.teardown();
+  });
+
+  it('sensitive agent + cloud-only catalog returns 422 with code privacy_tier_unroutable', async () => {
+    const res = await cloudOnly.app.request('/v1/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentName: 'security-reviewer' }),
+    });
+    expect(res.status).toBe(422);
+    const body = ApiError.parse(await res.json());
+    expect(body.error.code).toBe('privacy_tier_unroutable');
+    // Detail must carry the trace so an operator can drill in.
+    const details = body.error.details as
+      | { agent?: string; privacyTier?: string; trace?: ReadonlyArray<unknown> }
+      | undefined;
+    expect(details?.agent).toBe('security-reviewer');
+    expect(details?.privacyTier).toBe('sensitive');
+    expect(Array.isArray(details?.trace)).toBe(true);
+  });
+
+  it('public agent + cloud catalog returns 202 with a queued run record', async () => {
+    const res = await cloudOnly.app.request('/v1/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentName: 'public-helper' }),
+    });
+    expect(res.status).toBe(202);
+    const body = CreateRunResponse.parse(await res.json());
+    expect(body.run.agentName).toBe('public-helper');
+    expect(body.run.status).toBe('queued');
+    expect(body.run.id).toMatch(/^run_/);
+  });
+
+  it('returns 404 for an unknown agent', async () => {
+    const res = await cloudOnly.app.request('/v1/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentName: 'does-not-exist' }),
+    });
+    expect(res.status).toBe(404);
+    const body = ApiError.parse(await res.json());
+    expect(body.error.code).toBe('not_found');
+  });
+
+  it('returns 400 validation_error for a malformed body', async () => {
+    const res = await cloudOnly.app.request('/v1/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+    const body = ApiError.parse(await res.json());
+    expect(body.error.code).toBe('validation_error');
   });
 });

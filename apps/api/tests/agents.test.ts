@@ -1,6 +1,19 @@
-import { ApiError, GetAgentResponse, ListAgentsResponse } from '@aldo-ai/api-contract';
+import { fileURLToPath } from 'node:url';
+import {
+  ApiError,
+  CheckAgentResponse,
+  GetAgentResponse,
+  ListAgentsResponse,
+} from '@aldo-ai/api-contract';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type TestEnv, seedAgent, setupTestEnv } from './_setup.js';
+
+const CLOUD_ONLY_FIXTURE = fileURLToPath(
+  new URL('./fixtures/models.cloud-only.yaml', import.meta.url),
+);
+const WITH_LOCAL_FIXTURE = fileURLToPath(
+  new URL('./fixtures/models.with-local.yaml', import.meta.url),
+);
 
 let env: TestEnv;
 
@@ -182,5 +195,122 @@ describe('GET /v1/agents/:name', () => {
     const body = GetAgentResponse.parse(await res.json());
     expect(body.agent.guards).toBeNull();
     expect(body.agent.sandbox).toBeNull();
+  });
+});
+
+describe('POST /v1/agents/:name/check (wave 8 routing dry-run)', () => {
+  let cloudOnly: TestEnv;
+  let withLocal: TestEnv;
+
+  beforeAll(async () => {
+    cloudOnly = await setupTestEnv({ MODELS_FIXTURE_PATH: CLOUD_ONLY_FIXTURE });
+    withLocal = await setupTestEnv({ MODELS_FIXTURE_PATH: WITH_LOCAL_FIXTURE });
+
+    // Sensitive-tier agent with a local-reasoning fallback. Routing
+    // outcome flips between the two harness instances.
+    const seedSensitive = async (e: TestEnv): Promise<void> => {
+      await seedAgent(e.db, {
+        name: 'security-reviewer',
+        owner: 'support@aldo',
+        version: '0.1.0',
+        team: 'support',
+        description: 'sensitive-tier reviewer',
+        tags: ['support', 'security'],
+        privacyTier: 'sensitive',
+        promoted: true,
+        createdAt: '2026-04-25T09:00:00.000Z',
+        extraSpec: {
+          modelPolicy: {
+            privacyTier: 'sensitive',
+            capabilityRequirements: ['tool-use', 'structured-output'],
+            primary: { capabilityClass: 'reasoning-medium' },
+            fallbacks: [{ capabilityClass: 'local-reasoning' }],
+            budget: { usdMax: 1, usdGrace: 0 },
+            decoding: { mode: 'free' },
+          },
+        },
+      });
+    };
+    await seedSensitive(cloudOnly);
+    await seedSensitive(withLocal);
+
+    // Public-tier agent for the success-path-on-cloud assertion.
+    await seedAgent(cloudOnly.db, {
+      name: 'public-helper',
+      owner: 'support@aldo',
+      version: '0.1.0',
+      team: 'support',
+      privacyTier: 'public',
+      promoted: true,
+      createdAt: '2026-04-25T09:01:00.000Z',
+      extraSpec: {
+        modelPolicy: {
+          privacyTier: 'public',
+          capabilityRequirements: ['tool-use'],
+          primary: { capabilityClass: 'reasoning-medium' },
+          fallbacks: [],
+          budget: { usdMax: 1, usdGrace: 0 },
+          decoding: { mode: 'free' },
+        },
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await cloudOnly.teardown();
+    await withLocal.teardown();
+  });
+
+  it('cloud-only catalog: sensitive agent returns ok=false with privacy reason and a FIX hint', async () => {
+    const res = await cloudOnly.app.request('/v1/agents/security-reviewer/check', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = CheckAgentResponse.parse(await res.json());
+    expect(body.ok).toBe(false);
+    expect(body.chosen).toBeNull();
+    expect(body.agent.name).toBe('security-reviewer');
+    expect(body.agent.privacyTier).toBe('sensitive');
+    expect(body.fix).not.toBeNull();
+    expect(body.trace.length).toBeGreaterThanOrEqual(1);
+    // The primary class' trace records the privacy block, even though
+    // `body.reason` reflects the *last* class tried.
+    const primary = body.trace[0];
+    expect(primary?.capabilityClass).toBe('reasoning-medium');
+    expect(primary?.passPrivacy).toBe(0);
+  });
+
+  it('cloud + local catalog: sensitive agent routes to the local fallback', async () => {
+    const res = await withLocal.app.request('/v1/agents/security-reviewer/check', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = CheckAgentResponse.parse(await res.json());
+    expect(body.ok).toBe(true);
+    expect(body.chosen).not.toBeNull();
+    expect(body.chosen?.id).toBe('mlx-qwen-fixture');
+    expect(body.chosen?.locality).toBe('local');
+    expect(body.chosen?.classUsed).toBe('local-reasoning');
+    expect(body.fix).toBeNull();
+  });
+
+  it('public-tier agent against cloud-only catalog: routes to the cloud model', async () => {
+    const res = await cloudOnly.app.request('/v1/agents/public-helper/check', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = CheckAgentResponse.parse(await res.json());
+    expect(body.ok).toBe(true);
+    expect(body.chosen?.id).toBe('cloud-medium-fixture');
+    expect(body.chosen?.locality).toBe('cloud');
+  });
+
+  it('returns 404 with not_found for an unknown agent', async () => {
+    const res = await cloudOnly.app.request('/v1/agents/does-not-exist/check', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(404);
+    const body = ApiError.parse(await res.json());
+    expect(body.error.code).toBe('not_found');
   });
 });

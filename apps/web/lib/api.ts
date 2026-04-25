@@ -13,6 +13,7 @@
 
 import {
   ApiError,
+  CheckAgentResponse,
   GetAgentResponse,
   GetRunResponse,
   type ListAgentsQuery,
@@ -153,6 +154,19 @@ export function listAgents(query: Partial<ListAgentsQuery> = {}) {
 
 export function getAgent(name: string) {
   return request(`/v1/agents/${encodeURIComponent(name)}`, GetAgentResponse);
+}
+
+/**
+ * `POST /v1/agents/:name/check` — operator dry-run.
+ *
+ * Read-only. Asks the API to simulate a routing decision against the
+ * live model catalog and return per-class filter outcomes. The result
+ * is rendered inline by the routing-dry-run card on the agent page.
+ */
+export function checkAgent(name: string) {
+  return request(`/v1/agents/${encodeURIComponent(name)}/check`, CheckAgentResponse, {
+    method: 'POST',
+  });
 }
 
 /* ------------------------------- Models --------------------------------- */

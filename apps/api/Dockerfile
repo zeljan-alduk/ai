@@ -24,6 +24,7 @@ COPY platform/api-contract/package.json platform/api-contract/
 COPY platform/eval/package.json platform/eval/
 COPY platform/gateway/package.json platform/gateway/
 COPY platform/guards/package.json platform/guards/
+COPY platform/local-discovery/package.json platform/local-discovery/
 COPY platform/registry/package.json platform/registry/
 COPY platform/sandbox/package.json platform/sandbox/
 COPY platform/secrets/package.json platform/secrets/
@@ -59,6 +60,9 @@ COPY platform/eval ./platform/eval
 COPY platform/sandbox ./platform/sandbox
 COPY platform/guards ./platform/guards
 COPY platform/secrets ./platform/secrets
+# Wave 8: /v1/models calls @aldo-ai/local-discovery on each request to
+# probe well-known local-LLM ports and merge results into the response.
+COPY platform/local-discovery ./platform/local-discovery
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 

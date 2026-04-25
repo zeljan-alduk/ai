@@ -264,6 +264,80 @@ models:
       extra:
         note: "vLLM accepts guided_json / guided_grammar fields"
 
+  # --- MLX (Apple Silicon) ----------------------------------------------
+  # Illustrative MLX entries served by `python -m mlx_lm.server`. Quant tier
+  # surfaced via providerConfig.extra.quantization so the eval harness can
+  # compare q4 / q8 / bf16 head-to-head against the same agent spec.
+  # Operators are expected to override these with the actual model ids /
+  # ports they're serving via their own catalog file.
+  - id: mlx-qwen2.5-7b-instruct-4bit
+    provider: mlx
+    providerKind: mlx
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 32k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 32768
+    latencyP95Ms: 4000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:8081
+      extra:
+        quantization: q4
+        note: "mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8081"
+
+  - id: mlx-llama-3.3-70b-instruct-4bit
+    provider: mlx
+    providerKind: mlx
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 9000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:8081
+      extra:
+        quantization: q4
+        kvCacheQuantized: true
+
+  - id: mlx-mistral-small-3.1-instruct-bf16
+    provider: mlx
+    providerKind: mlx
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 32k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 32768
+    latencyP95Ms: 6000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:8081
+      extra:
+        quantization: bf16
+
   # --- Local embeddings -------------------------------------------------
   - id: nomic-embed-text
     provider: ollama

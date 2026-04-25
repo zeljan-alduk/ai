@@ -1,4 +1,5 @@
 import { PolicyPanels } from '@/components/agent/policy-panels';
+import { RoutingDryRunCard } from '@/components/agent/routing-dry-run-card';
 import { NeutralBadge, PrivacyBadge } from '@/components/badge';
 import { ErrorView } from '@/components/error-boundary';
 import { PageHeader } from '@/components/page-header';
@@ -140,6 +141,13 @@ function AgentBody({ agent }: { agent: Awaited<ReturnType<typeof getAgent>>['age
           Safety policy
         </h2>
         <PolicyPanels agent={agent} />
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Routing dry-run
+        </h2>
+        <RoutingDryRunCard agentName={agent.name} />
       </section>
 
       <section>

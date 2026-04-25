@@ -70,4 +70,18 @@ describe('GET /v1/models', () => {
     const openai = body.models.filter((m) => m.provider === 'openai');
     expect(openai.every((m) => m.available === false)).toBe(true);
   });
+
+  it('local-LLM discovery is disabled in the harness (ALDO_LOCAL_DISCOVERY=none)', async () => {
+    // Sanity: the harness sets ALDO_LOCAL_DISCOVERY=none so /v1/models
+    // doesn't burn its budget on closed localhost ports during tests.
+    // The catalog still lists every YAML row.
+    const res = await envNoKeys.app.request('/v1/models');
+    const body = ListModelsResponse.parse(await res.json());
+    expect(body.models.length).toBeGreaterThan(0);
+    // Discovery would have stamped these provider tags; with discovery
+    // disabled, only YAML-seeded rows appear. The fixture has no
+    // `lmstudio` or `llamacpp` provider, so they must be absent.
+    expect(body.models.some((m) => m.provider === 'lmstudio')).toBe(false);
+    expect(body.models.some((m) => m.provider === 'llamacpp')).toBe(false);
+  });
 });

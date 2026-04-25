@@ -9,12 +9,14 @@ import { runAgentLs } from './commands/agent-ls.js';
 import { runAgentNew } from './commands/agent-new.js';
 import { runAgentPromote } from './commands/agent-promote.js';
 import { runAgentValidate } from './commands/agent-validate.js';
+import { runAgentsCheck } from './commands/agents-check.js';
 import { runDev } from './commands/dev.js';
 import { runEvalRun } from './commands/eval-run.js';
 import { runEvalSuiteCreate } from './commands/eval-suite-create.js';
 import { runEvalSweep } from './commands/eval-sweep.js';
 import { runInit } from './commands/init.js';
 import { runMcpLs } from './commands/mcp-ls.js';
+import { runModelsDiscover } from './commands/models-discover.js';
 import { runModelsLs } from './commands/models-ls.js';
 import { runRun } from './commands/run.js';
 import { runRunsLs } from './commands/runs-ls.js';
@@ -146,6 +148,34 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
       },
     );
 
+  // --- agents (plural) ------------------------------------------------------
+  // The plural form hosts read-only operator queries against the live
+  // catalog (the singular `agent` namespace owns spec authoring). Right
+  // now there's just `check`; future entries (e.g. `agents diff` for two
+  // versions) will live here too.
+  const agents = program
+    .command('agents')
+    .description('operator queries against the live agent catalog');
+
+  agents
+    .command('check <name>')
+    .description('dry-run a routing decision for an agent (read-only)')
+    .option('--dir <path>', 'directory to look for <name>.yaml', 'agents')
+    .option('--models <path>', 'models YAML fixture override')
+    .option('--json', 'emit JSON output', false)
+    .action((name: string, o: { dir?: string; models?: string; json?: boolean }) => {
+      action = () =>
+        runAgentsCheck(
+          name,
+          {
+            ...(o.dir !== undefined ? { agentsDir: o.dir } : {}),
+            ...(o.models !== undefined ? { modelsYamlPath: o.models } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
   // --- run ------------------------------------------------------------------
   program
     .command('run <agent>')
@@ -259,13 +289,32 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     });
 
   // --- models ---------------------------------------------------------------
-  const models = program.command('models').description('inspect model capabilities (stub)');
+  const models = program.command('models').description('inspect model capabilities');
   models
     .command('ls')
     .description('list capability classes (stub)')
     .option('--json', 'emit JSON output', false)
     .action((o: { json?: boolean }) => {
       action = () => runModelsLs({ json: o.json === true }, io);
+    });
+  models
+    .command('discover')
+    .description(
+      'probe well-known local-LLM ports (Ollama, vLLM, llama.cpp, LM Studio) and list responders',
+    )
+    .option('--timeout <ms>', 'per-probe timeout in ms', (v) => Number.parseInt(v, 10))
+    .option('--json', 'emit JSON output', false)
+    .action((o: { timeout?: number; json?: boolean }) => {
+      action = () =>
+        runModelsDiscover(
+          {
+            ...(o.timeout !== undefined && Number.isFinite(o.timeout)
+              ? { timeoutMs: o.timeout }
+              : {}),
+            json: o.json === true,
+          },
+          io,
+        );
     });
 
   // --- mcp ------------------------------------------------------------------

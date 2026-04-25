@@ -8,17 +8,28 @@
  * which the platform contract forbids. Provider names stay opaque
  * strings throughout.
  *
+ * In addition to the YAML rows we run `@aldo-ai/local-discovery` once
+ * per process boot (cached for 30 s) to probe well-known local-LLM
+ * ports — Ollama / vLLM / llama.cpp / LM Studio — and fold their
+ * results into the response. YAML entries always win on duplicate id;
+ * discovered rows fill the gaps. Discovery is best-effort and never
+ * affects /v1/models latency on a fresh dev box (probes share a 1 s
+ * timeout and run concurrently).
+ *
  * `available` is computed per-row from environment variables:
  *   - cloud-locality models need a provider-specific API key env var
  *     (looked up in `cloudKeyEnvForProvider`),
  *   - local-locality models are available when their base-URL env var
  *     is set; the `OLLAMA_BASE_URL` default of `http://localhost:11434`
  *     is treated as configured so a fresh dev box "just works".
+ *   - discovered local models are reported `available: true` because
+ *     they were just observed responding on their port.
  */
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { ListModelsResponse, type ModelSummary } from '@aldo-ai/api-contract';
+import { type DiscoveredModel, discover as runLocalDiscovery } from '@aldo-ai/local-discovery';
 import { Hono } from 'hono';
 import YAML from 'yaml';
 import type { Deps, Env } from '../deps.js';
@@ -138,13 +149,93 @@ function toModelSummary(model: FixtureModel, env: Env): ModelSummary {
   return summary;
 }
 
+/**
+ * A discovered model is — by definition — already responding on its
+ * port at probe time, so we report it as available. The renderer in
+ * the web UI treats local-locality + capability/cost rows uniformly,
+ * so a discovered model lands next to the YAML-seeded ones.
+ */
+function discoveredToSummary(m: DiscoveredModel): ModelSummary {
+  return {
+    id: m.id,
+    provider: m.provider,
+    locality: m.locality,
+    capabilityClass: m.capabilityClass,
+    provides: [...m.provides],
+    privacyAllowed: [...m.privacyAllowed],
+    cost: {
+      usdPerMtokIn: m.cost.usdPerMtokIn,
+      usdPerMtokOut: m.cost.usdPerMtokOut,
+    },
+    effectiveContextTokens: m.effectiveContextTokens,
+    available: true,
+    ...(m.latencyP95Ms !== undefined ? { latencyP95Ms: m.latencyP95Ms } : {}),
+  };
+}
+
+/**
+ * Process-wide discovery cache. /v1/models can fire many times per
+ * second from the web UI; we don't want each call to spawn four HTTP
+ * probes against localhost. A 30-second TTL keeps the response
+ * snappy while still reflecting hot-plugged local servers within
+ * one cache window.
+ *
+ * This cache is intentionally module-scoped (not on the Deps bag)
+ * because it's a process-level concern, not a per-request one. Tests
+ * call `resetDiscoveryCache()` between runs.
+ */
+const DISCOVERY_TTL_MS = 30_000;
+interface DiscoveryCacheEntry {
+  readonly fetchedAt: number;
+  readonly result: readonly DiscoveredModel[];
+}
+let discoveryCache: DiscoveryCacheEntry | null = null;
+let inFlight: Promise<readonly DiscoveredModel[]> | null = null;
+
+export function resetDiscoveryCache(): void {
+  discoveryCache = null;
+  inFlight = null;
+}
+
+async function getDiscovered(env: Env): Promise<readonly DiscoveredModel[]> {
+  // Test seam: `ALDO_LOCAL_DISCOVERY=none` short-circuits without
+  // probing. The discovery package handles this internally — we still
+  // call through so the cache stays consistent.
+  const now = Date.now();
+  if (discoveryCache !== null && now - discoveryCache.fetchedAt < DISCOVERY_TTL_MS) {
+    return discoveryCache.result;
+  }
+  if (inFlight !== null) return inFlight;
+  inFlight = (async () => {
+    try {
+      const result = await runLocalDiscovery({ env });
+      discoveryCache = { fetchedAt: Date.now(), result };
+      return result;
+    } catch {
+      // Belt and braces — discover() never throws, but if it ever did
+      // we'd rather serve YAML-only than 500 the route.
+      discoveryCache = { fetchedAt: Date.now(), result: [] };
+      return [];
+    } finally {
+      inFlight = null;
+    }
+  })();
+  return inFlight;
+}
+
 export function modelsRoutes(deps: Deps): Hono {
   const app = new Hono();
   app.get('/v1/models', async (c) => {
     const catalog = await loadModelCatalog(deps.env);
-    const body = ListModelsResponse.parse({
-      models: catalog.models.map((m) => toModelSummary(m, deps.env)),
-    });
+    const known = new Set(catalog.models.map((m) => m.id));
+    const discovered = await getDiscovered(deps.env);
+    const summaries: ModelSummary[] = catalog.models.map((m) => toModelSummary(m, deps.env));
+    for (const d of discovered) {
+      if (known.has(d.id)) continue; // YAML wins on collision.
+      known.add(d.id);
+      summaries.push(discoveredToSummary(d));
+    }
+    const body = ListModelsResponse.parse({ models: summaries });
     return c.json(body);
   });
   return app;

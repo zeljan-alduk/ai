@@ -13,6 +13,27 @@ export const PaginatedMeta = z.object({
 });
 export type PaginatedMeta = z.infer<typeof PaginatedMeta>;
 
+/**
+ * Stable error codes the API may return. Open-ended (z.string() preserves
+ * forwards-compat with future codes) but the canonical list lives here so
+ * clients can switch on them without grep'ing the server.
+ *
+ * Wave 8 additions:
+ *   - `privacy_tier_unroutable` — the requested run can't reach a model
+ *     consistent with the agent's `privacy_tier` against the live catalog.
+ *     Returned by `POST /v1/runs` (and any run-creation surface) instead
+ *     of a generic 500. The detail payload carries the same trace as
+ *     `POST /v1/agents/:name/check` so operators can drill in.
+ */
+export const KNOWN_API_ERROR_CODES = [
+  'not_found',
+  'validation_error',
+  'http_error',
+  'internal_error',
+  'privacy_tier_unroutable',
+] as const;
+export type KnownApiErrorCode = (typeof KNOWN_API_ERROR_CODES)[number];
+
 /** Standard error envelope. The server returns this on any non-2xx. */
 export const ApiError = z.object({
   error: z.object({

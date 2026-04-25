@@ -41,53 +41,144 @@ export interface RoutingDecision {
 
 export interface Router {
   route(req: RoutingRequest): RoutingDecision;
+  /**
+   * Read-only routing simulation. Mirrors `route()`'s pipeline but
+   * returns a structured trace of every class tried — how many candidates
+   * pre/post each filter step, and which model would have been picked.
+   *
+   * The CLI's `aldo agents check` and the control-plane API's
+   * `POST /v1/agents/:name/check` endpoint both render this. It is
+   * deliberately the same shape on both surfaces so an operator can
+   * diff dry-run output between dev and prod without reformatting.
+   *
+   * Never mutates state; never calls a provider.
+   */
+  simulate(req: RoutingRequest): RoutingSimulation;
+}
+
+/** A single class' worth of filter outcomes during a simulation. */
+export interface ClassTrace {
+  readonly capabilityClass: CapabilityClass;
+  readonly preFilter: number;
+  readonly passCapability: number;
+  readonly passPrivacy: number;
+  readonly passBudget: number;
+  /** The chosen model id, or null when no candidate survived this class. */
+  readonly chosen: string | null;
+  /** Human-readable reason this class was rejected (set when `chosen === null`). */
+  readonly reason: string | null;
+}
+
+export interface RoutingSimulation {
+  readonly ok: boolean;
+  /** When ok=true, the decision; otherwise null. */
+  readonly decision: RoutingDecision | null;
+  /** Ordered trace; first entry is the primary class. */
+  readonly trace: readonly ClassTrace[];
+  /**
+   * When ok=false, an aggregated failure reason matching the last class'
+   * outcome (mirrors `NoEligibleModelError.reason` for parity).
+   */
+  readonly reason: string | null;
 }
 
 export function createRouter(registry: ModelRegistry): Router {
+  function simulate(req: RoutingRequest): RoutingSimulation {
+    const classes = [req.primaryClass, ...(req.fallbackClasses ?? [])];
+    const ctx = req.ctx;
+    const trace: ClassTrace[] = [];
+    let lastReason = 'no models registered';
+
+    for (const klass of classes) {
+      const candidates = registry.list().filter((m) => m.capabilityClass === klass);
+      if (candidates.length === 0) {
+        lastReason = `no model registered for class="${klass}"`;
+        trace.push({
+          capabilityClass: klass,
+          preFilter: 0,
+          passCapability: 0,
+          passPrivacy: 0,
+          passBudget: 0,
+          chosen: null,
+          reason: lastReason,
+        });
+        continue;
+      }
+      const withCaps = candidates.filter((m) => hasAllCapabilities(m.provides, ctx.required));
+      if (withCaps.length === 0) {
+        lastReason = `class="${klass}": no model provides required caps [${ctx.required.join(',')}]`;
+        trace.push({
+          capabilityClass: klass,
+          preFilter: candidates.length,
+          passCapability: 0,
+          passPrivacy: 0,
+          passBudget: 0,
+          chosen: null,
+          reason: lastReason,
+        });
+        continue;
+      }
+      const withPrivacy = withCaps.filter((m) => providerAllowsTier(m.privacyAllowed, ctx.privacy));
+      if (withPrivacy.length === 0) {
+        lastReason = `class="${klass}": no model allows privacy="${ctx.privacy}"`;
+        trace.push({
+          capabilityClass: klass,
+          preFilter: candidates.length,
+          passCapability: withCaps.length,
+          passPrivacy: 0,
+          passBudget: 0,
+          chosen: null,
+          reason: lastReason,
+        });
+        continue;
+      }
+      const withBudget = filterByBudget(withPrivacy, ctx.budget, req);
+      if (withBudget.length === 0) {
+        lastReason = `class="${klass}": no model within budget usdMax=${ctx.budget.usdMax}`;
+        trace.push({
+          capabilityClass: klass,
+          preFilter: candidates.length,
+          passCapability: withCaps.length,
+          passPrivacy: withPrivacy.length,
+          passBudget: 0,
+          chosen: null,
+          reason: lastReason,
+        });
+        continue;
+      }
+      const preferred = preferLatency(withBudget, ctx.budget.latencyP95Ms);
+      const chosen = pickCheapest(preferred);
+      const estimatedUsd = estimateCallCeilingUsd(chosen, req.tokensIn, req.maxTokensOut);
+      trace.push({
+        capabilityClass: klass,
+        preFilter: candidates.length,
+        passCapability: withCaps.length,
+        passPrivacy: withPrivacy.length,
+        passBudget: withBudget.length,
+        chosen: chosen.id,
+        reason: null,
+      });
+      return {
+        ok: true,
+        decision: { model: chosen, classUsed: klass, estimatedUsd },
+        trace,
+        reason: null,
+      };
+    }
+
+    return { ok: false, decision: null, trace, reason: lastReason };
+  }
+
   return {
     route(req) {
-      const classes = [req.primaryClass, ...(req.fallbackClasses ?? [])];
-      const ctx = req.ctx;
-
-      let lastReason = 'no models registered';
-      for (const klass of classes) {
-        const candidates = registry.list().filter((m) => m.capabilityClass === klass);
-        if (candidates.length === 0) {
-          lastReason = `no model registered for class="${klass}"`;
-          continue;
-        }
-
-        const withCaps = candidates.filter((m) => hasAllCapabilities(m.provides, ctx.required));
-        if (withCaps.length === 0) {
-          lastReason = `class="${klass}": no model provides required caps [${ctx.required.join(',')}]`;
-          continue;
-        }
-
-        const withPrivacy = withCaps.filter((m) =>
-          providerAllowsTier(m.privacyAllowed, ctx.privacy),
-        );
-        if (withPrivacy.length === 0) {
-          lastReason = `class="${klass}": no model allows privacy="${ctx.privacy}"`;
-          continue;
-        }
-
-        const withBudget = filterByBudget(withPrivacy, ctx.budget, req);
-        if (withBudget.length === 0) {
-          lastReason = `class="${klass}": no model within budget usdMax=${ctx.budget.usdMax}`;
-          continue;
-        }
-
-        const preferred = preferLatency(withBudget, ctx.budget.latencyP95Ms);
-        const chosen = pickCheapest(preferred);
-        const estimatedUsd = estimateCallCeilingUsd(chosen, req.tokensIn, req.maxTokensOut);
-        return { model: chosen, classUsed: klass, estimatedUsd };
-      }
-
-      throw new NoEligibleModelError(lastReason, {
-        required: ctx.required,
-        privacy: ctx.privacy,
+      const sim = simulate(req);
+      if (sim.ok && sim.decision !== null) return sim.decision;
+      throw new NoEligibleModelError(sim.reason ?? 'no models registered', {
+        required: req.ctx.required,
+        privacy: req.ctx.privacy,
       });
     },
+    simulate,
   };
 }
 

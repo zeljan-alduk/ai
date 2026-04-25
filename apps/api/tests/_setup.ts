@@ -16,6 +16,7 @@ import { InMemorySecretStore } from '@aldo-ai/secrets';
 import { type SqlClient, fromDatabaseUrl, migrate } from '@aldo-ai/storage';
 import { buildApp } from '../src/app.js';
 import { type Deps, type Env, createDeps } from '../src/deps.js';
+import { resetDiscoveryCache } from '../src/routes/models.js';
 
 export interface TestEnv {
   readonly deps: Deps;
@@ -25,9 +26,20 @@ export interface TestEnv {
 }
 
 export async function setupTestEnv(envOverrides: Env = {}): Promise<TestEnv> {
+  // /v1/models keeps a module-scoped discovery cache; reset between
+  // harness instances so back-to-back setups don't share state.
+  resetDiscoveryCache();
   const db = await fromDatabaseUrl({ driver: 'pglite' });
   await migrate(db);
-  const env: Env = { DATABASE_URL: '', ...envOverrides };
+  // Disable local-LLM discovery in the test harness so /v1/models
+  // doesn't spend the per-probe timeout budget hitting closed
+  // localhost ports on every request. Individual tests that exercise
+  // discovery override this via `envOverrides`.
+  const env: Env = {
+    DATABASE_URL: '',
+    ALDO_LOCAL_DISCOVERY: 'none',
+    ...envOverrides,
+  };
   const registry = new AgentRegistry({ storage: new PostgresStorage({ client: db }) });
   // Tests use the in-memory secrets store so we never need a master
   // key in the test env. Tests that exercise persistence semantics can

@@ -44,6 +44,8 @@ export const RunEvent = z.object({
     'error',
     'run.completed',
     'run.cancelled',
+    /** Wave 8: sensitive-tier routing audit row. */
+    'routing.privacy_sensitive_resolved',
   ]),
   at: z.string(),
   payload: z.unknown(),
@@ -70,3 +72,32 @@ export const GetRunResponse = z.object({
   run: RunDetail,
 });
 export type GetRunResponse = z.infer<typeof GetRunResponse>;
+
+// ---------------------------------------------------------------------------
+// `POST /v1/runs` — minimal create-run surface used by the API + CLI.
+//
+// v0 only carries enough fields for the platform to perform a routing
+// check before any provider contact is made. The surface intentionally
+// fails CLOSED on a privacy-tier violation: the response is a 422 with
+// `code: "privacy_tier_unroutable"` (see KNOWN_API_ERROR_CODES) and the
+// agent NEVER reaches the engine. CLAUDE.md non-negotiable #3 leans on
+// this — an operator can't accidentally bypass the router by hitting
+// the wire.
+
+export const CreateRunRequest = z.object({
+  agentName: z.string().min(1),
+  agentVersion: z.string().min(1).optional(),
+  inputs: z.unknown().optional(),
+});
+export type CreateRunRequest = z.infer<typeof CreateRunRequest>;
+
+export const CreateRunResponse = z.object({
+  run: z.object({
+    id: z.string(),
+    agentName: z.string(),
+    agentVersion: z.string(),
+    status: RunStatus,
+    startedAt: z.string(),
+  }),
+});
+export type CreateRunResponse = z.infer<typeof CreateRunResponse>;

@@ -7,7 +7,8 @@
  *   - createModelRegistry(): CRUD over ModelDescriptors + YAML loader.
  *   - createAdapterRegistry(): providerKind -> ProviderAdapter lookup.
  *   - Provider adapters: createOpenAICompatAdapter, createAnthropicAdapter,
- *     createGoogleAdapter, createBedrockAdapter (stub), createXaiAdapter.
+ *     createGoogleAdapter, createBedrockAdapter (stub), createXaiAdapter,
+ *     createMLXAdapter.
  *   - Pricing helpers + constrained-decoding helpers.
  */
 
@@ -15,7 +16,13 @@ export { createGateway } from './gateway.js';
 export type { GatewayDeps, GatewayEx, GatewayMiddleware, RoutingHints } from './gateway.js';
 
 export { createRouter, isEligible } from './router.js';
-export type { Router, RoutingRequest, RoutingDecision } from './router.js';
+export type {
+  Router,
+  RoutingRequest,
+  RoutingDecision,
+  RoutingSimulation,
+  ClassTrace,
+} from './router.js';
 
 export {
   createModelRegistry,
@@ -44,11 +51,16 @@ export {
 export type { GrammarHint, ConstrainOptions } from './decode/constrained.js';
 
 export { createOpenAICompatAdapter } from './providers/openai-compat.js';
-export type { OpenAICompatAdapterOptions } from './providers/openai-compat.js';
+export type {
+  BodyTransformer,
+  OpenAICompatAdapterOptions,
+} from './providers/openai-compat.js';
 export { createAnthropicAdapter } from './providers/anthropic.js';
 export { createGoogleAdapter } from './providers/google.js';
 export { createBedrockAdapter } from './providers/bedrock.js';
 export { createXaiAdapter } from './providers/xai.js';
+export { createMLXAdapter } from './providers/mlx.js';
+export type { MLXAdapter, MLXHealth } from './providers/mlx.js';
 
 export {
   NoEligibleModelError,

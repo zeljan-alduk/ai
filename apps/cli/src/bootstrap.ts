@@ -35,6 +35,7 @@ import {
   createAnthropicAdapter,
   createGateway,
   createGoogleAdapter,
+  createMLXAdapter,
   createModelRegistry,
   createOpenAICompatAdapter,
   createRouter,
@@ -121,6 +122,9 @@ export function bootstrap(opts: BootstrapOptions): RuntimeBundle {
   if (kinds.has('google')) {
     adapters.register(createGoogleAdapter() as ProviderAdapter);
   }
+  if (kinds.has('mlx')) {
+    adapters.register(createMLXAdapter() as ProviderAdapter);
+  }
 
   const router = createRouter(modelRegistry);
   const gateway =
@@ -203,8 +207,14 @@ function readModelsFromYaml(path: string): readonly RegisteredModel[] {
  */
 function modelIsEnabled(model: RegisteredModel, cfg: Config): boolean {
   if (model.locality === 'local') {
+    // Local models are enabled when a base URL is reachable. Ollama remains
+    // gated on `cfg.providers` since the CLI tracks an explicit Ollama
+    // toggle there; any other local provider (mlx_lm.server, lm-studio, …)
+    // is enabled when its YAML entry pins a baseUrl — actual reachability
+    // is reported via the API's `available` flag, not via this gate.
     const ollama = cfg.providers.find((p) => p.id === 'ollama');
-    return ollama?.enabled === true;
+    if (model.provider === 'ollama') return ollama?.enabled === true;
+    return model.providerConfig?.baseUrl !== undefined;
   }
 
   // Map model.provider (e.g. 'groq', 'anthropic', 'google', 'openai') to a

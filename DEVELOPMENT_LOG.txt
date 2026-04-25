@@ -1117,3 +1117,227 @@ finished in ~80s.
 Wave 7.5 closes the v0 control-plane UI gap. Next platform wave
 (8 — local-model adapters: Ollama/vLLM/llama.cpp/MLX) ready to spawn
 on the next "go".
+
+[2026-04-25 16:40 UTC] Engineer H — wave 8 MLX adapter
+Native MLX adapter (`mlx_lm.server` on Apple Silicon) shipped as a
+thin wrapper around the existing OpenAI-compat adapter. Touched:
+platform/gateway/src/providers/mlx.ts (new, ~135 lines including
+docs); platform/gateway/src/providers/openai-compat.ts (additive
+`bodyTransformer` hook, default no-op — old call sites unchanged);
+platform/gateway/src/provider.ts (`'mlx'` added to ProviderKind
+union); platform/gateway/src/index.ts (exports createMLXAdapter +
+MLXAdapter / MLXHealth / BodyTransformer types);
+platform/gateway/fixtures/models.yaml (3 illustrative seed entries —
+mlx-qwen2.5-7b-instruct-4bit, mlx-llama-3.3-70b-instruct-4bit,
+mlx-mistral-small-3.1-instruct-bf16 — flagged as illustrative;
+operators override via their own catalog); apps/cli/src/bootstrap.ts
+(registers the MLX adapter when an enabled model uses it; also
+generalised `modelIsEnabled` so any local-locality entry with a
+pinned baseUrl is enabled — Ollama still gated on cfg.providers
+state, no other provider hard-coded); platform/gateway/tests/
+providers/mlx.test.ts (new, 11 cases covering kind, body-translation
+for all four MLX-specific extra fields, base/empty-extra defaults,
+streaming-deltas + end-marker UsageRecord, fragmented-tool-call
+buffering regression, configured-baseUrl propagation, /health probe
+ok/non-ok/500/network-error paths, ProviderError on 5xx, grammar-
+field non-leak); docs/local-models/mlx.md (78 lines: install + spin
+up + register + eval-harness comparison + LLM-agnostic constraints).
+LLM-agnostic constraints honoured: no `provider === 'mlx'` branch in
+the router or anywhere else; MLX-specific knobs (quantization,
+kvCacheQuantized, draftModel, samplerSeed) live entirely in
+ProviderConfig.extra and are translated by the adapter's
+bodyTransformer; sensitive privacy tier is allowed since the model
+never leaves the box; no mlx_lm or Python TS dep — adapter only
+talks HTTP. Refactor of openai-compat.ts was surgical: one new
+exported `BodyTransformer` type plus one new optional field on
+OpenAICompatAdapterOptions; the parse loop, tool-call buffering,
+finish-reason mapping, and grammar-hint application are byte-for-byte
+unchanged. Quality bar: pnpm -r typecheck green (18 packages); pnpm
+exec biome check on touched files clean (pre-existing format errors
+in unrelated local-discovery + router-privacy/agents-check files
+not from this wave); pnpm --filter @aldo-ai/gateway test green
+(48/48, +11 new in mlx.test.ts); pnpm --filter @aldo-ai/api test
+green (56/56) — the 3 new MLX seed entries round-trip through
+ListModelsResponse without errors, and the existing models.test.ts
+cases that filter on provider names (anthropic/groq/vllm) still
+pass since they don't enumerate MLX. The API's `available` flag for
+MLX entries flows through the existing MLX_BASE_URL env-var check
+(already wired in apps/api/src/routes/models.ts). Out of scope per
+brief: local discovery probe (Engineer G), eval-harness changes,
+anything Python. Not committed — orchestrator integrates.
+
+[2026-04-25 16:45 UTC] Engineer G — wave 8 local discovery
+Built `@aldo-ai/local-discovery` — a new platform workspace package
+that probes well-known local-LLM ports (Ollama 11434/api/tags, vLLM
+8000/v1/models, llama.cpp 8080/v1/models, LM Studio 1234/v1/models)
+in parallel with a 1 s per-probe AbortController timeout, returning
+a union of `DiscoveredModel`s that extend `RegisteredModel` with
+`source` + `discoveredAt` metadata. Probes use native fetch only
+(no new external deps), tolerate every failure mode (connection
+refused, 404, non-JSON, wrong shape, timeout) — they NEVER throw,
+just log to an injected `onDebug` and return []. Configurable via
+`ALDO_LOCAL_DISCOVERY=ollama,vllm,llamacpp,lmstudio` (default all)
+or `=none` to disable. Discovered models default to
+`capabilityClass: 'local-reasoning'`, `locality: 'local'`,
+`privacyAllowed: ['public', 'internal', 'sensitive']`,
+`providerKind: 'openai-compat'`, zero-cost, baseUrl set to
+`${probedBase}/v1` so the existing OpenAI-compat adapter dials
+them without code changes. Files added: platform/local-discovery/
+{package.json, tsconfig.json, vitest.config.ts, src/{index.ts,
+discover.ts, registry-merge.ts, types.ts, probes/{util.ts,
+ollama.ts, vllm.ts, llamacpp.ts, lmstudio.ts}}, tests/{util,
+probes-ollama, probes-openai-compat, discover, registry-merge}
+.test.ts}. Test count: 58 (5 files: util×7, ollama×8, parameter-
+ised vllm/llamacpp/lmstudio×24, discover×11, merge×8) all green
+in 876 ms. Wired into apps/api/src/routes/models.ts via a 30 s
+process-scoped cache (singleflight via inFlight promise) — YAML
+entries always win on duplicate id; discovered rows fill gaps and
+are reported `available: true` since they were just observed.
+Added `resetDiscoveryCache()` export so `apps/api/tests/_setup.ts`
+can flush between harness instances; harness now defaults to
+`ALDO_LOCAL_DISCOVERY=none` so the test suite doesn't burn its
+budget on closed localhost ports — full apps/api suite drops
+from 24 s back to 12 s. New `aldo models discover` subcommand
+(apps/cli/src/commands/models-discover.ts) prints id|source|
+capabilityClass|locality|baseUrl as a fixed-column table, exits
+1 with the polite "no local LLM servers found on default ports
+— start Ollama / vLLM / llama.cpp / LM Studio" message when
+nothing responds, exits 0 when ≥1 model found; --json + --timeout
+flags supported. Manually smoke-tested the binary path with
+`tsx src/index.ts models discover`: prints the polite message
++ exits 1 on a clean dev box. Dockerfile updated (deps stage
+COPY platform/local-discovery/package.json + sources stage COPY
+platform/local-discovery ./platform/local-discovery) so the
+deployed API ships the new dep. apps/api/package.json gained
+`@aldo-ai/local-discovery` (and biome auto-hoisted the existing
+transitive `@aldo-ai/gateway` to a direct dep — local-discovery
+re-exports `RegisteredModel`). apps/cli/package.json + cli.ts
+register the new command alongside the existing `models ls` stub.
+Quality bar: pnpm -r typecheck green; pnpm exec biome check on
+all new/changed files clean (8 pre-existing biome errors in other
+waves' files left untouched per scope). Total tests across the
+14 backend packages now 499 (was 441) — +58 from this package,
++1 in apps/api models.test (discovery-disabled sanity check),
+plus the existing `agents` route gained 4 tests from a parallel
+wave. LLM-agnostic verified end-to-end: nothing under
+platform/gateway or apps/api keys routing on the runtime labels
+ollama/vllm/llamacpp/lmstudio — they're display-only; the only
+place those strings map to behaviour is the orchestrator's
+internal probe registry. Privacy default `[public, internal,
+sensitive]` is documented in registry-merge.ts (local inference
+is the answer to the sensitive-tier non-negotiable). Decisions
+worth flagging: (a) discovery cache is module-scoped not
+per-Deps, since it's a process concern + saves bookkeeping —
+tests reset via the exported helper; (b) effectiveContextTokens
+defaults to 8192 for discovered rows (a conservative floor —
+operators who want a 128k window can hand-add a YAML entry which
+takes precedence); (c) the brief mentioned `providerConfig.apiKey:
+''` but `RegisteredModel.providerConfig` doesn't carry an apiKey
+field — confirmed in gateway/src/model-registry.ts schema —
+so we set only `baseUrl`; the openai-compat adapter already
+skips the Authorization header when `config.apiKey` is empty
+(verified at platform/gateway/src/providers/openai-compat.ts:237).
+Not committed — orchestrator integrates.
+
+[2026-04-25 16:55 UTC] Engineer I — wave 8 privacy-tier enforcement
+Made CLAUDE.md non-negotiable #3 provable, debuggable, demoable.
+Router gained a read-only `simulate(req)` (platform/gateway/src/
+router.ts) — same pipeline as `route()` but returns a per-class
+ClassTrace[] (preFilter / passCapability / passPrivacy /
+passBudget / chosen / reason) that the CLI + API + web all render
+identically. New tests at platform/gateway/tests/router-privacy.
+test.ts pin every privacy invariant: cloud-only-+sensitive throws
+NoEligibleModelError mentioning "privacy" and "sensitive";
+mixed-registry sensitive picks the local model even when a
+cheaper cloud entry exists (privacy filter beats cost — the
+fixture is deliberately calibrated so a tier-blind solver would
+pick the cloud one); local-only serves public/internal/sensitive
+identically (no silent downgrade); a `locality:local` model that
+omits 'sensitive' from privacyAllowed STILL fails a sensitive
+request (locality and privacyAllowed are independent); fallback-
+class works for sensitive (primary=reasoning-medium with no
+privacy-eligible candidate falls through to a local-reasoning
+fallback); exhausted fallback chain still throws (not a 500);
+empty registry preserves ctx.privacy on the error; privacy
+filter beats cost minimisation even when estimatedUsd is
+non-zero; mix of allowing and denying local models in the same
+class picks the allowing one only; plus a simulate() shape test.
+13 cases, all green. Operator dry-run CLI lands at apps/cli/src/
+commands/agents-check.ts + wired into apps/cli/src/cli.ts (new
+plural `agents` namespace alongside the existing singular
+`agent` author-side namespace). Exit codes: 0 success, 2
+"would not route" (CI-gateable), 1 I/O error. The command
+prints the per-class breakdown plus a FIX hint for sensitive
+agents that don't declare a local-reasoning fallback; --json
+emits the same envelope. Read-only — never spawns a runtime,
+never contacts a provider; manually verified end-to-end against
+both apps/cli/tests/fixtures/models.cloud-only.yaml (exit 2,
+prints FIX) and models.local-fallback.yaml (exit 0, selects
+mlx-qwen-fixture). 4 CLI tests in apps/cli/tests/agents-check.
+test.ts. API endpoint POST /v1/agents/:name/check at apps/api/
+src/routes/agents.ts returns CheckAgentResponse — the api-
+contract additions (CheckAgentResponse, RoutingClassTraceWire,
+RoutingChosenWire) live in platform/api-contract/src/agents.ts.
+Same shape as the CLI JSON; the FIX heuristic is duplicated
+verbatim across both surfaces by design (operators who run the
+CLI then click the web button must see the same suggestion).
+4 new agents.test cases. Web routing-dry-run card lives at
+apps/web/components/agent/routing-dry-run-card.tsx, mounted
+under the Safety panel on the agent detail page. Compact (no
+modal); does NOT auto-fire — the operator clicks "Run dry-run"
+and the trace renders inline. Audit-event emission point: when
+endUsage arrives in agent-run.ts (i.e. the model turn
+completed successfully) AND spec.modelPolicy.privacyTier ===
+'sensitive', the engine emits a typed RunEvent of type
+`routing.privacy_sensitive_resolved` carrying {agent, model,
+provider, classUsed} — no `as any` cast; I added the new event
+to the cross-package union in platform/types/src/runtime.ts and
+to the api-contract RunEvent enum in platform/api-contract/src/
+runs.ts. classUsed is derived from Delta.end.model.capabilityClass
+(the gateway already threads ModelDescriptor through every
+terminal Delta), with a fall-through to spec.modelPolicy.primary.
+capabilityClass when the test gateway omits it. Decision worth
+flagging: I emit the audit row from the engine, not from the
+gateway, because (a) the engine is where the spec lives so the
+{agent} field is unambiguous, and (b) the existing run-event
+plumbing already persists through PostgresRunStore, so an
+operator can `SELECT * FROM run_events WHERE type =
+'routing.privacy_sensitive_resolved'` end-to-end. 3 engine
+tests in platform/engine/tests/privacy-audit-event.test.ts
+cover (i) sensitive emits exactly one row with {agent, model,
+provider, classUsed}, (ii) public-tier emits ZERO rows, (iii)
+the row persists through InMemoryRunStore. Negative-path API
+test: new POST /v1/runs endpoint at apps/api/src/routes/runs.ts
+performs a fail-closed pre-flight against the live YAML catalog
+and returns 422 with code `privacy_tier_unroutable` (added to
+KNOWN_API_ERROR_CODES in platform/api-contract/src/common.ts)
+when routing would fail; success path returns 202 with a
+queued run record. 4 new runs.test cases including the hard
+sensitive-+-cloud-only assertion. Test totals added: gateway
++13 (router-privacy.test.ts), engine +3 (privacy-audit-event),
+cli +4 (agents-check.test.ts), api +8 (4 in agents.test.ts on
+the new check endpoint, 4 in runs.test.ts on POST /v1/runs).
+Quality bar: pnpm -r typecheck green; pnpm lint clean (biome
+auto-fixed string-concat → template-literal in three new files
+during --write); pnpm -r test green across all 14 backend
+packages. apps/api/package.json gained @aldo-ai/gateway as a
+direct dep (was previously transitive). New fixtures:
+apps/cli/tests/fixtures/{security-reviewer.yaml, models.cloud-
+only.yaml, models.local-fallback.yaml} and apps/api/tests/
+fixtures/{models.cloud-only.yaml, models.with-local.yaml}.
+Decisions to flag for review: (1) I duplicated suggestFix
+across CLI + API rather than introducing a shared helper —
+the function is 25 lines and the CLI is in TS while the API
+helpers don't live in a shared package; can be promoted to a
+new @aldo-ai/routing-explain package if a third surface needs
+it. (2) The POST /v1/runs endpoint is a thin pre-flight that
+returns 202 with a queued record but does NOT actually spawn
+a runtime; the wave-8 brief described "an integration test
+that sends a runs.create" so I implemented the surface
+fail-closed-first and left the engine spawn for a later wave.
+(3) The audit-event emission is post-success only — if the
+adapter throws during streaming, no audit row fires. That
+matches the wave-8 brief ("when ... actually routes
+successfully") but worth confirming with the security review;
+an alternative would emit on first delta. Not committed —
+orchestrator integrates.

@@ -69,6 +69,22 @@ interface ChatCompletionStreamChunk {
   };
 }
 
+/**
+ * Hook that lets a wrapping adapter mutate / extend the outbound JSON body
+ * after the OpenAI-compatible defaults have been built. Used by native
+ * adapters (e.g. MLX) that want to surface backend-specific knobs from
+ * `ProviderConfig.extra` without forking the SSE parse loop. The hook is
+ * additive: omit it and the adapter behaves exactly like before.
+ */
+export type BodyTransformer = (
+  body: Record<string, unknown>,
+  ctx: {
+    readonly req: CompletionRequest;
+    readonly model: ModelDescriptor;
+    readonly config: ProviderConfig;
+  },
+) => Record<string, unknown>;
+
 export interface OpenAICompatAdapterOptions {
   /** Override the adapter kind string (e.g. 'ollama-compat'). */
   readonly kind?: string;
@@ -76,6 +92,12 @@ export interface OpenAICompatAdapterOptions {
   readonly defaultBaseUrl?: string;
   /** Grammar hint for constrained decoding. Opt-in per call via `extra`. */
   readonly grammarHint?: GrammarHint;
+  /**
+   * Optional last-mile body transformer. Runs after grammar-hint application
+   * and immediately before `fetch`. Use sparingly — provider-specific knobs
+   * belong in `ProviderConfig.extra`, not in the OpenAI-compat default path.
+   */
+  readonly bodyTransformer?: BodyTransformer;
 }
 
 export function createOpenAICompatAdapter(
@@ -83,13 +105,15 @@ export function createOpenAICompatAdapter(
 ): ProviderAdapter {
   const kind = options.kind ?? 'openai-compat';
   const defaultBase = options.defaultBaseUrl ?? DEFAULT_BASE_URL;
+  const transformBody = options.bodyTransformer;
 
   return {
     kind,
 
     async *complete(req, model, config, signal): AsyncIterable<Delta> {
       const url = `${config.baseUrl ?? defaultBase}/chat/completions`;
-      const body = buildChatBody(req, model, config);
+      const baseBody = buildChatBody(req, model, config);
+      const body = transformBody ? transformBody(baseBody, { req, model, config }) : baseBody;
 
       const res = await fetch(url, {
         method: 'POST',

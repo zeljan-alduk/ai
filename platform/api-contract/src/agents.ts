@@ -138,3 +138,53 @@ export const GetAgentResponse = z.object({
   agent: AgentDetail,
 });
 export type GetAgentResponse = z.infer<typeof GetAgentResponse>;
+
+// ---------------------------------------------------------------------------
+// `POST /v1/agents/:name/check` — operator dry-run.
+//
+// Mirrors the CLI's `aldo agents check` JSON shape so the same wave-8
+// envelope flows through both surfaces. Read-only; the server never
+// writes state in response to a check.
+
+/** A single capability-class' worth of filter outcomes during a routing simulation. */
+export const RoutingClassTraceWire = z.object({
+  capabilityClass: z.string(),
+  preFilter: z.number().int().nonnegative(),
+  passCapability: z.number().int().nonnegative(),
+  passPrivacy: z.number().int().nonnegative(),
+  passBudget: z.number().int().nonnegative(),
+  /** Selected model id, or null when no candidate survived this class. */
+  chosen: z.string().nullable(),
+  /** Human-readable reason this class was rejected; null on success. */
+  reason: z.string().nullable(),
+});
+export type RoutingClassTraceWire = z.infer<typeof RoutingClassTraceWire>;
+
+export const RoutingChosenWire = z.object({
+  id: z.string(),
+  provider: z.string(),
+  locality: z.enum(['cloud', 'on-prem', 'local']),
+  classUsed: z.string(),
+  estimatedUsd: z.number().nonnegative(),
+});
+export type RoutingChosenWire = z.infer<typeof RoutingChosenWire>;
+
+export const CheckAgentResponse = z.object({
+  ok: z.boolean(),
+  agent: z.object({
+    name: z.string(),
+    version: z.string(),
+    privacyTier: PrivacyTier,
+    required: z.array(z.string()),
+    primaryClass: z.string(),
+    fallbackClasses: z.array(z.string()),
+  }),
+  /** When ok=true, the chosen model envelope; null otherwise. */
+  chosen: RoutingChosenWire.nullable(),
+  trace: z.array(RoutingClassTraceWire),
+  /** Aggregate failure reason mirroring NoEligibleModelError.reason. */
+  reason: z.string().nullable(),
+  /** Operator-facing FIX hint; null on success. */
+  fix: z.string().nullable(),
+});
+export type CheckAgentResponse = z.infer<typeof CheckAgentResponse>;

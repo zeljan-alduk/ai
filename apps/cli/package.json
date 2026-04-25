@@ -23,6 +23,7 @@
     "@aldo-ai/engine": "workspace:*",
     "@aldo-ai/eval": "workspace:*",
     "@aldo-ai/gateway": "workspace:*",
+    "@aldo-ai/local-discovery": "workspace:*",
     "@aldo-ai/observability": "workspace:*",
     "@aldo-ai/registry": "workspace:*",
     "@aldo-ai/runtime-config": "workspace:*",
