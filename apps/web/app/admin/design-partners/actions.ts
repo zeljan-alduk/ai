@@ -21,21 +21,10 @@ import {
 } from '@aldo-ai/api-contract';
 import { revalidatePath } from 'next/cache';
 
-export interface UpdateApplicationFormState {
-  readonly error: string | null;
-  /**
-   * Stamp incremented on each successful save so the client island
-   * can show a transient "saved" toast even when the underlying row
-   * data didn't change. (`useFormState` re-renders only when the
-   * returned object's identity changes.)
-   */
-  readonly savedAt: string | null;
-}
-
-export const EMPTY_UPDATE_STATE: UpdateApplicationFormState = {
-  error: null,
-  savedAt: null,
-};
+// UpdateApplicationFormState + EMPTY_UPDATE_STATE moved to ./state —
+// non-async exports from a `'use server'` file collapse to `undefined`
+// in client-component import sites and break `useActionState`.
+import type { UpdateApplicationFormState } from './state';
 
 function strField(form: FormData, name: string): string {
   const v = form.get(name);

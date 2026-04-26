@@ -25,15 +25,12 @@ import { ApiClientError, getAuthMe, listAgents, login, signup } from '@/lib/api'
 import { clearSession, setSession } from '@/lib/session';
 import { redirect } from 'next/navigation';
 import { LoginFormSchema, SignupFormSchema, safeNextPath } from './schemas';
+import type { AuthFormState } from './state';
 
-export interface AuthFormState {
-  /** Inline error message rendered above the submit button. */
-  readonly error: string | null;
-  /** Field-level errors keyed by form field name. */
-  readonly fieldErrors: Readonly<Record<string, string>>;
-}
-
-export const EMPTY_AUTH_STATE: AuthFormState = { error: null, fieldErrors: {} };
+// AuthFormState + EMPTY_AUTH_STATE live in ./state because a `'use server'`
+// file can only export async functions to client components — non-async
+// exports come through as `undefined`. Client islands import them
+// directly from ./state; only server actions live here.
 
 function formStringField(form: FormData, name: string): string {
   const v = form.get(name);

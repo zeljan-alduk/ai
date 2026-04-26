@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { EMPTY_AUTH_STATE, loginAction } from '../actions';
+import { loginAction } from '../actions';
+import { EMPTY_AUTH_STATE } from '../state';
 
 export function LoginForm({ next }: { next: string | null }) {
   const [state, formAction] = useActionState(loginAction, EMPTY_AUTH_STATE);

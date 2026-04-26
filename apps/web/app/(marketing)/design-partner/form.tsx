@@ -27,7 +27,8 @@ import {
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { EMPTY_DESIGN_PARTNER_STATE, applyForDesignPartnerAction } from './actions';
+import { applyForDesignPartnerAction } from './actions';
+import { EMPTY_DESIGN_PARTNER_STATE } from './state';
 
 const USE_CASE_MIN = 50;
 const USE_CASE_MAX = 500;

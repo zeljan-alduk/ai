@@ -22,7 +22,8 @@ import {
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { EMPTY_UPDATE_STATE, updateDesignPartnerApplicationAction } from './actions';
+import { updateDesignPartnerApplicationAction } from './actions';
+import { EMPTY_UPDATE_STATE } from './state';
 
 interface Props {
   readonly application: DesignPartnerApplication;

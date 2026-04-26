@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { EMPTY_AUTH_STATE, signupAction } from '../actions';
+import { signupAction } from '../actions';
+import { EMPTY_AUTH_STATE } from '../state';
 
 export function SignupForm({ next }: { next: string | null }) {
   const [state, formAction] = useActionState(signupAction, EMPTY_AUTH_STATE);
