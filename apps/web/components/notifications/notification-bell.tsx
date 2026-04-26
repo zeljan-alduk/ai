@@ -35,6 +35,7 @@ const KIND_ICON: Record<NotificationKind, string> = {
   guards_blocked: '⚠',
   invitation_received: '✉',
   budget_threshold: '$',
+  comment_mention: '@',
 };
 
 const KIND_TINT: Record<NotificationKind, string> = {
@@ -44,6 +45,7 @@ const KIND_TINT: Record<NotificationKind, string> = {
   guards_blocked: 'text-amber-700 bg-amber-50 border-amber-200',
   invitation_received: 'text-violet-700 bg-violet-50 border-violet-200',
   budget_threshold: 'text-rose-700 bg-rose-50 border-rose-200',
+  comment_mention: 'text-blue-700 bg-blue-50 border-blue-200',
 };
 
 export function NotificationBell() {

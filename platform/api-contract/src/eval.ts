@@ -27,6 +27,13 @@ export const EvalCase = z.object({
       criterion: z.string(),
       judgeCapabilityClass: z.string().default('reasoning-medium'),
     }),
+    // Wave-14: attach a custom (tenant-scoped) evaluator. The runner
+    // resolves `evaluatorId` to a stored evaluator row (built-in or
+    // llm_judge) at sweep start.
+    z.object({
+      kind: z.literal('evaluator'),
+      evaluatorId: z.string(),
+    }),
   ]),
   /** Per-case score weight (defaults to 1). */
   weight: z.number().nonnegative().default(1),
@@ -34,16 +41,30 @@ export const EvalCase = z.object({
 });
 export type EvalCase = z.infer<typeof EvalCase>;
 
-/** Registered eval suite — versioned, addressable. */
+/** Registered eval suite — versioned, addressable.
+ *
+ * Wave-14: a suite EITHER declares inline cases OR binds to a
+ * dataset. The base object permits both shapes; the suite loader
+ * (`@aldo-ai/eval`) does the cross-field check that at least one
+ * case OR a dataset is present. We don't lift the check into a Zod
+ * `.refine` here because the surrounding code uses `.pick()` /
+ * `.extend()` on this schema and `ZodEffects` would block that. */
 export const EvalSuite = z.object({
   name: z.string(),
   version: z.string(), // semver
   description: z.string(),
   /** Agent under test (name only — version comes from the sweep request). */
   agent: z.string(),
-  cases: z.array(EvalCase).min(1),
+  cases: z.array(EvalCase).default([]),
   /** Min weighted-pass ratio for the suite to be considered green. */
   passThreshold: z.number().min(0).max(1),
+  /**
+   * Wave-14 — optional dataset binding. When set, the runner pulls
+   * examples from `/v1/datasets/:id/examples` at sweep start. Inline
+   * `cases` still wins; only a dataset-only suite (cases empty)
+   * triggers a fetch.
+   */
+  dataset: z.string().optional(),
 });
 export type EvalSuite = z.infer<typeof EvalSuite>;
 

@@ -18,7 +18,7 @@ export default async function ApiKeysPage() {
   }
 
   return (
-    <>
+    <div data-tour="api-keys">
       <PageHeader
         title="API keys"
         description="Programmatic credentials scoped to this tenant. Each key is shown once on creation and never re-displayable. Revoking is immediate."
@@ -98,7 +98,7 @@ export default async function ApiKeysPage() {
           </div>
         )
       ) : null}
-    </>
+    </div>
   );
 }
 

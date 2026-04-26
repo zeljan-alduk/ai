@@ -38,6 +38,11 @@ const PUBLIC_BOUNDED: ReadonlyArray<string> = [
   '/security',
   '/design-partner',
   '/docs',
+  // Wave 14 (Engineer 14D): public read-only share viewer. The
+  // backing API endpoint `/v1/public/share/:slug` is also on the
+  // server allow-list (apps/api/src/auth/middleware.ts) so an
+  // unauthenticated browser can resolve the slug end-to-end.
+  '/share',
 ];
 
 export function isPublicPath(pathname: string): boolean {

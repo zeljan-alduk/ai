@@ -9,6 +9,12 @@ import { useState } from 'react';
 
 const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => boolean }> = [
   { href: '/runs', label: 'Runs', match: (p) => p === '/runs' || p.startsWith('/runs/') },
+  // Wave-14 — between Runs and Agents per the brief.
+  {
+    href: '/dashboards',
+    label: 'Dashboards',
+    match: (p) => p === '/dashboards' || p.startsWith('/dashboards/'),
+  },
   {
     href: '/playground',
     label: 'Playground',
@@ -210,6 +216,19 @@ function UserMenu({ user }: { user: SidebarUser }) {
               <div className="my-1 border-t border-slate-200" />
             </>
           ) : null}
+          {/* Wave-14C — relaunch the product tour on demand. The
+              tour provider listens for the `aldo:tour:start` window
+              event and re-opens at step 0. */}
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('aldo:tour:start'));
+              setOpen(false);
+            }}
+            className="block w-full rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+          >
+            Take the tour
+          </button>
           <form action={logoutAction}>
             <button
               type="submit"

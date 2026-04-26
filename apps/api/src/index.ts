@@ -15,6 +15,7 @@ import { migrate } from '@aldo-ai/storage';
 import { serve } from '@hono/node-server';
 import { buildApp } from './app.js';
 import { SEED_TENANT_UUID, createDeps } from './deps.js';
+import { runAlertsTick } from './routes/alerts.js';
 
 async function main(): Promise<void> {
   const deps = await createDeps(process.env);
@@ -68,6 +69,19 @@ async function main(): Promise<void> {
   serve({ fetch: app.fetch, port, hostname: host }, (info) => {
     console.log(`[api] listening on http://${info.address}:${info.port}`);
   });
+
+  // Wave 14 — alert evaluator. Runs every 60s; multi-instance safe via
+  // per-rule Postgres advisory locks (`pg_try_advisory_lock`). Disabled
+  // in tests (which never reach this entry point).
+  const ALERTS_TICK_MS = 60_000;
+  const alertsTimer = setInterval(() => {
+    void runAlertsTick({ deps }).catch((err) => {
+      console.error('[alerts] tick failed', err);
+    });
+  }, ALERTS_TICK_MS);
+  // Don't pin the event loop open — the shutdown hooks below clear it,
+  // but `unref()` keeps a fast `kill -9` recovery clean.
+  alertsTimer.unref();
 
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`[api] received ${signal}, shutting down`);

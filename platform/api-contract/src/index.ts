@@ -25,3 +25,7 @@ export * from './billing.js';
 export * from './views.js';
 export * from './admin.js';
 export * from './notifications.js';
+export * from './dashboards.js';
+export * from './datasets.js';
+export * from './annotations.js';
+export * from './integrations.js';

@@ -31,6 +31,10 @@
 import { randomUUID } from 'node:crypto';
 import type { ActivityEvent, Notification, NotificationKind } from '@aldo-ai/api-contract';
 import type { EngineNotification, NotificationSink } from '@aldo-ai/engine';
+import type {
+  IntegrationDispatcher,
+  IntegrationEvent as IntegrationEventName,
+} from '@aldo-ai/integrations';
 import type { SqlClient } from '@aldo-ai/storage';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +57,46 @@ export interface EmitNotificationArgs {
  * supplies one — every emit is a fresh row). The intent is "fire-and-
  * forget"; callers that don't care about the row id ignore the return.
  */
+/**
+ * Wave-14C — per-db dispatcher hook. The API wires its
+ * `IntegrationDispatcher` at boot via `setIntegrationsDispatcher(db, d)`;
+ * `emitNotification` looks the dispatcher up by the SqlClient identity
+ * the caller passes in and best-effort fans the event out to
+ * integrations subscribed to that kind.
+ *
+ * The hook is keyed on the SqlClient (not module-scoped) because the
+ * test harness builds multiple isolated `Deps` instances back-to-back
+ * — a module-scoped reference would have one harness's dispatcher
+ * point at another harness's (closed) db, which is the wave-14C
+ * regression the per-db keying fixes. The WeakMap lets old entries
+ * be garbage-collected automatically when the SqlClient is dropped.
+ *
+ * Threading model: synchronous in the same Node process. Each
+ * notification awaits the dispatcher only to log failures; the
+ * dispatcher itself wraps every runner in `Promise.allSettled` plus
+ * a 5s per-call timeout, so a slow Slack workspace never stalls a
+ * run. A failure here NEVER propagates to the engine.
+ */
+const dispatcherByDb = new WeakMap<SqlClient, IntegrationDispatcher>();
+
+export function setIntegrationsDispatcher(db: SqlClient, d: IntegrationDispatcher | null): void {
+  if (d === null) dispatcherByDb.delete(db);
+  else dispatcherByDb.set(db, d);
+}
+
+/**
+ * Subset of NotificationKind that the integrations dispatcher accepts.
+ * The intersection mirrors `IntegrationEvent` from @aldo-ai/integrations.
+ */
+const INTEGRATION_KINDS: ReadonlySet<string> = new Set<IntegrationEventName>([
+  'run_completed',
+  'run_failed',
+  'sweep_completed',
+  'guards_blocked',
+  'budget_threshold',
+  'invitation_received',
+]);
+
 export async function emitNotification(
   db: SqlClient,
   args: EmitNotificationArgs,
@@ -77,6 +121,27 @@ export async function emitNotification(
       createdAt,
     ],
   );
+  // Wave-14C — fan out to outbound integrations. Best-effort. We
+  // only forward kinds that the dispatcher knows about; a future
+  // notification kind that isn't in `INTEGRATION_KINDS` quietly
+  // skips the dispatcher (rather than throwing or logging).
+  const dispatcher = dispatcherByDb.get(db);
+  if (dispatcher !== undefined && INTEGRATION_KINDS.has(args.kind)) {
+    void dispatcher
+      .dispatch(args.tenantId, args.kind as IntegrationEventName, {
+        title: args.title,
+        body: args.body,
+        link,
+        metadata: { ...metadata },
+        occurredAt: createdAt,
+      })
+      .catch((err) => {
+        // Dispatcher contractually never throws, but if some future
+        // refactor breaks that, swallow + log so a misbehaving
+        // dispatcher never tears down the API request that fired it.
+        console.error('[notifications] integrations dispatch threw', err);
+      });
+  }
   return {
     id,
     userId: args.userId,

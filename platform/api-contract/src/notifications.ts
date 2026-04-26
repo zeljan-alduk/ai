@@ -33,6 +33,8 @@ export const NotificationKind = z.enum([
   'guards_blocked',
   'invitation_received',
   'budget_threshold',
+  // Wave-14 (Engineer 14D): @-mention in an annotation.
+  'comment_mention',
 ]);
 export type NotificationKind = z.infer<typeof NotificationKind>;
 

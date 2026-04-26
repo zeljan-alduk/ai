@@ -2710,3 +2710,529 @@ provider — the audit-log verbs are platform concepts
 resources (runs / agents / secrets / admin), and the
 api-keys/invitations role enum is fixed at the platform
 ladder. Privacy tiers are untouched.
+
+[2026-04-26 21:35 UTC] engineer-14A — wave 14 dashboards + heatmaps + alerts
+Shipped the dashboard CRUD surface, server-side widget aggregation,
+13 widget kinds (KPIs, timeseries, pie, bar, heatmaps), 5 alert
+kinds with a 60s background evaluator + Slack/email/in-app
+channels, and seeded two default dashboards on tenant signup.
+
+Migration 013 (`013_dashboards_alerts.sql`) added three tables:
+dashboards (id, tenant_id, user_id, name, description, is_shared,
+layout JSONB, timestamps), alert_rules (id, tenant_id, user_id,
+name, kind, threshold JSONB, targets JSONB, notification_channels
+TEXT[], enabled, last_triggered_at, last_silenced_at), and
+alert_events (id, alert_rule_id FK CASCADE, triggered_at, value
+DOUBLE, dimensions JSONB, notified_channels TEXT[]). All FK to
+tenants(id) ON DELETE CASCADE; partial index on `enabled = true`
+for the evaluator hot path; (tenant_id, updated_at DESC) index
+for the dashboards list page.
+
+API contract (`platform/api-contract/src/dashboards.ts`):
+DashboardWidget discriminated by `kind` ∈ {timeseries-cost,
+timeseries-runs, timeseries-latency, pie-models, pie-locality,
+bar-agents, bar-errors, heatmap-cost-by-hour,
+heatmap-errors-by-model, kpi-runs-24h, kpi-cost-mtd,
+kpi-error-rate, kpi-active-agents}. Per-kind query schemas
+(`WidgetQuerySchemas`) live in api-contract so client + server
+share validation. WidgetData is a discriminated union over
+`shape` ∈ {timeseries, pie, bar, heatmap, kpi}. AlertKind enum
+is {cost_spike, error_rate, latency_p95, guards_blocked,
+budget_threshold}; NotificationChannel is `app | email |
+slack:<webhook-url>`. All additive — no breaking changes.
+
+API surface (apps/api/src/routes/dashboards.ts +
+apps/api/src/routes/alerts.ts):
+  GET    /v1/dashboards
+  POST   /v1/dashboards
+  GET    /v1/dashboards/:id
+  PATCH  /v1/dashboards/:id
+  DELETE /v1/dashboards/:id
+  POST   /v1/dashboards/:id/data
+  GET    /v1/alerts
+  POST   /v1/alerts
+  GET    /v1/alerts/:id
+  PATCH  /v1/alerts/:id
+  DELETE /v1/alerts/:id
+  POST   /v1/alerts/:id/silence?until=ISO|forever
+  POST   /v1/alerts/:id/test
+  GET    /v1/alerts/:id/events
+
+`POST /v1/dashboards/:id/data` is the single round-trip
+aggregation: client sends an optional layout (so the editor can
+preview unsaved widgets) and gets one payload per widget keyed
+on widget id. Each resolver in `apps/api/src/dashboards/widget-data.ts`
+reads from existing wave-1/8/10 tables (`runs`, `usage_records`,
+`run_events`) — no new schema for the aggregations themselves.
+Tenant isolation is enforced on every query via the
+authenticated session's tenantId. A single bad widget never
+poisons the whole payload — the route catches per-widget and
+returns a typed `error` shape.
+
+Heatmaps are first-class. The aggregation lives in TS (one
+wide-row SQL pull, then JS group-by) so the same data feeds
+every (xAxis, yAxis, metric) combination — `hour-of-day` /
+`day-of-week` × `model` / `agent` / `capability` / `locality`
+× `cost` / `errors` / `runs` / `latency-p95`. The web side
+draws the heatmap with native SVG (no extra dep): cells get
+the `valueToColor` slate→amber→red gradient, `<title>` tooltips
+on hover, axis labels on the gutter. All of this lives in
+`apps/web/components/dashboards/heatmap.ts` so vitest can pin
+the layout math without a renderer.
+
+Alert evaluator (`apps/api/src/dashboards/alert-eval.ts`):
+five kinds — cost_spike (sum usd in window), error_rate
+(failed/error / total), latency_p95 (p95 wall-clock duration
+of completed runs), guards_blocked (count of run_events that
+look like sandbox/guards/policy events), budget_threshold
+(alias for cost_spike). Per-rule debounce: a rule that fired
+within its `period` is skipped on subsequent ticks
+(`shouldSkipForTick`). `last_silenced_at > now()` also skips.
+
+The 60s background tick lives in `apps/api/src/index.ts`
+(setInterval, unref'd). Multi-instance safe: every rule
+evaluation takes a Postgres advisory lock keyed on
+`hashLockKey(rule_id)` (djb2 → int31). Lock failure is
+treated as "another instance owns this tick" → skip; lock
+release is in a `finally` block. pglite tolerates the calls
+as a no-op; the test harness exercises the path via
+`runAlertsTick({ deps })`.
+
+Notification channels (`apps/api/src/dashboards/notify-channels.ts`):
+  - `app`   → wave-13 emitNotification (tenant-wide row)
+  - `email` → wave-11 mailer.send (text body)
+  - `slack:<url>` → POST a JSON payload with the minimal
+    Incoming-Webhook envelope. `isSlackWebhookUrl` validates
+    the URL is `https://hooks.slack.com/...` BEFORE the fetch;
+    a non-Slack url never opens an HTTP connection. The
+    validator runs at create + update + dispatch time.
+
+Default dashboards seeded on signup
+(`apps/api/src/dashboards/seed-defaults.ts`):
+  - "Operations" — KPIs (runs/24h, error rate, active agents)
+    + runs/min timeseries + p95 latency timeseries + top
+    failing agents bar.
+  - "Cost" — KPIs (cost MTD, runs/24h, active agents) +
+    spend timeseries + spend-by-model pie + top agents by
+    spend bar + spend-by-hour×model heatmap.
+Both `is_shared = true`. Hooked into POST /v1/auth/signup as a
+best-effort write — a failure logs and does NOT block the
+signup response. Idempotent against name match so a manually
+re-run seeder never duplicates.
+
+Web surface (apps/web/app/dashboards/* +
+apps/web/app/settings/alerts/*):
+  - /dashboards — server-rendered card grid with a
+    `LayoutThumbnail` SVG snapshot (pure, deterministic,
+    color-coded by widget kind) on each card.
+  - /dashboards/[id] — server-fetches dashboard + widget data,
+    renders via the client `DashboardCanvas`. Viewer mode:
+    CSS-grid 12-col layout. Editor mode (toggle): @dnd-kit/core
+    PointerSensor for drag, ←→↑↓ resize handles per widget,
+    "Add widget" picker (13 kinds), "Save layout" PATCH,
+    "Delete" with confirm. Pure layout logic lives in
+    `components/dashboards/layout-grid.ts` (clampColRow,
+    rectsOverlap, packLayout, moveWidget, resizeWidget,
+    nextFreeRow, layoutHeight) — the canvas just calls into it.
+  - /settings/alerts — list table with per-row Enable/Test/
+    Silence (1h/24h/7d/forever)/Delete actions; "New rule"
+    Dialog with kind/threshold/period/comparator selects, target
+    agent input, and a multiline channels textarea. Channel
+    validation runs through the unit-tested
+    `validateChannel`/`draftToCreateRequest` helpers in
+    `components/dashboards/alert-form.ts`.
+  - Sidebar nav: added "Dashboards" between Runs and
+    Playground; added "Alerts" to the settings sub-nav.
+
+@dnd-kit/core@^6.1.0 added to apps/web/package.json. Pure
+DnD layer; doesn't ship a custom drop-zone grid because v0
+of the editor leans on row-based packing — drag distance ≥
+4px starts a drag, the canvas re-layouts on drop. The
+DnD-driven precise-cell drop is wired but inert in this
+revision (parseDropId returns null) because measuring grid
+coordinates without a portal-based overlay is brittle; the
+manual ←→↑↓ resize handles + click-to-add cover the editor's
+v0 use cases. Future revisions can add `useDroppable` zones
+per cell.
+
+Quality bar:
+  - apps/api typecheck green for every wave-14 file.
+  - apps/web typecheck green for every wave-14 file. Pre-
+    existing errors live in concurrent-engineer files
+    (14C's integrations + comment_mention notification kind).
+  - apps/api tests: 24 wave-14 tests added (12 dashboards:
+    CRUD ×6 + aggregation ×6; 12 alerts: CRUD, evaluation
+    ×5, silence, slack-validation, helpers ×3). All pass.
+    Full suite: 259 passing + 6 skipped + 1 unrelated
+    playground hook-timeout (not wave-14).
+  - apps/web tests: 27 wave-14 tests added (layout-grid ×9,
+    heatmap ×8, alert-form ×10). All 194 web tests pass.
+  - biome --fix applied to every wave-14 file; no biome
+    errors in any wave-14 file.
+
+LLM-agnostic: every widget kind, alert kind, channel kind,
+and contract field keys on platform concepts (cost / errors /
+latency / guards / budget / runs / agents / models / locality).
+Provider strings are opaque; a switch from cloud → local
+provider never requires a contract or migration change.
+Privacy tiers are untouched — alert rules can target a model
+or agent name, but the cross-cutting privacy_tier enforcement
+stays at the gateway layer.
+
+Out of scope (per brief): native Slack OAuth (paste-only),
+real email delivery (mailer stub), forecasting beyond linear.
+
+[2026-04-26 21:38 UTC] engineer-14D — wave 14 annotations + shares
+Built three new tables, end-to-end CRUD + reactions, public
+read-only share-link viewer, and the corresponding web UI.
+
+Migration 016_annotations_shares.sql
+  - annotations(id, tenant_id, user_id, target_kind, target_id,
+    body, parent_id, created_at, updated_at). target_kind is a
+    CHECK-constrained enum ('run' | 'sweep' | 'agent'). parent_id
+    is a self-referential FK with ON DELETE SET NULL — orphaned
+    replies survive a parent delete and surface as [deleted]
+    tombstones in the UI (the schema permits arbitrary nesting;
+    the UI flattens to a single level pragmatically).
+  - annotation_reactions(annotation_id, user_id, kind, created_at)
+    with the (annotation, user, kind) tuple as PRIMARY KEY. kind
+    is constrained to {thumbs_up, thumbs_down, eyes, check}. The
+    PK makes the toggle semantics fall out for free — DELETE
+    first, INSERT on rowCount=0.
+  - share_links(id, tenant_id, created_by_user_id, target_kind,
+    target_id, slug UNIQUE, password_hash NULL, expires_at NULL,
+    revoked_at NULL, view_count DEFAULT 0, created_at). The slug
+    is opaque ('share_' + 16 chars of crockford base32 minus
+    i/l/o/0/1) and is the public handle. Revocation is soft
+    (revoked_at) so the audit trail stays intact.
+
+API surface — apps/api/src/routes/annotations.ts:
+  GET    /v1/annotations?targetKind=run&targetId=<id>
+  POST   /v1/annotations { targetKind, targetId, body, parentId? }
+  PATCH  /v1/annotations/:id { body }   author-only
+  DELETE /v1/annotations/:id            author-or-owner
+  POST   /v1/annotations/:id/reactions { kind }   toggle
+  GET    /v1/annotations/feed?since=<iso>&limit=
+
+  - Members + above can comment; viewers are read-only via the
+    existing requireRole ladder.
+  - @-mention notifications: extractMentionedEmails() pulls
+    `@<email>@<domain>` matches from the body; the route does a
+    JOIN against tenant_members and emits a `comment_mention`
+    notification per matched member (added the kind to the
+    NotificationKind enum).
+
+API surface — apps/api/src/routes/shares.ts:
+  POST   /v1/shares { targetKind, targetId, expiresInHours?, password? }
+  GET    /v1/shares?targetKind=&targetId=
+  POST   /v1/shares/:id/revoke
+  DELETE /v1/shares/:id
+  GET    /v1/public/share/:slug   PUBLIC (no auth)
+
+Share-link permission model:
+  - Create: members + above on their own tenant. The route
+    pre-validates the target row exists in the caller's tenant
+    (404 otherwise — cross-tenant create is blocked at the
+    pre-check). Sweeps don't carry tenant_id on disk (predates
+    wave-10), so existence is the gate there.
+  - Revoke: creator OR owner. Anyone else 403s. The result
+    flips revoked_at; subsequent public resolves 404.
+  - Delete: creator OR owner. Hard delete.
+  - Public resolve: no auth. The middleware allow-list now
+    carries a path PREFIX ('/v1/public/share/') alongside the
+    EXACT entries. Unknown / revoked / expired all 404 with the
+    same error so a casual visitor can't distinguish them.
+  - Password-gated: argon2id-hashed; verified at resolve. Wrong
+    password returns {locked:true, reason:'password_invalid'};
+    after 5 wrong attempts per slug per hour the bucket flips
+    to 'rate_limited' (in-memory map; resets on process boot,
+    which is fine — anything more determined is what argon2's
+    300ms verify cost is for).
+
+Public payload shapes (api-contract: PublicSharedResource):
+  - run   -> {kind:'run', run:{id, agentName, agentVersion,
+              status, startedAt, endedAt, totalUsd, finalOutput,
+              events[]}}. NO usage_records (per-call provider/
+              model/$ stay private; the aggregated totalUsd
+              survives). finalOutput is picked from the last
+              run.completed/run.output/agent.completed event.
+  - sweep -> {kind:'sweep', sweep:{id, agentName, status,
+              createdAt, matrix[], summary{perModel}}}. matrix
+              cells include caseId/model/passed/score/output/
+              costUsd/durationMs.
+  - agent -> {kind:'agent', agent:{name, version, description,
+              specYaml}}.
+
+Web surface:
+  - <CommentsThread> at apps/web/components/annotations/
+    comments-thread.tsx. Markdown via `marked` (@15.0.0) +
+    sanitisation via `isomorphic-dompurify` (@2.16.0). Threaded
+    view (single level), reaction toggle bar with thumbs_up /
+    thumbs_down / eyes / check icons, edit/delete on own
+    comments only, Cmd-Enter shortcut, write/preview tabs,
+    15-second poll for new comments. Avatars use the wave-12
+    AgentAvatar generator.
+  - <ShareDialog> at apps/web/components/shares/share-dialog.tsx.
+    Triggered from the page header on /runs/[id], /eval/sweeps/
+    [id], /agents/[name]. Optional expiry (1h/24h/7d/never) +
+    optional password (>=4 chars). Lists existing shares with
+    revoke/delete + view-count + status badge.
+  - Public viewer at apps/web/app/(public-share)/share/[slug]/
+    page.tsx. The route group `(public-share)` carries its own
+    minimal layout — top CTA bar ("Sign up to comment +
+    iterate" -> /signup) + footer watermark ("Shared via ALDO
+    AI"). The layout REPLACES the root sidebar chrome via the
+    isChromelessPath check. Password-gated shares render a
+    simple GET form that re-submits with ?password=. The web
+    middleware allow-list adds `/share/...` so an unauthenticated
+    browser can land here without being bounced to /login.
+
+Wired @ /runs/[id], /eval/sweeps/[id], /agents/[name]:
+  - Page header gets a Share button (ShareDialog).
+  - Below the existing surface, the CommentsThread mounts with
+    a server-prefetched initial snapshot (listAnnotationsApi +
+    getAuthMe in parallel, errors swallowed — comments are
+    auxiliary).
+
+Quality bar:
+  - pnpm --filter @aldo-ai/api test: annotations 8/8 +
+    shares 10/10 (= 18 new tests, exactly per the brief —
+    annotations CRUD x6 + reactions x2 + share CRUD x6 +
+    public access x4). Full suite is 275/275 green.
+  - pnpm --filter @aldo-ai/storage test: 2/2 (migration 016
+    round-trip — annotations parent/reply, reactions PK
+    no-op on duplicate, share_links slug+view_count).
+  - pnpm --filter @aldo-ai/api typecheck: clean for my files
+    (the dashboards.test + integrations _fetch.ts errors are
+    Engineer 14A and 14C's surface, not this wave).
+  - pnpm --filter @aldo-ai/web typecheck: clean for my files
+    (tour-provider.tsx error is Engineer 14C's surface).
+  - biome check: 0 errors in my files. The auto-fixer was run
+    for formatting; surrounding files I touched got reformatted
+    along the way.
+
+Shipped:
+  platform/storage/migrations/016_annotations_shares.sql
+  platform/storage/tests/migrate.test.ts (extended)
+  platform/api-contract/src/annotations.ts
+  platform/api-contract/src/index.ts (added export)
+  platform/api-contract/src/notifications.ts (added comment_mention)
+  apps/api/src/annotations-store.ts
+  apps/api/src/shares-store.ts
+  apps/api/src/routes/annotations.ts
+  apps/api/src/routes/shares.ts
+  apps/api/src/auth/middleware.ts (PUBLIC_PATH_PREFIX)
+  apps/api/src/app.ts (wire annotations + shares routes)
+  apps/api/tests/annotations.test.ts
+  apps/api/tests/shares.test.ts
+  apps/web/lib/api.ts (annotation + share API helpers)
+  apps/web/lib/middleware-shared.ts (/share allow-list)
+  apps/web/app/layout.tsx (chromeless for /share)
+  apps/web/app/(public-share)/layout.tsx
+  apps/web/app/(public-share)/share/[slug]/page.tsx
+  apps/web/app/(public-share)/share/[slug]/public-share-view.tsx
+  apps/web/components/annotations/comments-thread.tsx
+  apps/web/components/shares/share-dialog.tsx
+  apps/web/app/runs/[id]/page.tsx (mount comments + share)
+  apps/web/app/eval/sweeps/[id]/page.tsx (mount comments + share)
+  apps/web/app/agents/[name]/page.tsx (mount comments + share)
+  apps/web/components/notifications/notification-bell.tsx (added
+    icon + tint for comment_mention kind)
+  apps/web/app/notifications/page.tsx (added the kind)
+  apps/web/app/eval/suites/[name]/page.tsx (defensive case for
+    Engineer 14B's `evaluator` discriminant, kept typecheck green)
+  apps/web/package.json (+ marked, + isomorphic-dompurify)
+
+Out of scope (per brief): @-mention by display name (only
+@<email>), file attachments on comments, real-time SSE for
+comments (the 15s poll is deliberate).
+
+LLM-agnostic: nothing in this wave references a model
+provider. The annotation `body` is opaque markdown; the public
+share payload exposes provider/model strings as opaque text
+(or drops them entirely for runs). Privacy tiers are
+untouched.
+
+---
+
+## 2026-04-26 — Engineer 14C — wave 14 tour + landing polish + integrations
+
+Shipped the wave-14C surface in three lanes:
+
+LANE 1 — interactive product tour. `@reactour/tour` (~30
+KB, MIT) added to apps/web deps. Seven-step coach-mark
+overlay (welcome card, default-template CTA, /agents card,
+/runs flame-graph anchor, /eval radar, /observability
+privacy feed, /settings/api-keys generate-first-key) wired
+behind stable `data-tour="..."` attributes — selectors live
+on the rendered surface so a CSS refactor doesn't silently
+break the tour. Auto-launches once on /welcome (gated by
+`localStorage.aldo_tour_complete`); a "Take the tour" link
+in the user-menu re-opens at step 0 via a window
+CustomEvent. Step transitions write
+`localStorage.aldo_tour_step` and trigger a router.push
+when the next step lives on a different route.
+
+LANE 2 — landing polish. Real screenshots strategy:
+`apps/web/scripts/capture-screenshots.ts` drives Playwright
+against a deployed Vercel preview, authenticates via a
+service-account token (E2E_BASE_URL +
+ALDO_SCREENSHOT_USER_TOKEN + ALDO_SCREENSHOT_RUN_ID +
+ALDO_SCREENSHOT_SWEEP_ID env vars), and emits three PNGs
+(/runs, /runs/[id], /eval/sweeps/[id]) into
+public/screenshots/. The token is NEVER committed; the
+script refuses to run without it. Hero now has a pure-CSS
+animated gradient blob (`prefers-reduced-motion: reduce`
+honoured), a `<DemoVideoPlaceholder />` thumbnail that
+opens a YouTube embed Dialog (TODO(launch) marker on the
+URL constant), the wave-12 "trusted by" placeholder
+replaced with a "Be one of our design partners" CTA →
+/design-partner, and a new honest <Comparison /> section
+with the brief's mandated "Last verified: 2026-04-26"
+footnote. Verification cadence is documented as a quarterly
+launch requirement (constant + comment + footnote
+co-located).
+
+LANE 3 — integrations runtime. New `@aldo-ai/integrations`
+workspace at `platform/integrations/` with:
+
+  - types.ts — IntegrationKind ('slack'|'github'|'webhook'|
+    'discord'), IntegrationEvent (run_completed|run_failed|
+    sweep_completed|guards_blocked|budget_threshold|
+    invitation_received), Integration row, per-kind
+    SlackConfig/GithubConfig/WebhookConfig/DiscordConfig
+    Zod schemas, IntegrationRunner interface,
+    IntegrationDispatchResult.
+
+  - runners/{slack,github,webhook,discord}.ts — plain fetch,
+    no SDKs. Slack guards `hooks.slack.com` hostname,
+    Discord guards `discord.com`/`discordapp.com`, GitHub
+    posts a comment on a configured (repo, issueNumber)
+    pair via `Authorization: Bearer <token>` (token
+    decrypted at dispatch time), Webhook signs the body
+    with `X-Aldo-Signature: sha256=<hex>` over the bytes
+    we send so receivers can verify with HMAC-SHA256.
+    Each runner aborts via AbortController on a 5s
+    per-call timeout and returns a structured `{ok,
+    statusCode?, error?, timedOut?}` envelope. Runners
+    NEVER throw — failures are returned in band.
+
+  - registry.ts — kind → runner lookup. Adding a new kind
+    is one line in this table.
+
+  - store.ts — `IntegrationStore` interface plus a
+    `PostgresIntegrationStore` (against the shared
+    SqlClient from @aldo-ai/storage) and an
+    `InMemoryIntegrationStore` for tests. Tenant-scoped on
+    every method; `listEnabledForEvent(tenantId, event)`
+    is the dispatcher hot-path query.
+
+  - dispatcher.ts — `IntegrationDispatcher.dispatch(...)`.
+    Threading model: same Node process, one
+    `Promise.allSettled` over every matching enabled
+    integration with a per-call 5s timeout (belt-and-
+    suspenders: the runner aborts via AbortController AND
+    the dispatcher races on its own `setTimeout`).
+    Best-effort — never throws, never propagates a
+    failure to the engine. Successful dispatches stamp
+    `last_fired_at`; failures log one structured stderr
+    line. Documented in code that the dispatcher is
+    in-process by design and a queue is a follow-up.
+
+Migration 015_integrations.sql — `integrations` table with
+TENANT_ID FK + ON DELETE CASCADE, JSONB config, TEXT[]
+events, last_fired_at TIMESTAMPTZ, idx_integrations_tenant_
+enabled. Round-trip + `$event = ANY(events)` query covered
+in the storage migrate.test.ts addition.
+
+API surface — `/v1/integrations` (`apps/api/src/routes/
+integrations.ts`):
+  - GET    list (admin sees decrypted secrets; viewers see
+           redacted config — Slack/Discord webhook URLs
+           reduced to `origin/…`, GitHub tokens dropped,
+           webhook signing secrets dropped)
+  - POST   create (admin) — validates the per-kind shape
+           via the runner before insert and seals
+           sensitive fields (github.token,
+           webhook.signingSecret) at rest with NaCl
+           secretbox via the wave-7 master key
+  - GET    /:id read
+  - PATCH  /:id update (admin) — kind is immutable
+           post-create
+  - DELETE /:id delete (admin)
+  - POST   /:id/test fire — synthesises a `run_completed`
+           event and runs the runner; surfaces ok/status/
+           error/timedOut to the UI
+
+Encryption envelope: `{__enc: true, ciphertext, nonce}` in
+the JSONB config blob. Reuses `@aldo-ai/secrets`'s
+`encrypt`/`decrypt` and `loadMasterKeyFromEnv`. Production
+fails closed if the master key is unset; dev gets an
+ephemeral key + warning.
+
+Notification-sink wiring — `emitNotification(db, ...)` in
+`apps/api/src/notifications.ts` now reads a per-db
+`IntegrationDispatcher` from a `WeakMap<SqlClient,
+IntegrationDispatcher>` keyed on the SqlClient identity
+(NOT a module global — that would have bled state between
+test harnesses) and best-effort fans matching events out.
+Failures are swallowed and logged so a misbehaving
+dispatcher can't tear down a run. Wired at
+`createDeps()`-time via `setIntegrationsDispatcher(db,
+dispatcher)`. Threading model is documented at the call
+site.
+
+Web UI — `/settings/integrations` (server component) +
+`new-integration-dialog.tsx` (kind picker, per-kind config
+form, events multi-select, owners/admins only) +
+`integration-actions.tsx` (Test/Pause-Resume/Delete row
+buttons). The settings layout's left-nav grew an
+"Integrations" entry between Roles and Audit log.
+
+Empty states + illustrations — 8 new SVGs under
+`apps/web/public/empty-states/` (runs.svg, agents.svg,
+datasets.svg, dashboards.svg, alerts.svg, sweeps.svg,
+integrations.svg, notifications.svg) — simple geometric
+marks rendered with `currentColor` so they pick up the
+token theme. /runs gets a richer empty card with two
+illustrated CTAs (Open the playground, Kick off a sweep);
+/dashboards now uses the EmptyState component with the
+dashboards.svg illustration; /settings/integrations'
+empty state uses integrations.svg + the New-integration
+CTA. /agents already had its own illustrated empty state
+from wave-12 — left untouched, brief calls for adding
+illustrations not replacing.
+
+Tests — 20 in @aldo-ai/integrations (4 per runner ×
+success/failure/timeout/signature for slack/github/
+webhook/discord, plus 2 dispatcher tests for fan-out +
+per-call timeout, plus 2 registry tests for kind →
+runner lookup + unknown-kind throw); 8 in @aldo-ai/api
+covering CRUD + test-fire + RBAC (member 403, admin 201)
++ cross-tenant isolation + secrets-encrypted-at-rest.
+Migration 015 round-trip lands in
+`platform/storage/tests/migrate.test.ts` — INSERT a
+webhook integration, SELECT by tenant + enabled +
+ANY(events).
+
+Dockerfile — `apps/api/Dockerfile` now COPYs
+`platform/integrations/package.json` in the deps stage
+and the full `platform/integrations` source in the
+sources stage so the runtime container can resolve
+`@aldo-ai/integrations` via tsx.
+
+Quality bar — `pnpm --filter @aldo-ai/api test`: 275/275
+green (30/30 test files); `pnpm --filter
+@aldo-ai/integrations test`: 20/20 green;
+`pnpm --filter @aldo-ai/storage test`: 2/2 green;
+`pnpm --filter @aldo-ai/web build` clean; my new files
+are biome-clean (a few pre-existing wave-14A lint
+warnings remain in 14A's files).
+
+LLM-agnostic — nothing in this wave references a model
+provider. Integration kinds are platform concepts;
+runner payloads are formatted from generic fields
+(title, body, link) the notification sink emits. The
+per-kind config schemas don't carry model identifiers.
+Privacy tiers are unchanged — outbound integrations are
+opt-in per integration row, never automatic.

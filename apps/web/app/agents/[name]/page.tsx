@@ -20,11 +20,14 @@ import { AgentDetailTabs } from '@/components/agents/agent-detail-tabs';
 import { AgentRunsPanel } from '@/components/agents/agent-runs-panel';
 import { CompositeDiagram } from '@/components/agents/composite-diagram';
 import { EvalAnalytics } from '@/components/agents/eval-analytics';
+import { CommentsThread } from '@/components/annotations/comments-thread';
 import { NeutralBadge, PrivacyBadge } from '@/components/badge';
 import { ErrorView } from '@/components/error-boundary';
 import { PageHeader } from '@/components/page-header';
+import { ShareDialog } from '@/components/shares/share-dialog';
 import { Card } from '@/components/ui/card';
-import { getAgent, listAgents } from '@/lib/api';
+import { getAgent, getAuthMe, listAgents, listAnnotationsApi } from '@/lib/api';
+import type { Annotation } from '@aldo-ai/api-contract';
 import yaml from 'js-yaml';
 import Link from 'next/link';
 
@@ -49,6 +52,24 @@ export default async function AgentDetailPage({
     error = err;
   }
 
+  // Wave-14 (Engineer 14D): annotations + auth-me prefetch.
+  let initialAnnotations: readonly Annotation[] = [];
+  let currentUserId = '';
+  let currentUserEmail = '';
+  if (data !== null) {
+    try {
+      const [annResp, me] = await Promise.all([
+        listAnnotationsApi({ targetKind: 'agent', targetId: decoded }),
+        getAuthMe(),
+      ]);
+      initialAnnotations = annResp.annotations;
+      currentUserId = me.user.id;
+      currentUserEmail = me.user.email;
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -56,6 +77,7 @@ export default async function AgentDetailPage({
         description="Agent identity, spec, safety policy, composite diagram, eval analytics, and recent runs."
         actions={
           <>
+            <ShareDialog targetKind="agent" targetId={decoded} />
             <Link
               href="/agents"
               className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
@@ -74,7 +96,20 @@ export default async function AgentDetailPage({
       {error ? (
         <ErrorView error={error} context="this agent" />
       ) : data ? (
-        <AgentBody agent={data.agent} knownAgents={knownAgents} />
+        <>
+          <AgentBody agent={data.agent} knownAgents={knownAgents} />
+          {currentUserId.length > 0 && (
+            <div className="mt-6">
+              <CommentsThread
+                targetKind="agent"
+                targetId={decoded}
+                currentUserId={currentUserId}
+                currentUserEmail={currentUserEmail}
+                initialAnnotations={initialAnnotations}
+              />
+            </div>
+          )}
+        </>
       ) : null}
     </>
   );

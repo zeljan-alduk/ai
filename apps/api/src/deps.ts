@@ -27,6 +27,7 @@ import {
   loadBillingConfig,
   loadMailerFromEnv,
 } from '@aldo-ai/billing';
+import { IntegrationDispatcher, PostgresIntegrationStore } from '@aldo-ai/integrations';
 import {
   AgentRegistry,
   PostgresRegisteredAgentStore,
@@ -36,6 +37,7 @@ import {
 import { PostgresSecretStore, type SecretStore, loadMasterKeyFromEnv } from '@aldo-ai/secrets';
 import { type SqlClient, fromDatabaseUrl } from '@aldo-ai/storage';
 import { loadSigningKeyFromEnv } from './auth/jwt.js';
+import { setIntegrationsDispatcher } from './notifications.js';
 import {
   type EngineDebugger,
   type InProcessEngineDebugger,
@@ -255,6 +257,19 @@ export async function createDeps(
   console.log(describeBillingConfig(billing));
 
   const subscriptionStore = opts.subscriptionStore ?? new PostgresSubscriptionStore({ client: db });
+
+  // Wave-14C — outbound integrations dispatcher. Wired here so
+  // `emitNotification` (the side-channel callable from every wave-13
+  // surface) can fan events out to enabled tenant integrations
+  // without threading the dispatcher through every call site. The
+  // dispatcher is best-effort: a failure to load integrations or
+  // dispatch one never propagates up to the caller. Keyed on the
+  // SqlClient identity so a test harness that spins up multiple
+  // independent Deps doesn't cross-contaminate dispatchers.
+  const integrationsDispatcher = new IntegrationDispatcher({
+    store: new PostgresIntegrationStore({ client: db }),
+  });
+  setIntegrationsDispatcher(db, integrationsDispatcher);
 
   const deps: Deps = {
     db,

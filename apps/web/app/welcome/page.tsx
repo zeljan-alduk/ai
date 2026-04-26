@@ -1,19 +1,20 @@
 /**
- * First-run / onboarding bridge.
+ * /welcome — first-run onboarding bridge.
  *
- * After signup or after a tenant-switch into an empty workspace, the
- * auth flow lands here instead of /runs. This page is intentionally a
- * stub — wave 12's full onboarding will replace it. The two seams
- * we expose now are:
+ * Wave-14C makes this a real page (the wave-12 stub is gone) with two
+ * clear paths to a working tenant:
  *
- *   1. "Use the default agency template" — calls the
- *      /v1/tenants/me/seed-default endpoint Engineer O is adding.
- *      We render a server action that hits it and redirects to /runs.
+ *   1. "Use the default agency template" — POSTs the wave-10
+ *      seed-default endpoint, then redirects to /runs.
+ *   2. "Define your first agent" — links into /agents.
  *
- *   2. "Create my first agent" — link to the (yet-unbuilt) agent
- *      authoring flow. For now it just sends the operator into the
- *      empty agents list, which already has its own copy explaining
- *      how to define an agent spec.
+ * The page also auto-launches the interactive product tour the FIRST
+ * time it loads (gated by localStorage). The tour walks every major
+ * surface — see components/tour/tour-provider.tsx for the step list.
+ *
+ * `data-tour="welcome"` and `data-tour="welcome-default-template"`
+ * are the anchors the tour's first two steps target. Don't rename
+ * without updating tour-provider.tsx.
  *
  * LLM-agnostic: the seed-default endpoint creates AgentSpec rows
  * declaring capabilities; provider selection happens at run time
@@ -21,20 +22,31 @@
  */
 
 import { PageHeader } from '@/components/page-header';
+import { TourAutoLaunch } from '@/components/tour/tour-provider';
 import Link from 'next/link';
 import { seedDefaultAgencyAction } from './actions';
+import { TakeTourLink } from './take-tour-link';
 
 export const dynamic = 'force-dynamic';
 
 export default function WelcomePage() {
   return (
     <>
+      <TourAutoLaunch />
       <PageHeader
         title="Welcome to ALDO AI"
-        description="Your workspace is empty. Pick a starting point — you can always change course later."
+        description="Two paths from here. The first seeds a working agency in your tenant; the second drops you into the registry to define your own. The product tour is one click away."
       />
+      <div data-tour="welcome" className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <p className="text-sm text-blue-900">
+          New here? <TakeTourLink /> or pick a starting point below.
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <section
+          data-tour="welcome-default-template"
+          className="rounded-lg border border-slate-200 bg-white p-5"
+        >
           <h2 className="text-sm font-semibold text-slate-900">Start from the default agency</h2>
           <p className="mt-1 text-sm text-slate-600">
             Seeds your workspace with the dogfood org we use to ship ALDO AI itself: principal,
@@ -64,8 +76,8 @@ export default function WelcomePage() {
         </section>
       </div>
       <p className="mt-6 text-xs text-slate-500">
-        Wave 12 will replace this stub with a guided onboarding. For now, both buttons land you in a
-        workspace ready to run.
+        Need a hand later? Open the user menu in the sidebar and pick &ldquo;Take the tour&rdquo; to
+        relaunch this guide on any page.
       </p>
     </>
   );

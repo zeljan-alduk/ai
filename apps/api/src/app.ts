@@ -27,13 +27,17 @@ import type { Deps } from './deps.js';
 import { errorHandler } from './middleware/error.js';
 import { logger } from './middleware/logger.js';
 import { agentsRoutes } from './routes/agents.js';
+import { alertsRoutes } from './routes/alerts.js';
+import { annotationsRoutes } from './routes/annotations.js';
 import { apiKeysRoutes } from './routes/api-keys.js';
 import { auditRoutes } from './routes/audit.js';
 import { billingRoutes } from './routes/billing.js';
+import { dashboardsRoutes } from './routes/dashboards.js';
 import { debuggerRoutes } from './routes/debugger.js';
 import { designPartnersRoutes } from './routes/design-partners.js';
 import { evalRoutes } from './routes/eval.js';
 import { healthRoutes } from './routes/health.js';
+import { integrationsRoutes } from './routes/integrations.js';
 import { invitationsRoutes } from './routes/invitations.js';
 import { membersRoutes } from './routes/members.js';
 import { modelsRoutes } from './routes/models.js';
@@ -43,6 +47,7 @@ import { playgroundRoutes } from './routes/playground.js';
 import { runsCompareRoutes } from './routes/runs-compare.js';
 import { runsRoutes } from './routes/runs.js';
 import { secretsRoutes } from './routes/secrets.js';
+import { sharesRoutes } from './routes/shares.js';
 import { tenantsRoutes } from './routes/tenants.js';
 import { viewsRoutes } from './routes/views.js';
 
@@ -118,6 +123,16 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', invitationsRoutes(deps));
   app.route('/', membersRoutes(deps));
   app.route('/', auditRoutes(deps));
+  // Wave-14 — dashboards + alerts.
+  app.route('/', dashboardsRoutes(deps));
+  app.route('/', alertsRoutes(deps));
+  // Wave-14 — annotations (threaded comments) + share links (public,
+  // password-gated read-only handles for runs / sweeps / agents).
+  app.route('/', annotationsRoutes(deps));
+  app.route('/', sharesRoutes(deps));
+  // Wave-14C — outbound integrations (Slack/GitHub/Discord/webhook) +
+  // their dispatcher hooked into the notification sink.
+  app.route('/', integrationsRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>

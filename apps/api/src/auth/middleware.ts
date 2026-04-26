@@ -70,10 +70,22 @@ const PUBLIC_PATH_EXACT = new Set<string>([
   '/v1/invitations/accept',
 ]);
 
+/**
+ * Path PREFIXES that bypass auth. Currently only the wave-14 public
+ * share-link resolve (e.g. `/v1/public/share/share_abc123`). The
+ * `findShareBySlug` helper rejects revoked / expired / unknown slugs
+ * so a missing-token visitor sees a clean 404.
+ */
+const PUBLIC_PATH_PREFIX: readonly string[] = ['/v1/public/share/'];
+
 /** True iff this request can pass without a bearer token. */
 export function isPublicPath(method: string, path: string): boolean {
   if (method === 'OPTIONS') return true; // CORS preflight.
-  return PUBLIC_PATH_EXACT.has(path);
+  if (PUBLIC_PATH_EXACT.has(path)) return true;
+  for (const prefix of PUBLIC_PATH_PREFIX) {
+    if (path.startsWith(prefix)) return true;
+  }
+  return false;
 }
 
 /**

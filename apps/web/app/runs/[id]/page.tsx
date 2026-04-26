@@ -17,6 +17,7 @@
  * LLM-agnostic: rows display opaque provider/model strings only.
  */
 
+import { CommentsThread } from '@/components/annotations/comments-thread';
 import { NeutralBadge, StatusBadge } from '@/components/badge';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorView } from '@/components/error-boundary';
@@ -28,10 +29,11 @@ import { ReplayScrubber } from '@/components/runs/replay-scrubber';
 import { RunDetailTabs } from '@/components/runs/run-detail-tabs';
 import { RunTree } from '@/components/runs/run-tree';
 import { TimelineView } from '@/components/runs/timeline-view';
+import { ShareDialog } from '@/components/shares/share-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ApiClientError, getRun, getRunTree } from '@/lib/api';
+import { ApiClientError, getAuthMe, getRun, getRunTree, listAnnotationsApi } from '@/lib/api';
 import { formatAbsolute, formatDuration, formatRelativeTime, formatUsd } from '@/lib/format';
-import type { RunDetail, RunTreeNode } from '@aldo-ai/api-contract';
+import type { Annotation, RunDetail, RunTreeNode } from '@aldo-ai/api-contract';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -75,6 +77,27 @@ export default async function RunDetailPage({
     }
   }
 
+  // Wave-14 (Engineer 14D): pre-fetch annotations + the caller's
+  // identity so the comments thread + share dialog can render
+  // without an extra round trip on first paint.
+  let initialAnnotations: readonly Annotation[] = [];
+  let currentUserId = '';
+  let currentUserEmail = '';
+  if (data !== null) {
+    try {
+      const [annResp, me] = await Promise.all([
+        listAnnotationsApi({ targetKind: 'run', targetId: id }),
+        getAuthMe(),
+      ]);
+      initialAnnotations = annResp.annotations;
+      currentUserId = me.user.id;
+      currentUserEmail = me.user.email;
+    } catch {
+      // Comments are auxiliary — never block the page on a comments
+      // fetch failure.
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -83,6 +106,7 @@ export default async function RunDetailPage({
         actions={
           <div className="flex items-center gap-2">
             <CompareWithButton currentRunId={id} />
+            <ShareDialog targetKind="run" targetId={id} />
             <Link
               href="/runs"
               className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
@@ -95,7 +119,20 @@ export default async function RunDetailPage({
       {error ? (
         <ErrorView error={error} context="this run" />
       ) : data ? (
-        <RunDetailBody run={data.run} tree={tree} runId={id} />
+        <>
+          <RunDetailBody run={data.run} tree={tree} runId={id} />
+          {currentUserId.length > 0 && (
+            <div className="mt-6">
+              <CommentsThread
+                targetKind="run"
+                targetId={id}
+                currentUserId={currentUserId}
+                currentUserEmail={currentUserEmail}
+                initialAnnotations={initialAnnotations}
+              />
+            </div>
+          )}
+        </>
       ) : null}
     </>
   );

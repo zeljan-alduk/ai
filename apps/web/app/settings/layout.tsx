@@ -11,6 +11,8 @@ const SETTINGS_NAV = [
   { href: '/settings/api-keys', label: 'API keys' },
   { href: '/settings/members', label: 'Members' },
   { href: '/settings/roles', label: 'Roles' },
+  { href: '/settings/integrations', label: 'Integrations' },
+  { href: '/settings/alerts', label: 'Alerts' },
   { href: '/settings/audit', label: 'Audit log' },
 ] as const;
 

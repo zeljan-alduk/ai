@@ -26,6 +26,7 @@ COPY platform/engine/package.json platform/engine/
 COPY platform/eval/package.json platform/eval/
 COPY platform/gateway/package.json platform/gateway/
 COPY platform/guards/package.json platform/guards/
+COPY platform/integrations/package.json platform/integrations/
 COPY platform/local-discovery/package.json platform/local-discovery/
 COPY platform/observability/package.json platform/observability/
 COPY platform/orchestrator/package.json platform/orchestrator/
@@ -64,6 +65,11 @@ COPY platform/eval ./platform/eval
 COPY platform/sandbox ./platform/sandbox
 COPY platform/guards ./platform/guards
 COPY platform/secrets ./platform/secrets
+# Wave 14C: outbound integrations (Slack/GitHub/Discord/webhook). The
+# /v1/integrations routes + the notification-sink dispatcher call into
+# @aldo-ai/integrations; the package source must ride along with the
+# image (same lesson family as wave-6.5 / wave-7 / wave-10).
+COPY platform/integrations ./platform/integrations
 # Wave 11: /v1/billing/* routes call into @aldo-ai/billing for the
 # subscription store, checkout/portal/webhook helpers, and the
 # trial-gate middleware. The package boots in placeholder mode when

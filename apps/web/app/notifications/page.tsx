@@ -25,6 +25,7 @@ const ALL_KINDS: ReadonlyArray<NotificationKind> = [
   'guards_blocked',
   'invitation_received',
   'budget_threshold',
+  'comment_mention',
 ];
 
 const KIND_LABEL: Record<NotificationKind, string> = {
@@ -34,6 +35,7 @@ const KIND_LABEL: Record<NotificationKind, string> = {
   guards_blocked: 'Guards blocks',
   invitation_received: 'Invitations',
   budget_threshold: 'Budget alerts',
+  comment_mention: 'Mentions',
 };
 
 const KIND_TINT: Record<NotificationKind, string> = {
@@ -43,6 +45,7 @@ const KIND_TINT: Record<NotificationKind, string> = {
   guards_blocked: 'bg-amber-100 text-amber-800',
   invitation_received: 'bg-violet-100 text-violet-800',
   budget_threshold: 'bg-rose-100 text-rose-800',
+  comment_mention: 'bg-blue-100 text-blue-800',
 };
 
 interface SearchParamsShape {

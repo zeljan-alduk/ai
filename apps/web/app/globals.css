@@ -132,6 +132,39 @@ body {
   }
 }
 
+/*
+ * Wave-14C — animated gradient blob behind the marketing hero.
+ *
+ * Pure CSS keyframes (no JS). The blob is absolutely positioned
+ * behind the hero copy with a heavy radial gradient + blur, then
+ * gently animated via `blob-float`. Honors
+ * `prefers-reduced-motion: reduce` — users who opt out see a static
+ * gradient.
+ */
+.aldo-hero-blob {
+  position: absolute;
+  top: -120px;
+  right: -80px;
+  width: 540px;
+  height: 540px;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    closest-side,
+    rgba(59, 130, 246, 0.18),
+    rgba(59, 130, 246, 0.07) 60%,
+    rgba(59, 130, 246, 0) 80%
+  );
+  filter: blur(48px);
+  animation: blob-float 18s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aldo-hero-blob {
+    animation: none;
+  }
+}
+
 /* Subtle table styling re-used across pages (legacy; kept for non-redesigned routes). */
 .aldo-table {
   width: 100%;

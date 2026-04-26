@@ -30,9 +30,19 @@ export {
   evaluateRegex,
   evaluateJsonSchema,
   evaluateRubric,
+  evaluateLlmJudge,
+  runStoredEvaluator,
   type EvaluatorContext,
   type EvaluationResult,
+  type CustomEvaluator,
+  type EvaluatorResolver,
 } from './evaluators/index.js';
+
+export {
+  clusterFailures,
+  type FailureClusterDraft,
+  type ClusterableCell,
+} from './failure-cluster.js';
 
 export {
   runSweep,

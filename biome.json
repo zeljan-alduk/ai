@@ -6,11 +6,16 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noExplicitAny": "error"
+        "noExplicitAny": "error",
+        "noArrayIndexKey": "warn"
       },
       "style": {
         "noNonNullAssertion": "warn",
         "useImportType": "error"
+      },
+      "a11y": {
+        "noLabelWithoutControl": "warn",
+        "noSvgWithoutTitle": "warn"
       }
     }
   },

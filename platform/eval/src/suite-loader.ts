@@ -60,6 +60,20 @@ export function parseSuiteYaml(yamlText: string): LoadOutcome {
       })),
     };
   }
+  // Wave-14: a suite must declare AT LEAST one inline case OR a
+  // dataset binding. Lifted up here (instead of a Zod refine) so the
+  // base schema stays `.pick`/`.extend`-friendly for downstream code.
+  if (parsed.data.cases.length === 0 && parsed.data.dataset === undefined) {
+    return {
+      ok: false,
+      errors: [
+        {
+          path: 'cases',
+          message: 'a suite must declare at least one case OR a dataset binding',
+        },
+      ],
+    };
+  }
   return { ok: true, suite: parsed.data };
 }
 

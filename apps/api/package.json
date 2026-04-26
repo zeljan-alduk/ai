@@ -17,6 +17,7 @@
     "@aldo-ai/engine": "workspace:*",
     "@aldo-ai/eval": "workspace:*",
     "@aldo-ai/gateway": "workspace:*",
+    "@aldo-ai/integrations": "workspace:*",
     "@aldo-ai/local-discovery": "workspace:*",
     "@aldo-ai/observability": "workspace:*",
     "@aldo-ai/orchestrator": "workspace:*",

@@ -23,6 +23,7 @@ import type { ApiError } from '@aldo-ai/api-contract';
 import type { SqlClient } from '@aldo-ai/storage';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { seedDefaultDashboards } from '../dashboards/seed-defaults.js';
 import type { Deps } from '../deps.js';
 import { HttpError, validationError } from '../middleware/error.js';
 import { type SessionAuth, type SessionTokenClaims, signSessionToken } from './jwt.js';
@@ -174,6 +175,17 @@ export function authRoutes(deps: AuthRoutesDeps): Hono {
       { nowSeconds: now() },
     );
     const memberships = await listMemberships(deps.db, created.user.id);
+    // Wave 14: seed two default dashboards (Operations + Cost) so the
+    // tenant has something to look at on first login. Best-effort: a
+    // failure here MUST NOT block signup — we log and move on.
+    try {
+      await seedDefaultDashboards(deps.db, {
+        tenantId: created.tenant.id,
+        userId: created.user.id,
+      });
+    } catch (err) {
+      console.error('[dashboards] default-dashboard seed failed', err);
+    }
     // Wave 13: audit signup (best-effort). We can't go through
     // `recordAudit(c)` here because the request hasn't been stamped
     // with `auth` yet — we synthesise the row directly.

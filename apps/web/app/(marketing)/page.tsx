@@ -14,7 +14,19 @@
  *     claim one.
  */
 
+import { DemoVideoPlaceholder } from '@/components/marketing/demo-video-placeholder';
 import Link from 'next/link';
+
+/**
+ * Wave-14C — last verification of the comparison table below.
+ *
+ * LAUNCH REQUIREMENT: the comparison numbers and capability claims
+ * must be re-verified at least quarterly. The footnote on the table
+ * shows this date verbatim — update both this constant AND the table
+ * footer when you re-verify. Do NOT compute the date dynamically; an
+ * always-now string would be a lie.
+ */
+const COMPARISON_TABLE_VERIFIED = '2026-04-26';
 
 const FEATURES: ReadonlyArray<{ title: string; body: string }> = [
   {
@@ -73,15 +85,120 @@ export default function HomePage() {
       <Features />
       <Builders />
       <HowItWorks />
+      <Comparison />
       <BottomCta />
     </>
   );
 }
 
+/**
+ * Honest comparison table. Three columns: ALDO AI, "general AI
+ * frameworks" (LangChain / LlamaIndex / etc.), "chat wrappers" (the
+ * cohort of UIs around a single API key). No vendor names — we
+ * describe categories so the comparison is durable across model
+ * launches.
+ *
+ * LAUNCH REQUIREMENT: re-verify the rows quarterly. Update both
+ * `COMPARISON_TABLE_VERIFIED` at the top of the file AND the footnote
+ * at the bottom of this section.
+ */
+function Comparison() {
+  const rows: ReadonlyArray<{ feature: string; aldo: string; framework: string; wrapper: string }> =
+    [
+      {
+        feature: 'LLM-agnostic capability routing',
+        aldo: 'Yes',
+        framework: 'Partial (per-call)',
+        wrapper: 'No',
+      },
+      {
+        feature: 'Local-model first-class',
+        aldo: 'Yes (Ollama / vLLM / llama.cpp / MLX)',
+        framework: 'Possible',
+        wrapper: 'No',
+      },
+      {
+        feature: 'Privacy tier fail-closed',
+        aldo: 'Yes (router drops sensitive → cloud)',
+        framework: 'No',
+        wrapper: 'No',
+      },
+      {
+        feature: 'Replayable run tree',
+        aldo: 'Yes (per-node model swap)',
+        framework: 'Logs',
+        wrapper: 'No',
+      },
+      {
+        feature: 'Sandboxed tool execution',
+        aldo: 'Yes (process isolation + scanner)',
+        framework: 'BYO',
+        wrapper: 'No',
+      },
+      {
+        feature: 'Eval gating before promotion',
+        aldo: 'Yes',
+        framework: 'BYO',
+        wrapper: 'No',
+      },
+    ];
+  return (
+    <section className="border-t border-slate-200 bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+        <div className="mb-8 max-w-2xl">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Honest comparison.
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Three categories of incumbents: general-purpose agent frameworks, chat-wrapper apps, and
+            us. We&rsquo;re only comparing what we ship today — no roadmap items in the table.
+          </p>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Capability</th>
+                <th className="px-4 py-3">ALDO AI</th>
+                <th className="px-4 py-3">Agent framework</th>
+                <th className="px-4 py-3">Chat wrapper</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.feature} className="border-t border-slate-100">
+                  <td className="px-4 py-3 font-medium text-slate-900">{r.feature}</td>
+                  <td className="px-4 py-3 text-slate-700">{r.aldo}</td>
+                  <td className="px-4 py-3 text-slate-500">{r.framework}</td>
+                  <td className="px-4 py-3 text-slate-500">{r.wrapper}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[11px] text-slate-500">
+          Last verified: {COMPARISON_TABLE_VERIFIED}. We re-verify these claims quarterly; if one is
+          out of date,{' '}
+          <Link className="underline hover:text-slate-700" href="/security">
+            email us
+          </Link>{' '}
+          and we&rsquo;ll fix the row in the next deploy.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function Hero() {
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-16 pb-12 sm:px-6 sm:pt-24 sm:pb-16">
-      <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+    <section className="relative mx-auto max-w-6xl overflow-hidden px-4 pt-16 pb-12 sm:px-6 sm:pt-24 sm:pb-16">
+      {/* Wave-14C — animated gradient blob behind the headline.
+          Pure CSS keyframes; no JS. The animation is `prefers-reduced-
+          motion` aware via the global stylesheet so users who opt out
+          see a static gradient (defined in globals.css under
+          `.aldo-hero-blob`). */}
+      <div aria-hidden className="aldo-hero-blob" />
+      <h1 className="relative max-w-3xl text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
         Run real software-engineering teams of LLM agents.
       </h1>
       <p className="mt-5 max-w-2xl text-lg text-slate-600">
@@ -108,6 +225,26 @@ function Hero() {
         </Link>
         .
       </p>
+      {/* Wave-14C — demo video placeholder above the fold. Modal
+          dialog opens with a YouTube embed; thumbnail is a static
+          gradient. Real recording lands at launch (TODO marker
+          in the component). */}
+      <DemoVideoPlaceholder />
+      {/* Wave-14C — design-partner CTA in place of the wave-12
+          "Trusted by" placeholder. We don't have logos yet, and we
+          will not stage logos we don't have. */}
+      <div className="mt-12 rounded-xl border border-blue-200 bg-blue-50/60 p-5 text-center sm:flex sm:items-center sm:justify-between sm:text-left">
+        <p className="text-sm text-blue-900">
+          <strong>Be one of our design partners.</strong> We&rsquo;re working with a small cohort of
+          early teams to shape the roadmap.
+        </p>
+        <Link
+          href="/design-partner"
+          className="mt-3 inline-flex rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 sm:mt-0"
+        >
+          Apply to be a design partner →
+        </Link>
+      </div>
     </section>
   );
 }

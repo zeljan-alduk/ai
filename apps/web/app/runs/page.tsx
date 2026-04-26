@@ -106,31 +106,32 @@ export default async function RunsPage({
 }
 
 function EmptyRunsCard() {
+  // Wave-14C — richer empty state with two illustrated CTAs (playground
+  // + sweep) so a fresh tenant has two obvious paths to a first run.
   return (
     <Card className="px-6 py-12 text-center">
-      <div className="mx-auto h-16 w-16">
-        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true" className="h-16 w-16 text-fg-faint">
-          <title>No runs illustration</title>
-          <rect x={8} y={20} width={48} height={28} rx={4} stroke="currentColor" strokeWidth={2} />
-          <path
-            d="M14 30h36M14 38h24"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-          />
-          <circle cx={48} cy={48} r={6} stroke="currentColor" strokeWidth={2} fill="white" />
-        </svg>
+      <div className="mx-auto flex h-22 w-22 items-center justify-center text-fg-faint" aria-hidden>
+        {/* The 8 SVGs under /public/empty-states are the canonical wave-14C
+            illustration set. We route the runs card to runs.svg. */}
+        <img src="/empty-states/runs.svg" alt="" width={88} height={88} />
       </div>
-      <h3 className="mt-4 text-base font-semibold text-fg">No runs yet</h3>
-      <p className="mt-1 text-sm text-fg-muted">
-        Spin one up — kick off an agent and we'll trace every span here.
+      <h3 className="mt-4 text-base font-semibold text-fg">Your runs will appear here.</h3>
+      <p className="mx-auto mt-1 max-w-md text-sm text-fg-muted">
+        Try the playground for an ad-hoc prompt or kick off a sweep against a saved suite — every
+        span, tool call, and replay shows up in this list.
       </p>
-      <div className="mt-4">
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         <Link
-          href="/agents"
+          href="/playground"
           className="inline-flex items-center rounded bg-fg px-3 py-1.5 text-sm font-medium text-bg hover:bg-fg/90"
         >
-          Kick off your first run →
+          Open the playground →
+        </Link>
+        <Link
+          href="/eval"
+          className="inline-flex items-center rounded border border-border bg-bg-elevated px-3 py-1.5 text-sm font-medium text-fg hover:bg-bg-subtle"
+        >
+          Kick off a sweep →
         </Link>
       </div>
     </Card>

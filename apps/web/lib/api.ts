@@ -712,3 +712,132 @@ export function listActivityApi(
   if (query.limit !== undefined) q.limit = query.limit;
   return request('/v1/activity', ListActivityResponse, { query: q });
 }
+
+/* ---------------------------- Annotations ----------------------------- */
+//
+// Wave 14 (Engineer 14D). The `<CommentsThread>` UI uses these helpers
+// to drive a 15s poll on the runs / sweeps / agents detail pages.
+
+export async function listAnnotationsApi(query: {
+  targetKind: 'run' | 'sweep' | 'agent';
+  targetId: string;
+}) {
+  const { ListAnnotationsResponse } = await import('@aldo-ai/api-contract');
+  return request('/v1/annotations', ListAnnotationsResponse, {
+    query: { targetKind: query.targetKind, targetId: query.targetId },
+  });
+}
+
+export async function createAnnotationApi(req: {
+  targetKind: 'run' | 'sweep' | 'agent';
+  targetId: string;
+  body: string;
+  parentId?: string;
+}) {
+  const { Annotation } = await import('@aldo-ai/api-contract');
+  const { z } = await import('zod');
+  return request('/v1/annotations', z.object({ annotation: Annotation }), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export async function updateAnnotationApi(id: string, body: string) {
+  const { Annotation } = await import('@aldo-ai/api-contract');
+  const { z } = await import('zod');
+  return request(
+    `/v1/annotations/${encodeURIComponent(id)}`,
+    z.object({ annotation: Annotation }),
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ body }),
+    },
+  );
+}
+
+export async function deleteAnnotationApi(id: string): Promise<void> {
+  const url = buildUrl(`/v1/annotations/${encodeURIComponent(id)}`);
+  const headers = await buildRequestHeaders(undefined);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers,
+    cache: 'no-store',
+    credentials: typeof window === 'undefined' ? 'omit' : 'include',
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new ApiClientError('http_4xx', `DELETE failed: ${res.status}`, { status: res.status });
+  }
+}
+
+export async function toggleReactionApi(
+  annotationId: string,
+  kind: 'thumbs_up' | 'thumbs_down' | 'eyes' | 'check',
+) {
+  const { ToggleReactionResponse } = await import('@aldo-ai/api-contract');
+  return request(
+    `/v1/annotations/${encodeURIComponent(annotationId)}/reactions`,
+    ToggleReactionResponse,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind }),
+    },
+  );
+}
+
+/* ----------------------------- Share links ---------------------------- */
+//
+// Wave 14 (Engineer 14D). The Share dialog on /runs/[id], /eval/sweeps/[id]
+// and /agents/[name] uses these helpers to mint, list, and revoke
+// public share-link slugs.
+
+export async function listSharesApi(
+  query: {
+    targetKind?: 'run' | 'sweep' | 'agent';
+    targetId?: string;
+  } = {},
+) {
+  const { ListShareLinksResponse } = await import('@aldo-ai/api-contract');
+  const q: Record<string, string | number | undefined> = {};
+  if (query.targetKind !== undefined) q.targetKind = query.targetKind;
+  if (query.targetId !== undefined) q.targetId = query.targetId;
+  return request('/v1/shares', ListShareLinksResponse, { query: q });
+}
+
+export async function createShareApi(req: {
+  targetKind: 'run' | 'sweep' | 'agent';
+  targetId: string;
+  expiresInHours?: number;
+  password?: string;
+}) {
+  const { CreateShareLinkResponse } = await import('@aldo-ai/api-contract');
+  return request('/v1/shares', CreateShareLinkResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export async function revokeShareApi(id: string) {
+  const { ShareLink } = await import('@aldo-ai/api-contract');
+  const { z } = await import('zod');
+  return request(`/v1/shares/${encodeURIComponent(id)}/revoke`, z.object({ share: ShareLink }), {
+    method: 'POST',
+  });
+}
+
+export async function deleteShareApi(id: string): Promise<void> {
+  const url = buildUrl(`/v1/shares/${encodeURIComponent(id)}`);
+  const headers = await buildRequestHeaders(undefined);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers,
+    cache: 'no-store',
+    credentials: typeof window === 'undefined' ? 'omit' : 'include',
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new ApiClientError('http_4xx', `DELETE failed: ${res.status}`, { status: res.status });
+  }
+}

@@ -6,6 +6,7 @@ import '@/lib/api-server-init';
 
 import { CommandPalette } from '@/components/command-palette';
 import { Sidebar, type SidebarUser } from '@/components/sidebar';
+import { TourProvider } from '@/components/tour/tour-provider';
 import { ApiClientError, getAuthMe } from '@/lib/api';
 import { getSession } from '@/lib/session';
 import { themeClass } from '@/lib/theme';
@@ -33,6 +34,10 @@ function isChromelessPath(pathname: string | null): boolean {
   if (!pathname) return false;
   if (pathname === '/login' || pathname === '/signup') return true;
   if (isMarketingPath(pathname)) return true;
+  // Wave 14 (Engineer 14D): the public share viewer renders its own
+  // minimal chrome (CTA bar + watermark). The route group
+  // `(public-share)` owns the layout for `/share/...`.
+  if (pathname === '/share' || pathname.startsWith('/share/')) return true;
   return false;
 }
 
@@ -110,10 +115,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         {chromeless ? (
           children
         ) : (
-          <div className="flex min-h-screen">
-            <Sidebar user={user} />
-            <main className="flex-1 overflow-y-auto p-6">{children}</main>
-          </div>
+          <TourProvider>
+            <div className="flex min-h-screen">
+              <Sidebar user={user} />
+              <main className="flex-1 overflow-y-auto p-6">{children}</main>
+            </div>
+          </TourProvider>
         )}
         {/* Global Cmd-K palette — mounted everywhere except auth pages.
             Auth pages already redirect on submit, so a hotkey navigation

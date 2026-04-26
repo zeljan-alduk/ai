@@ -344,6 +344,218 @@ describe('migrate()', () => {
         : (meta as Record<string, unknown>);
     expect(metaObj?.fingerprint).toBe('sha256:abc');
 
+    // Wave-14 (Engineer 14B): migration 014 — datasets + dataset_examples
+    // + evaluators + failure_clusters. Round-trip rows in each table
+    // and confirm CASCADE on dataset delete clears the example rows.
+    expect(applied.some((m) => m.version === '014')).toBe(true);
+    await client.query(
+      `INSERT INTO datasets (id, tenant_id, user_id, name, description, schema, tags)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+      [
+        'ds-1',
+        DEFAULT_TENANT_UUID,
+        'u-1',
+        'Triage prompts',
+        'A small bag of prompts.',
+        JSON.stringify({ columns: [{ name: 'q', type: 'string' }] }),
+        ['triage', 'eng'],
+      ],
+    );
+    await client.query(
+      `INSERT INTO dataset_examples
+         (id, dataset_id, input, expected, metadata, label, split)
+       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7),
+              ($8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14)`,
+      [
+        'ex-1',
+        'ds-1',
+        JSON.stringify({ q: 'Hello?' }),
+        JSON.stringify('hi'),
+        JSON.stringify({ src: 'manual' }),
+        null,
+        'eval',
+        'ex-2',
+        'ds-1',
+        JSON.stringify({ q: 'Bye?' }),
+        JSON.stringify('bye'),
+        JSON.stringify({}),
+        'farewell',
+        'train',
+      ],
+    );
+    const dsRows = await client.query<{ count: string | number }>(
+      'SELECT count(*)::text AS count FROM dataset_examples WHERE dataset_id = $1',
+      ['ds-1'],
+    );
+    expect(Number(dsRows.rows[0]?.count)).toBe(2);
+
+    // evaluators — round-trip a llm_judge row.
+    await client.query(
+      `INSERT INTO evaluators (id, tenant_id, user_id, name, kind, config, is_shared)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+      [
+        'ev-1',
+        DEFAULT_TENANT_UUID,
+        'u-1',
+        'Helpful judge',
+        'llm_judge',
+        JSON.stringify({
+          model_class: 'reasoning-medium',
+          prompt: 'Did the assistant answer {{input}}? Output: {{output}}',
+        }),
+        true,
+      ],
+    );
+    const evaluatorRows = await client.query<{ kind: string; is_shared: boolean | string }>(
+      'SELECT kind, is_shared FROM evaluators WHERE id = $1',
+      ['ev-1'],
+    );
+    expect(evaluatorRows.rows[0]?.kind).toBe('llm_judge');
+
+    // failure_clusters — sweep_id is plain TEXT (no FK), so any string works.
+    await client.query(
+      `INSERT INTO failure_clusters (id, sweep_id, label, count, examples_sample)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [
+        'fc-1',
+        'sw-1',
+        'timeout / network',
+        4,
+        JSON.stringify([{ caseId: 'c1', model: 'm', output: 'timeout' }]),
+      ],
+    );
+    const fcRows = await client.query<{ count: number | string; label: string }>(
+      'SELECT count, label FROM failure_clusters WHERE sweep_id = $1',
+      ['sw-1'],
+    );
+    expect(Number(fcRows.rows[0]?.count)).toBe(4);
+    expect(fcRows.rows[0]?.label).toBe('timeout / network');
+
+    // CASCADE — deleting the dataset clears its examples.
+    await client.query('DELETE FROM datasets WHERE id = $1', ['ds-1']);
+    const remRows = await client.query<{ count: string | number }>(
+      'SELECT count(*)::text AS count FROM dataset_examples WHERE dataset_id = $1',
+      ['ds-1'],
+    );
+    expect(Number(remRows.rows[0]?.count)).toBe(0);
+
+    // Wave-14: migration 015 — integrations. Round-trip a row + assert
+    // the (tenant_id, enabled) index is queryable and that the TEXT[]
+    // events column accepts the canonical event names.
+    expect(applied.some((m) => m.version === '015')).toBe(true);
+    await client.query(
+      `INSERT INTO integrations
+         (id, tenant_id, kind, name, config, events, enabled)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+      [
+        'int-1',
+        DEFAULT_TENANT_UUID,
+        'webhook',
+        'CI hook',
+        JSON.stringify({ url: 'https://example.com/hook', signingSecret: 'secret-12345' }),
+        ['run_completed', 'run_failed'],
+        true,
+      ],
+    );
+    const intRow = await client.query<{
+      id: string;
+      kind: string;
+      enabled: boolean | string;
+      events: string[] | string;
+      last_fired_at: unknown;
+    }>(`SELECT id, kind, enabled, events, last_fired_at FROM integrations WHERE id = 'int-1'`);
+    expect(intRow.rows).toHaveLength(1);
+    expect(intRow.rows[0]?.kind).toBe('webhook');
+    expect(intRow.rows[0]?.last_fired_at).toBeNull();
+    expect(Array.isArray(intRow.rows[0]?.events)).toBe(true);
+    // The hot-path query the dispatcher uses — narrowed by tenant +
+    // enabled + event membership — must work against the column types.
+    const enabledRows = await client.query<{ id: string }>(
+      `SELECT id FROM integrations
+        WHERE tenant_id = $1 AND enabled = TRUE AND $2 = ANY(events)`,
+      [DEFAULT_TENANT_UUID, 'run_failed'],
+    );
+    expect(enabledRows.rows).toHaveLength(1);
+    expect(enabledRows.rows[0]?.id).toBe('int-1');
+
+    // Wave-14: migration 016 — annotations + reactions + share_links.
+    // Round-trip a top-level annotation and a reply, plus a thumbs-up
+    // reaction (with the PRIMARY KEY making double-insert a no-op),
+    // and a share_link with an opaque slug.
+    expect(applied.some((m) => m.version === '016')).toBe(true);
+    await client.query(
+      `INSERT INTO annotations
+         (id, tenant_id, user_id, target_kind, target_id, body)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        'ann-1',
+        DEFAULT_TENANT_UUID,
+        'u-1',
+        'run',
+        'w13-run-1',
+        'Looks like this run regressed against last week.',
+      ],
+    );
+    await client.query(
+      `INSERT INTO annotations
+         (id, tenant_id, user_id, target_kind, target_id, body, parent_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      ['ann-2', DEFAULT_TENANT_UUID, 'u-1', 'run', 'w13-run-1', 'Yeah +1.', 'ann-1'],
+    );
+    const annRows = await client.query<{
+      id: string;
+      target_kind: string;
+      parent_id: string | null;
+    }>(
+      `SELECT id, target_kind, parent_id FROM annotations
+         WHERE tenant_id = $1 AND target_id = $2 ORDER BY id ASC`,
+      [DEFAULT_TENANT_UUID, 'w13-run-1'],
+    );
+    expect(annRows.rows).toHaveLength(2);
+    expect(annRows.rows[0]?.parent_id).toBeNull();
+    expect(annRows.rows[1]?.parent_id).toBe('ann-1');
+
+    // Reactions PK enforces (annotation, user, kind) uniqueness — the
+    // toggle semantics in the route layer rely on it.
+    await client.query(
+      `INSERT INTO annotation_reactions (annotation_id, user_id, kind)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      ['ann-1', 'u-1', 'thumbs_up'],
+    );
+    await client.query(
+      `INSERT INTO annotation_reactions (annotation_id, user_id, kind)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      ['ann-1', 'u-1', 'thumbs_up'],
+    );
+    const reactRows = await client.query<{ kind: string }>(
+      'SELECT kind FROM annotation_reactions WHERE annotation_id = $1',
+      ['ann-1'],
+    );
+    expect(reactRows.rows).toHaveLength(1);
+    expect(reactRows.rows[0]?.kind).toBe('thumbs_up');
+
+    // share_links — slug is unique; password_hash + expires_at + revoked_at
+    // are nullable; view_count defaults to 0.
+    await client.query(
+      `INSERT INTO share_links
+         (id, tenant_id, created_by_user_id, target_kind, target_id, slug)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      ['sh-1', DEFAULT_TENANT_UUID, 'u-1', 'run', 'w13-run-1', 'share_abc12345'],
+    );
+    const shareRow = await client.query<{
+      slug: string;
+      view_count: number | string;
+      revoked_at: unknown;
+      password_hash: string | null;
+    }>(`SELECT slug, view_count, revoked_at, password_hash FROM share_links WHERE id = 'sh-1'`);
+    expect(shareRow.rows).toHaveLength(1);
+    expect(shareRow.rows[0]?.slug).toBe('share_abc12345');
+    expect(Number(shareRow.rows[0]?.view_count)).toBe(0);
+    expect(shareRow.rows[0]?.revoked_at).toBeNull();
+    expect(shareRow.rows[0]?.password_hash).toBeNull();
+
     await client.close();
   });
 

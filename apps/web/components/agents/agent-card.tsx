@@ -38,7 +38,7 @@ export function AgentCard({ agent, recentStatuses = [], hasComposite }: AgentCar
   const visibleTags = agent.tags.slice(0, TAG_LIMIT);
   const hiddenTagCount = Math.max(0, agent.tags.length - TAG_LIMIT);
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col" data-tour="agents-card">
       <CardHeader className="flex flex-row items-start gap-3 p-4">
         <AgentAvatar name={agent.name} size={44} />
         <div className="min-w-0 flex-1">

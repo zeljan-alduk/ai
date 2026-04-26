@@ -19,7 +19,7 @@ export default async function EvalIndexPage() {
   }
 
   return (
-    <>
+    <div data-tour="eval-radar">
       <PageHeader
         title="Eval"
         description="Suites, sweeps, and promotion gates. Compare any model on the same agent spec."
@@ -187,6 +187,6 @@ export default async function EvalIndexPage() {
           </section>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

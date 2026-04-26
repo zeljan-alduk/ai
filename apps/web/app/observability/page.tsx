@@ -14,12 +14,12 @@ export const dynamic = 'force-dynamic';
  */
 export default function ObservabilityRoute() {
   return (
-    <>
+    <div data-tour="privacy-feed">
       <PageHeader
         title="Observability"
         description="Live signals from the platform: privacy-tier enforcement, sandbox/guards activity, and local-vs-cloud routing. Updates every 15 seconds."
       />
       <ObservabilityPage />
-    </>
+    </div>
   );
 }

@@ -33,7 +33,7 @@ export function RunsList({ runs }: RunsListProps) {
 
   return (
     <>
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden" data-tour="runs-list">
         <div className="flex items-center gap-3 border-b border-border bg-bg-subtle px-4 py-2">
           <Checkbox
             aria-label="Select all visible runs"

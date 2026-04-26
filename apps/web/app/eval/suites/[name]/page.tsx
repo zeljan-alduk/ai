@@ -220,6 +220,10 @@ function summarizeExpect(
       return 'json schema';
     case 'rubric':
       return e.criterion;
+    case 'evaluator':
+      return `evaluator: ${e.evaluatorId}`;
+    default:
+      return '';
   }
 }
 

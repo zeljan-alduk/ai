@@ -10,14 +10,20 @@ import type {
   ApiKey,
   AuditLogEntry,
   CreateApiKeyRequest,
+  CreateIntegrationRequest,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  IntegrationContract,
+  IntegrationResponse,
   Invitation,
   ListApiKeysResponse,
   ListAuditLogResponse,
+  ListIntegrationsResponse,
   ListInvitationsResponse,
   ListMembersResponse,
   Role,
+  TestFireResponse,
+  UpdateIntegrationRequest,
   UpdateMemberRequest,
 } from '@aldo-ai/api-contract';
 import { ApiClientError } from './api';
@@ -204,6 +210,43 @@ export function listAuditLog(query: ListAuditQuery = {}): Promise<ListAuditLogRe
 }
 
 // ---------------------------------------------------------------------------
+// Integrations (wave 14C)
+// ---------------------------------------------------------------------------
+
+export function listIntegrations(): Promise<ListIntegrationsResponse> {
+  return jsonFetch<ListIntegrationsResponse>('/v1/integrations');
+}
+
+export function createIntegration(req: CreateIntegrationRequest): Promise<IntegrationResponse> {
+  return jsonFetch<IntegrationResponse>('/v1/integrations', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function updateIntegration(
+  id: string,
+  req: UpdateIntegrationRequest,
+): Promise<IntegrationResponse> {
+  return jsonFetch<IntegrationResponse>(`/v1/integrations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function deleteIntegration(id: string): Promise<void> {
+  return jsonFetch<void>(`/v1/integrations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function testFireIntegration(id: string): Promise<TestFireResponse> {
+  return jsonFetch<TestFireResponse>(`/v1/integrations/${encodeURIComponent(id)}/test`, {
+    method: 'POST',
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Re-export the wire types so consumers don't need a second import.
 // ---------------------------------------------------------------------------
-export type { ApiKey, AuditLogEntry, Invitation, Role };
+export type { ApiKey, AuditLogEntry, Invitation, IntegrationContract, Role };
