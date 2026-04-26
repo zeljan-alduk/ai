@@ -27,16 +27,24 @@ import type { Deps } from './deps.js';
 import { errorHandler } from './middleware/error.js';
 import { logger } from './middleware/logger.js';
 import { agentsRoutes } from './routes/agents.js';
+import { apiKeysRoutes } from './routes/api-keys.js';
+import { auditRoutes } from './routes/audit.js';
 import { billingRoutes } from './routes/billing.js';
 import { debuggerRoutes } from './routes/debugger.js';
 import { designPartnersRoutes } from './routes/design-partners.js';
 import { evalRoutes } from './routes/eval.js';
 import { healthRoutes } from './routes/health.js';
+import { invitationsRoutes } from './routes/invitations.js';
+import { membersRoutes } from './routes/members.js';
 import { modelsRoutes } from './routes/models.js';
+import { notificationsRoutes } from './routes/notifications.js';
 import { observabilityRoutes } from './routes/observability.js';
+import { playgroundRoutes } from './routes/playground.js';
+import { runsCompareRoutes } from './routes/runs-compare.js';
 import { runsRoutes } from './routes/runs.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { tenantsRoutes } from './routes/tenants.js';
+import { viewsRoutes } from './routes/views.js';
 
 export interface BuildAppOptions {
   /** Disable the request logger (tests pass `false`). */
@@ -68,7 +76,7 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   // Bearer-token middleware. Runs on every request, but skips the
   // public allow-list (health + signup/login + OPTIONS). Stamps
   // `c.var.auth` for downstream routes.
-  app.use('*', bearerAuth(deps.signingKey));
+  app.use('*', bearerAuth(deps.signingKey, deps.db));
 
   // Wave 11 — trial gate on the mutating routes that COST money to
   // run later. Permissive when billing is `not_configured`, when the
@@ -87,7 +95,12 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
 
   app.route('/', healthRoutes(deps));
   app.route('/', authRoutes({ db: deps.db, signingKey: deps.signingKey }));
+  // Wave-13 — register the compare route BEFORE the generic /v1/runs/:id
+  // matcher in `runsRoutes` so Hono picks the more specific path first.
+  app.route('/', runsCompareRoutes(deps));
   app.route('/', runsRoutes(deps));
+  // Wave-13 — multi-model prompt playground (SSE).
+  app.route('/', playgroundRoutes(deps));
   app.route('/', agentsRoutes(deps));
   app.route('/', modelsRoutes(deps));
   app.route('/', observabilityRoutes(deps));
@@ -97,6 +110,14 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', tenantsRoutes(deps));
   app.route('/', designPartnersRoutes(deps));
   app.route('/', billingRoutes(deps));
+  app.route('/', viewsRoutes(deps));
+  // Wave-13 — notifications + activity feed + SSE live tail.
+  app.route('/', notificationsRoutes(deps));
+  // Wave-13 — admin surfaces: api-keys, invitations, members, audit.
+  app.route('/', apiKeysRoutes(deps));
+  app.route('/', invitationsRoutes(deps));
+  app.route('/', membersRoutes(deps));
+  app.route('/', auditRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>

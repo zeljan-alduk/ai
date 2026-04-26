@@ -23,6 +23,18 @@ export const RunSummary = z.object({
    * pre-wave-9 servers omit it and the UI falls back to "no badge".
    */
   hasChildren: z.boolean().optional(),
+  /**
+   * Wave-13: free-form labels attached via the bulk-action `add-tag`
+   * surface. Always present on wave-13+ servers (default `[]`); kept
+   * optional on the wire so a pre-13 server response still parses.
+   */
+  tags: z.array(z.string()).optional(),
+  /**
+   * Wave-13: timestamp the run was archived via the bulk-action
+   * `archive` surface. `null` for live runs; an ISO timestamp for
+   * archived rows. Optional/additive.
+   */
+  archivedAt: z.string().nullable().optional(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 
@@ -190,3 +202,104 @@ export const GetRunTreeResponse = z.object({
   tree: RunTreeNode,
 });
 export type GetRunTreeResponse = z.infer<typeof GetRunTreeResponse>;
+
+// ---------------------------------------------------------------------------
+// Wave-13 — full-text search + saved views + bulk actions on /runs.
+//
+// Closes the competitor gap (LangSmith / Langfuse): the legacy
+// /v1/runs endpoint is filter-pill-driven; the new /v1/runs/search
+// endpoint accepts free-text + status[] + agent[] + cost / duration /
+// time ranges and returns the same paginated cursor envelope.
+//
+// LLM-agnostic: filter values are opaque strings — the schema never
+// enumerates a specific model or provider.
+
+/**
+ * Free-form CSV-or-array helper. Query strings carry repeated
+ * parameters (`?status=running&status=failed`) which Hono surfaces as a
+ * single string with newline separators; we additionally accept comma
+ * separation so the client can choose the more compact form.
+ */
+const StringList = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((v) => {
+    if (v === undefined) return undefined;
+    if (Array.isArray(v)) return v.filter((s) => s.length > 0);
+    return v
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  });
+
+export const RunSearchRequest = z.object({
+  /**
+   * Free-text query. Substring-matches against `agent_name`, run id,
+   * latest error message, and the JSON-serialised tool_args /
+   * tool_results in the run's events. Empty string is treated as
+   * "no text filter".
+   */
+  q: z.string().optional(),
+  /** ANY-of statuses. Empty / omitted = all statuses. */
+  status: StringList,
+  /** ANY-of agent names. */
+  agent: StringList,
+  /** ANY-of model names — match against `usage_records.model`. */
+  model: StringList,
+  /** Inclusive USD lower bound on `SUM(usage_records.usd)` per run. */
+  cost_gte: z.coerce.number().nonnegative().optional(),
+  /** Inclusive USD upper bound on `SUM(usage_records.usd)` per run. */
+  cost_lte: z.coerce.number().nonnegative().optional(),
+  /** Inclusive duration lower bound (ms). */
+  duration_gte: z.coerce.number().int().nonnegative().optional(),
+  /** Inclusive duration upper bound (ms). */
+  duration_lte: z.coerce.number().int().nonnegative().optional(),
+  /** ISO timestamp; runs with `started_at >= this` are included. */
+  started_after: z.string().optional(),
+  /** ISO timestamp; runs with `started_at <= this` are included. */
+  started_before: z.string().optional(),
+  /** When `true`, restrict to composite parents (i.e. runs with subagents). */
+  has_children: z.coerce.boolean().optional(),
+  /** When `true`, restrict to runs with at least one error event. */
+  has_failed_event: z.coerce.boolean().optional(),
+  /** When `true`, include archived runs; otherwise only live rows. */
+  include_archived: z.coerce.boolean().optional(),
+  /** Substring-match against `runs.tags`. ANY-of, comma-separated. */
+  tag: StringList,
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type RunSearchRequest = z.infer<typeof RunSearchRequest>;
+
+export const RunSearchResponse = z.object({
+  runs: z.array(RunSummary),
+  nextCursor: z.string().nullable(),
+  /**
+   * Exact count over the current tenant matching the supplied filter
+   * set. Cheap because tenant-scoped — fine for the MVP. The tradeoff
+   * is documented inline in the route for the sub-second-latency
+   * upgrade path (estimated count via `pg_class.reltuples` once a
+   * tenant accumulates millions of runs).
+   */
+  total: z.number().int().nonnegative(),
+});
+export type RunSearchResponse = z.infer<typeof RunSearchResponse>;
+
+/**
+ * Bulk action on a list of run ids. Single transaction; all-or-nothing.
+ * The action verbs are open-ended so a future wave can add e.g.
+ * `re-run` without breaking the wire.
+ */
+export const BulkRunActionRequest = z.object({
+  runIds: z.array(z.string().min(1)).min(1).max(500),
+  action: z.enum(['archive', 'unarchive', 'add-tag', 'remove-tag']),
+  /** Required when `action` is `add-tag` or `remove-tag`. */
+  tag: z.string().min(1).max(64).optional(),
+});
+export type BulkRunActionRequest = z.infer<typeof BulkRunActionRequest>;
+
+export const BulkRunActionResponse = z.object({
+  /** Number of run rows the action mutated (`< runIds.length` if some were already in the target state). */
+  affected: z.number().int().nonnegative(),
+});
+export type BulkRunActionResponse = z.infer<typeof BulkRunActionResponse>;

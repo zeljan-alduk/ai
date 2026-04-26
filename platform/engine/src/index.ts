@@ -73,6 +73,14 @@ export {
 
 export { NoopTracer } from './tracer/noop.js';
 
+// Wave-13 — notification side-channel.
+export {
+  type EngineNotification,
+  type EngineNotificationKind,
+  type NotificationSink,
+  noopNotificationSink,
+} from './notification-sink.js';
+
 // Re-export node runners for direct use by tests/advanced callers.
 export { runAgentNode } from './nodes/agent.js';
 export { runPipelineNode } from './nodes/pipeline.js';

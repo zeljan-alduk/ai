@@ -2261,3 +2261,452 @@ test 116/116 (41 new across the 6 wave-12 test files); pnpm
 build green. The pre-existing lint warnings on
 components/marketing/top-nav, command-palette, and theme-* files
 are not from wave 12 — every file I touched is biome-clean.
+
+[2026-04-26 20:30 UTC] engineer-13B — wave 13 comparison + playground
+Side-by-side run comparison + multi-model prompt playground.
+
+Run comparison: new server-component page at apps/web/app/runs/compare/
+page.tsx, URL-driven (?a=&b=) and shareable. Header strip is a 2-pane
+field grid that highlights the model field with an amber outline when
+the server's diff payload says modelChanged=true; below the strip a
+4-cell summary card shows the scalar deltas (event-count, cost,
+duration, same-agent). Event-by-event diff pairs by index (pure
+`pairEvents` + `pairedSpans` helpers, vitest-pinned) and renders two
+vertical-stack tracks with type-keyed colors and ghost-row borders for
+length mismatches. Final-output diff feeds the events through the
+`diff` library (newly added) with red/green inline highlighting.
+Cost-breakdown chart: Recharts stacked bar, side-by-side. Trigger
+points: a CompareWithButton on /runs/[id] header (opens a Sheet
+listing recent runs to pick the second slot) and a
+CompareSelectedButton component 13A can wire into the bulk-action bar
+once the selection state surfaces (button is disabled with a
+"Select two runs" tooltip when the count isn't exactly 2).
+
+Playground: /playground page at apps/web/app/playground/page.tsx with a
+client island that owns the column state. Composer uses
+`@uiw/react-textarea-code-editor` (newly added, dynamic-import so SSR
+doesn't break) for system + user prompts; capability-class dropdown +
+privacy-tier dropdown drive the gateway router. Run button POSTs to
+/v1/playground/run and consumes the SSE stream into a column map via
+the pure `applyFrame` reducer. Up to 5 columns; each shows model id +
+locality badge + streaming text + latency / token counts / $ cost +
+copy button. PlaygroundOutputDiff lets the operator pick any two
+columns and renders a textual diff (reuses computeTextDiff from
+/runs/compare). SaveAsEvalCaseButton bundles the prompt + manually-
+edited expected-output into a fresh eval suite via POST
+/v1/eval/suites — bumping the suite version on each save keeps the
+surface simple. Sidebar gained a Playground entry between Runs and
+Agents.
+
+Endpoints (additive):
+  GET  /v1/runs/compare?a=&b=  → both runs + scalar diff payload.
+                                 Tenant-scoped via getRun(); same
+                                 disclosure stance as /v1/runs/:id.
+                                 Refuses a==b with 400.
+  POST /v1/playground/run      → SSE stream `event: delta\ndata:
+                                 {modelId,type,payload}\n\n` per
+                                 frame. Wave-8 router enforces
+                                 privacy fail-closed (422
+                                 privacy_tier_unroutable BEFORE any
+                                 SSE bytes). Concurrency cap = 5
+                                 models / request; rate limit = 10
+                                 requests / tenant / minute (in-memory
+                                 sliding window — multi-instance
+                                 caveat documented inline). The
+                                 streaming seam is injectable
+                                 (PlaygroundStreamer); v0 wires a
+                                 deterministic stub so the SSE shape
+                                 + privacy gate are testable without
+                                 a provider key. Real provider
+                                 streaming lands when the gateway's
+                                 streaming surface plumbs through
+                                 this route.
+
+Wire types added in @aldo-ai/api-contract (additive, separate files
+to dodge merge-conflicts with 13A's runs.ts edits):
+  src/runs-compare.ts  RunCompareQuery / RunCompareDiff /
+                       RunCompareResponse + RunCompareSide alias
+  src/playground.ts    PlaygroundRunRequest / PlaygroundFrame /
+                       PlaygroundFrameType + payload-shape interfaces;
+                       constants PLAYGROUND_MAX_MODELS=5 and
+                       PLAYGROUND_RATE_LIMIT_PER_MIN=10.
+
+Components shipped (web):
+  components/runs-compare/event-pairing.ts + .test.ts (4 tests)
+  components/runs-compare/text-diff.ts + .test.ts (4 tests)
+  components/runs-compare/run-compare-header.tsx
+  components/runs-compare/event-diff-panel.tsx
+  components/runs-compare/output-diff-panel.tsx
+  components/runs-compare/cost-compare-chart.tsx
+  components/runs-compare/compare-with-button.tsx (Sheet picker)
+  components/runs-compare/compare-selected-button.tsx (13A hook)
+  components/playground/playground-state.ts + .test.ts (7 tests)
+  components/playground/playground-shell.tsx (client island)
+  components/playground/playground-composer.tsx
+  components/playground/playground-columns.tsx
+  components/playground/playground-output-diff.tsx
+  components/playground/save-as-eval-case-button.tsx
+  app/runs/compare/page.tsx
+  app/playground/page.tsx
+
+API routes shipped (apps/api):
+  src/routes/runs-compare.ts (new file, mounted before runsRoutes
+                              so /v1/runs/compare matches before
+                              /v1/runs/:id)
+  src/routes/playground.ts   (new file; injectable streamer +
+                              resetPlaygroundRateLimiter test seam)
+
+Tests added (api): runs-compare × 4 (compare success, missing-id 404,
+cross-tenant 404, validation 400) + playground × 6 (capability
+routing, privacy fail-closed, model cap, rate limit, SSE shape,
+error propagation). 173/173 -> 225/225 in @aldo-ai/api (the 52-test
+delta is shared with 13A's invitations / api-keys / audit work).
+
+Tests added (web): event-pairing × 4 + text-diff × 4 + playground-
+state × 7 = 15 tests; brief asked for +6 — over-delivered to
+exercise the column reducer end-to-end. 116/116 -> 167/167 in
+@aldo-ai/web (the 51-test delta is shared with 13A's runs-toolbar /
+saved-views / bulk-selection work).
+
+Deps added (apps/web): diff ^9.0.0, @types/diff ^8.0.0,
+@uiw/react-textarea-code-editor ^3.1.1. No platform-package deps
+changed. No CLAUDE.md non-negotiable touched: every model + provider
+field is rendered as opaque strings; the playground privacy fail-
+closed routes through the same wave-8 router as POST /v1/runs;
+capability-class is the only routing input the UI exposes.
+
+Quality bar: pnpm -r typecheck green; pnpm --filter @aldo-ai/api
+test 225/225 (+10 wave-13B); pnpm --filter @aldo-ai/web test 167/167
+(+15 wave-13B); pnpm --filter @aldo-ai/web build green (the
+/playground 8.8 kB chunk and /runs/compare 3.18 kB chunk show up in
+the route table). Lint warnings on this wave's files are ZERO; the 56
+remaining biome errors at the repo level are all in 13A's untracked
+auth/* + routes/{api-keys,audit,invitations,members,notifications}
+files — every wave-13B file is biome-clean.
+
+[2026-04-26 20:38 UTC] engineer-13A — wave 13 search + views + bulk
+Closed the LangSmith/Langfuse parity gap on /runs. Three new
+backend surfaces, one design-system primitive, and a full /runs
+page rewrite.
+
+Backend (apps/api):
+  - GET  /v1/runs/search — auth + tenant-scoped, accepts q, status[],
+    agent[], model[], cost_gte/lte, duration_gte/lte, started_after/
+    before, has_children, has_failed_event, include_archived, tag[],
+    cursor, limit (max 100, default 50). Returns RunSummary[] +
+    nextCursor + exact total. ILIKE-based MVP scan over agent_name +
+    run id + the JSON-serialised event payload text; pg_trgm GIN
+    upgrade path documented inline in db.ts and the route comment.
+    9 vitest cases (runs-search.test.ts): empty result, exact agent
+    match, fuzzy substring, status filter, cost-range filter,
+    has_children filter, cross-tenant isolation, cursor pagination,
+    invalid-cursor 400.
+  - POST /v1/runs/bulk — body { runIds, action, tag? } where action
+    is 'archive' | 'unarchive' | 'add-tag' | 'remove-tag'. Single
+    transaction, cross-tenant ids silently no-op. 4 tests
+    (runs-bulk.test.ts): archive idempotency, add/remove-tag
+    round-trip, validation_error on missing tag, cross-tenant
+    isolation.
+  - GET/POST/PATCH/DELETE /v1/views — saved views CRUD on a new
+    surface enum ('runs' | 'agents' | 'eval' | 'observability'),
+    tenant + user scoped, intra-tenant sharing via is_shared. 4
+    tests (views.test.ts): full CRUD round-trip, validation_error
+    on unknown surface, cross-tenant 404 disclosure stance,
+    PATCH-on-missing-id 404.
+
+Migration 010 (platform/storage):
+  - saved_views table (id, tenant_id, user_id, name, surface,
+    query JSONB, is_shared, created_at, updated_at) +
+    idx_saved_views_tenant_surface + idx_saved_views_user.
+  - runs.archived_at TIMESTAMPTZ NULL + idx_runs_active partial
+    index (WHERE archived_at IS NULL).
+  - runs.tags TEXT[] DEFAULT '{}' + idx_runs_tags_gin GIN.
+  - migrate.test.ts now round-trips the new table + columns
+    (insert + array_append + archive flip).
+
+api-contract (additive):
+  - RunSearchRequest / RunSearchResponse, BulkRunActionRequest /
+    BulkRunActionResponse, SavedView + List/Create/Update
+    surfaces. RunSummary gained optional `tags` + `archivedAt`.
+
+Web (apps/web):
+  - app/runs/page.tsx rewritten as a server component reading
+    GET /v1/runs/search; URL is the source of truth for filter +
+    saved-view state.
+  - components/runs/runs-toolbar.tsx (search box debounced 250ms,
+    filter Sheet with status/agent/cost/duration/started/Other
+    facets, saved-views DropdownMenu + save/edit Sheets).
+  - components/runs/runs-list.tsx (Card-rendered list with row
+    checkboxes + tristate header; selection toolbar slides in
+    from the bottom).
+  - components/runs/selection-toolbar.tsx (Export CSV + JSON,
+    Archive, Unarchive, Label).
+  - components/runs/search-query.ts + bulk-selection.ts —
+    pure-logic modules (URL <-> query serialiser, selection
+    reducer, CSV/JSON exporters). 24 vitest cases pinning the
+    state machine + URL serialisation contract.
+  - components/ui/checkbox.tsx — new design-system primitive
+    (token-driven HTML <input type="checkbox"> with
+    indeterminate via DOM property setter).
+  - lib/api.ts grew searchRuns / bulkRunAction / listSavedViews /
+    createSavedView / updateSavedView / deleteSavedView wrappers.
+
+Quality bar:
+  - pnpm -r typecheck green.
+  - pnpm --filter @aldo-ai/storage test 2/2 (migration 010
+    round-trips end-to-end on pglite).
+  - pnpm --filter @aldo-ai/api test 225/225 (was 167; added 17
+    wave-13A tests; the rest came from other wave-13 engineers).
+  - pnpm --filter @aldo-ai/web typecheck + test 167/167 (added
+    24 wave-13A tests: 14 search-query + 10 bulk-selection) +
+    build green.
+  - Repo-level lint: no remaining biome errors are in any
+    wave-13A file. Pre-existing errors live in other engineers'
+    auth/playground/notifications surfaces.
+
+Out of scope (per the brief):
+  - Real-time results (poll-on-input is fine).
+  - Cross-tenant view sharing (only intra-tenant).
+
+[2026-04-26 20:38 UTC] engineer-13C — wave 13 live tail + notifications + activity feed
+Shipped the unified live event tail, notification system, and
+activity feed so the control plane finally has a "what's
+happening now?" surface that LangSmith / Helicone don't.
+
+Migration 011 added two tenant-scoped tables —
+`notifications` (id, tenant_id, user_id NULL = tenant-wide,
+kind, title, body, link, metadata, read_at, created_at) and
+`activity_events` (id, tenant_id, actor_user_id NULL = system,
+verb, object_kind, object_id, metadata, at). Indices match the
+hot read paths: bell-popover (tenant_id + user_id + read_at),
+/notifications (tenant_id + created_at DESC), /activity
+(tenant_id + at DESC). Both FK to tenants(id) ON DELETE
+CASCADE. users.id stayed TEXT (matches migration 006); the
+brief's `UUID` is a UUID v4 string at write time, so the column
+type is purely cosmetic and we don't drift from the existing
+auth FK.
+
+API surface (apps/api/src/routes/notifications.ts) shipped:
+  GET  /v1/notifications?unreadOnly=&kind=&limit=
+  POST /v1/notifications/:id/mark-read
+  POST /v1/notifications/mark-all-read
+  GET  /v1/activity?actorUserId=&verb=&since=&until=&cursor=&limit=
+  GET  /v1/sse/events?stream=notifications|run/<runId>
+
+SSE protocol: text/event-stream, bearer-auth via the existing
+auth-proxy, 25s heartbeat, 1.5s DB poll (no LISTEN/NOTIFY
+because pglite + Neon HTTP can't share a session). Each frame
+is `event: <kind>\ndata: <json>\n\n`; kinds are heartbeat,
+notification, run_event. The notifications stream primes to
+"now" so it never replays history; the run/<id> stream primes
+to the run's max(at,id) and only streams rows written AFTER
+the connection opens. Aborted requests close the loop cleanly.
+
+Engine hook (platform/engine/src/notification-sink.ts):
+narrow `NotificationSink` interface with `emit(EngineNotification)`
+plumbed through AgentRunDeps + RuntimeDeps as an OPTIONAL field.
+LeafAgentRun.emit() fires it on `run.completed`, `error`, and
+`tool_result`-with-guards-reason events; every call is
+fire-and-forget via `void sink.emit(...).catch(...)` so a sink
+exception can never tear down a run. Production wires
+`PostgresNotificationSink` (apps/api/src/notifications.ts);
+tests pass nothing → notifications stay disabled. Engine tests
+stayed green (29/29) — the hook is purely additive.
+
+Activity emission lives at the API edges: POST /v1/runs ("ran"),
+POST /v1/eval/sweeps ("started_sweep" + a `sweep_completed`
+notification when runSweep finishes). Each call is
+best-effort; an emitActivity failure logs and never blocks
+the request that triggered it.
+
+Web (apps/web):
+  - /runs/[id]/live (NEW) — server shell + LiveTail client
+    island. SSE via built-in EventSource (no library; built-in
+    exponential-backoff reconnect). Filter chips (model / tool
+    / span / error + agent dropdown), pause-with-buffer,
+    stick-to-bottom toggle, copy-line on hover, terminal-style
+    monospace output + per-(model+span) streaming-text panels
+    with a soft cursor and a checkmark on completion. Buffer
+    capped at 1000 events.
+  - /runs/[id] auto-redirects to /live when status === 'running'.
+  - NotificationBell — Popover-anchored, top of sidebar. Live
+    SSE subscription on the notifications stream + 60s polling
+    backstop. Unread badge capped at "9+". "Mark all read" + per-
+    row "Mark read" + "View all" → /notifications.
+  - /notifications — server-rendered list with kind-filter chips.
+  - /activity — server-rendered timeline grouped by day, actor
+    + verb dropdown filters, cursor pagination ("Load older").
+    Sidebar entry between Observability and Billing per the
+    brief.
+  - Sidebar: added /activity nav entry + Live link in the run
+    sublist next to Detail / Debug. The bell only renders when
+    a session is in play (chrome-suppressed routes never see it).
+
+Pure logic extracted so vitest can pin it without React:
+  components/runs/live-tail-filters.ts (categorize, applyFilters,
+  spanPathOf, agentNameOf, summarize, reduceStreamingBuffer).
+
+Quality bar:
+  - pnpm -r typecheck green across all 19 packages.
+  - apps/api tests 225/225 (+22 over wave 12; wave-13 added
+    13 in notifications.test.ts: 5 notifications CRUD/filters,
+    3 SSE streaming, 4 activity events + 1 cross-tenant
+    isolation guard).
+  - apps/web tests 167/167 (+12 in
+    components/runs/live-tail-filters.test.ts and
+    components/notifications/notification-bell.test.tsx;
+    9 filter-logic cases + 3 bell-badge cases — the +8 target
+    is comfortably cleared).
+  - apps/web build green; all new pages render server-side.
+  - apps/web typecheck green; api typecheck green.
+  - Engine tests 29/29; storage migrate tests 2/2.
+
+LLM-agnostic: every new surface keys on platform concepts
+(run, sweep, guards, activity verb) — no provider name appears
+in any contract type, route handler, or UI string. The
+streaming-text panels are keyed on (model, spanPath) so a
+provider switch mid-flight never tears the stream.
+
+[2026-04-26 20:45 UTC] engineer-13D — wave 13 keys + invites + audit
+Shipped the wave-13 admin surface that's been blocking the B2B
+SaaS story: API keys (programmatic access, scope-checked +
+revocable), user invitations (email-driven onboarding into a
+tenant, 14d default expiry), 4-role RBAC ladder
+(viewer / member / admin / owner), and an owner-only audit log
+browser. The whole thing slots in behind the wave-10 bearer
+auth — no breaking changes to existing JWT flows.
+
+Migration 012 (`012_keys_invites_audit.sql`) adds three tables:
+api_keys (TEXT[] scopes column, prefix-indexed for the hot
+auth path, argon2id-hashed full secret), invitations (CHECK
+constraint on the role enum, defaulted 14d expires_at,
+argon2id-hashed accept token), audit_log (JSONB metadata, the
+(tenant_id, at DESC) index keeps the browser cheap). Storage
+round-trip tests added — pglite + node-postgres + Neon HTTP
+all share one TEXT-as-UUID representation per the existing
+006/008/010 pattern.
+
+Token shape: `aldo_live_<24-char-base32>`; first 12 chars are
+the displayable prefix. The auth middleware now branches on
+the prefix tag — JWT (HS256, wave-10) and `aldo_live_…`
+bearers go through the same `c.var.auth` so every downstream
+route reads tenant id through the existing `getAuth(c)`
+helper. API-key sessions also stamp `c.var.authApiKey` so
+`requireScope(c, 'runs:write')` can scope-check; JWT sessions
+short-circuit scope checks (the role check is the authority
+there).
+
+Scope catalog (mirrored in api-contract/src/admin.ts):
+runs:read | runs:write | agents:read | agents:write |
+secrets:read | secrets:write | admin:*. `admin:*` is a
+wildcard; `<resource>:*` matches both verbs on that resource.
+
+RBAC enforcement points (every mutating route now gates on
+`requireRole` + `requireScope` where the API-key path applies):
+  - POST /v1/runs           → member + runs:write
+  - POST /v1/agents         → member + agents:write
+  - POST /v1/secrets        → member + secrets:write
+  - DELETE /v1/secrets/:n   → member + secrets:write
+  - GET  /v1/secrets        → secrets:read (read-allowed for any role)
+  - POST /v1/api-keys       → admin (owner-or-admin)
+  - POST /v1/invitations    → admin
+  - PATCH /v1/members/:id   → owner only
+  - DELETE /v1/members/:id  → owner only (refuses to remove last owner)
+  - GET  /v1/audit          → owner only
+
+Audit-log writer (`recordAudit`) hooked into:
+  - /v1/auth/{signup,login}
+  - /v1/secrets POST + DELETE
+  - /v1/agents POST
+  - /v1/api-keys {create, revoke, delete}
+  - /v1/invitations {create, revoke, delete, accept}
+  - /v1/members {role-change, remove}
+The writer is best-effort — a failed insert never regresses
+the request that triggered it. IP + user-agent are captured
+from request headers; metadata is a free-form JSONB blob that
+NEVER carries secret values.
+
+Wave-13 role enum extended to include `viewer` (read-only).
+The wave-10 `TenantRole` union is now
+`'owner' | 'admin' | 'member' | 'viewer'`. JWT verify
+recognises the new role; auth/store's `toRole()` defaults to
+viewer (least privilege) on unrecognised values. The brief's
+"viewer" role implementation is end-to-end — the migration's
+CHECK constraint on `invitations.role`, the JWT claim
+narrowing, the `requireRole()` ladder.
+
+Coordinated with Engineer 13C: invitation create emits an
+`invitation_received` notification on the (tenantId, null)
+pair so every member sees it in their bell popover. The
+mailer integration uses the wave-11 `Mailer` stub
+(`deps.mailer.send`); when MAILER_PROVIDER is unset it logs a
+single stderr line and the create UI surfaces the accept URL
+inline so the invite is testable without an inbox.
+
+Web surface at apps/web/app/settings/{api-keys, members,
+roles, audit, page} with a left sub-nav layout. Sidebar entry
+added (between Eval and Docs). Each page:
+  - api-keys: list + "New key" Dialog (name + scope multi-
+    select + optional expiry); on create the full secret is
+    shown ONCE in a copy-on-click block with a clear amber
+    warning ("This key is shown once — copy it now"). After
+    dismiss it's not re-derivable. Per-row revoke + delete
+    with confirm dialogs. Last-used relative timestamp +
+    expiry countdown (`in 30d` / `in 4h` / `expired`).
+  - members: list of tenant_members with role-change
+    <select> (confirm dialog on change) + "Remove member"
+    button. "Invite" Dialog with email + role pick.
+    Pending-invitations section + past-invitations section.
+  - roles: documentation page (no editing — RBAC is fixed).
+  - audit: paginated table with verb/objectKind/since
+    filters; row click opens a Sheet with the full JSON.
+  - page (Profile): user email + active tenant + change-
+    password placeholder.
+
+Public path `/invite/[id]?token=<plain>` accepts the invite
+via `acceptInviteAction` (server action) — POSTs to the new
+public-allow-listed `/v1/invitations/accept` endpoint. New
+users supply a 12+ char password; existing users (matched by
+email) get added as a tenant_member without a password. The
+accept route is on the `PUBLIC_PATH_EXACT` allow-list so the
+recipient can hit it without a session.
+
+Shipped:
+  platform/storage/migrations/012_keys_invites_audit.sql
+  platform/api-contract/src/admin.ts
+  apps/api/src/auth/api-keys.ts
+  apps/api/src/auth/audit.ts
+  apps/api/src/auth/invitations.ts
+  apps/api/src/routes/api-keys.ts
+  apps/api/src/routes/audit.ts
+  apps/api/src/routes/invitations.ts
+  apps/api/src/routes/members.ts
+  apps/web/lib/api-admin.ts
+  apps/web/app/settings/{layout,page,actions}.tsx
+  apps/web/app/settings/api-keys/{page,new-key-dialog,key-actions}.tsx
+  apps/web/app/settings/members/{page,invite-dialog,member-actions}.tsx
+  apps/web/app/settings/roles/page.tsx
+  apps/web/app/settings/audit/{page,audit-table}.tsx
+  apps/web/app/invite/[id]/{page,actions}.tsx
+
+Quality bar: 22 wave-13 tests added (api-keys × 9 covering
+scope check, expiry, revocation, admin:* wildcard, delete;
+invitations × 7 covering create-once-token, list, revoke
+blocks accept, existing-user accept, new-user accept, bad-
+token; audit × 4 covering write-on-mutation, owner-only,
+filter narrowing, cross-tenant isolation; RBAC × 2 covering
+viewer-cannot-mutate + member-cannot-read-audit). API test
+suite is 225/225 green; storage tests 2/2 green; web
+typecheck + build green; biome clean on every file I touched.
+
+Out of scope (per brief): real email delivery (Mailer stub),
+SSO/SAML, custom roles (fixed 4-role enum), API-key rotation
+flows (manual revoke + create).
+
+LLM-agnostic: nothing in this wave references a model
+provider — the audit-log verbs are platform concepts
+(`secret.set`, `agent.register`, `api_key.revoke`,
+`invitation.accept`), the scope strings key on platform
+resources (runs / agents / secrets / admin), and the
+api-keys/invitations role enum is fixed at the platform
+ladder. Privacy tiers are untouched.

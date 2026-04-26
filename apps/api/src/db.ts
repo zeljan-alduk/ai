@@ -143,6 +143,8 @@ export async function listRuns(db: SqlClient, opts: ListRunsOptions): Promise<Li
       r.status,
       r.started_at,
       r.ended_at,
+      r.tags,
+      r.archived_at,
       COALESCE(SUM(u.usd), 0)::text AS total_usd,
       (SELECT u2.provider FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,
@@ -178,6 +180,21 @@ function rowToRunSummary(r: RunListRow): RunSummary {
   const endedAt = toIsoOrNull(r.ended_at);
   const durationMs =
     endedAt !== null ? new Date(endedAt).getTime() - new Date(startedAt).getTime() : null;
+  // Wave-13: tags / archived_at columns are added in migration 010 and
+  // are present on every server >= wave-13. The fields are optional on
+  // the wire (additive), so a pre-13 row missing them simply omits the
+  // keys.
+  const rowTags = (r as { tags?: unknown }).tags;
+  const tags = Array.isArray(rowTags)
+    ? rowTags.filter((t): t is string => typeof t === 'string')
+    : undefined;
+  const archivedAtRaw = (r as { archived_at?: unknown }).archived_at;
+  const archivedAt =
+    archivedAtRaw === undefined || archivedAtRaw === null
+      ? archivedAtRaw === undefined
+        ? undefined
+        : null
+      : toIso(archivedAtRaw);
   return {
     id: r.id,
     agentName: r.agent_name,
@@ -193,10 +210,581 @@ function rowToRunSummary(r: RunListRow): RunSummary {
     ...(r.has_children !== undefined && r.has_children !== null
       ? { hasChildren: Boolean(r.has_children) }
       : {}),
+    ...(tags !== undefined ? { tags } : {}),
+    ...(archivedAt !== undefined ? { archivedAt } : {}),
   };
 }
 
 type RunDetailRow = RunListRow;
+
+// --- wave-13 run search ----------------------------------------------------
+
+export interface SearchRunsOptions {
+  readonly tenantId: string;
+  readonly q?: string | undefined;
+  readonly statuses?: readonly string[] | undefined;
+  readonly agents?: readonly string[] | undefined;
+  readonly models?: readonly string[] | undefined;
+  readonly tags?: readonly string[] | undefined;
+  readonly costGte?: number | undefined;
+  readonly costLte?: number | undefined;
+  readonly durationGte?: number | undefined;
+  readonly durationLte?: number | undefined;
+  readonly startedAfter?: string | undefined;
+  readonly startedBefore?: string | undefined;
+  readonly hasChildren?: boolean | undefined;
+  readonly hasFailedEvent?: boolean | undefined;
+  readonly includeArchived?: boolean | undefined;
+  readonly limit: number;
+  readonly cursor?: RowCursor | undefined;
+}
+
+export interface SearchRunsResult {
+  readonly runs: readonly RunSummary[];
+  readonly nextCursor: string | null;
+  readonly total: number;
+}
+
+/**
+ * Wave-13 full-text + multi-faceted search over runs.
+ *
+ * The `q` token substring-matches against the agent name (cheap
+ * column-level ILIKE), the run id (exact prefix), the latest error
+ * event's message (joined via `run_events`), and the tool_args /
+ * tool_result strings stored under `run_events.payload_jsonb`. We use
+ * ILIKE for the MVP — Postgres `pg_trgm` GIN indices on the joined
+ * columns are the upgrade path once a tenant accumulates enough events
+ * that the seq-scan dominates request latency. The `idx_runs_active`
+ * partial index from migration 010 covers the unarchived-list path.
+ *
+ * Multi-value filters (`statuses`, `agents`, `models`, `tags`) compose
+ * as ANY-of within a facet and AND across facets — the canonical
+ * "search & filter" semantics every operator already knows from
+ * GitHub / Linear / LangSmith.
+ */
+export async function searchRuns(
+  db: SqlClient,
+  opts: SearchRunsOptions,
+): Promise<SearchRunsResult> {
+  const params: unknown[] = [];
+  const where: string[] = [];
+
+  // Tenant scope is always FIRST so the (tenant_id) index path is hit.
+  params.push(opts.tenantId);
+  where.push(`r.tenant_id = $${params.length}`);
+
+  if (opts.includeArchived !== true) {
+    where.push('r.archived_at IS NULL');
+  }
+
+  if (opts.statuses !== undefined && opts.statuses.length > 0) {
+    params.push([...opts.statuses]);
+    where.push(`r.status = ANY($${params.length}::text[])`);
+  }
+  if (opts.agents !== undefined && opts.agents.length > 0) {
+    params.push([...opts.agents]);
+    where.push(`r.agent_name = ANY($${params.length}::text[])`);
+  }
+  if (opts.tags !== undefined && opts.tags.length > 0) {
+    params.push([...opts.tags]);
+    // `&&` is the array-overlap operator — true when at least one
+    // element of `r.tags` matches the supplied set.
+    where.push(`r.tags && $${params.length}::text[]`);
+  }
+  if (opts.startedAfter !== undefined) {
+    params.push(opts.startedAfter);
+    where.push(`r.started_at >= $${params.length}::timestamptz`);
+  }
+  if (opts.startedBefore !== undefined) {
+    params.push(opts.startedBefore);
+    where.push(`r.started_at <= $${params.length}::timestamptz`);
+  }
+  if (opts.durationGte !== undefined) {
+    params.push(opts.durationGte);
+    where.push(
+      `r.ended_at IS NOT NULL AND (EXTRACT(EPOCH FROM (r.ended_at - r.started_at)) * 1000) >= $${params.length}::numeric`,
+    );
+  }
+  if (opts.durationLte !== undefined) {
+    params.push(opts.durationLte);
+    where.push(
+      `r.ended_at IS NOT NULL AND (EXTRACT(EPOCH FROM (r.ended_at - r.started_at)) * 1000) <= $${params.length}::numeric`,
+    );
+  }
+  if (opts.hasChildren !== undefined) {
+    if (opts.hasChildren) {
+      where.push('EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id)');
+    } else {
+      where.push('NOT EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id)');
+    }
+  }
+  if (opts.hasFailedEvent === true) {
+    where.push(`EXISTS (SELECT 1 FROM run_events e WHERE e.run_id = r.id AND e.type = 'error')`);
+  }
+  if (opts.q !== undefined && opts.q.trim().length > 0) {
+    const pattern = `%${opts.q.trim()}%`;
+    params.push(pattern);
+    const idx = params.length;
+    // Substring match across:
+    //   - agent_name (cheap, column-level)
+    //   - run id (cheap, column-level)
+    //   - any error event message (joined via run_events)
+    //   - any event payload JSONB serialised text (tool_args /
+    //     tool_results land here as nested keys; serialising the whole
+    //     payload to text and ILIKE-ing is the simplest portable shape).
+    where.push(`(
+      r.agent_name ILIKE $${idx}
+      OR r.id ILIKE $${idx}
+      OR EXISTS (
+        SELECT 1 FROM run_events e
+         WHERE e.run_id = r.id
+           AND (e.payload_jsonb::text ILIKE $${idx})
+      )
+    )`);
+  }
+  if (opts.models !== undefined && opts.models.length > 0) {
+    params.push([...opts.models]);
+    where.push(
+      `EXISTS (SELECT 1 FROM usage_records u WHERE u.run_id = r.id AND u.model = ANY($${params.length}::text[]))`,
+    );
+  }
+  // Cost range — push into the SELECT via a HAVING because SUM is an
+  // aggregate. We compose it after the WHERE clause is built; the
+  // `cost_*` predicates AND together when both are set.
+  const having: string[] = [];
+  if (opts.costGte !== undefined) {
+    params.push(opts.costGte);
+    having.push(`COALESCE(SUM(u.usd), 0) >= $${params.length}::numeric`);
+  }
+  if (opts.costLte !== undefined) {
+    params.push(opts.costLte);
+    having.push(`COALESCE(SUM(u.usd), 0) <= $${params.length}::numeric`);
+  }
+  if (opts.cursor !== undefined) {
+    params.push(opts.cursor.at);
+    const atIdx = params.length;
+    params.push(opts.cursor.id);
+    const idIdx = params.length;
+    where.push(`(r.started_at, r.id) < ($${atIdx}::timestamptz, $${idIdx})`);
+  }
+
+  // Build the page query (limit+1 sentinel for hasMore).
+  params.push(opts.limit + 1);
+  const limitIdx = params.length;
+
+  const sql = `
+    SELECT
+      r.id,
+      r.agent_name,
+      r.agent_version,
+      r.parent_run_id,
+      r.status,
+      r.started_at,
+      r.ended_at,
+      r.tags,
+      r.archived_at,
+      COALESCE(SUM(u.usd), 0)::text AS total_usd,
+      (SELECT u2.provider FROM usage_records u2
+        WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,
+      (SELECT u2.model FROM usage_records u2
+        WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_model,
+      EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id) AS has_children
+    FROM runs r
+    LEFT JOIN usage_records u ON u.run_id = r.id
+    WHERE ${where.join(' AND ')}
+    GROUP BY r.id
+    ${having.length > 0 ? `HAVING ${having.join(' AND ')}` : ''}
+    ORDER BY r.started_at DESC, r.id DESC
+    LIMIT $${limitIdx}
+  `;
+
+  const res = await db.query<RunListRow>(sql, params);
+  const rows = res.rows.slice(0, opts.limit);
+  const hasMore = res.rows.length > opts.limit;
+  const last = rows[rows.length - 1];
+  const nextCursor =
+    hasMore && last !== undefined
+      ? encodeCursor({ at: toIso(last.started_at), id: last.id })
+      : null;
+
+  // Count over the same WHERE+HAVING (without cursor / limit). We
+  // build a fresh parameter list to avoid reusing the cursor binds.
+  const countParams: unknown[] = [];
+  const countWhere: string[] = [];
+  countParams.push(opts.tenantId);
+  countWhere.push(`r.tenant_id = $${countParams.length}`);
+  if (opts.includeArchived !== true) {
+    countWhere.push('r.archived_at IS NULL');
+  }
+  if (opts.statuses !== undefined && opts.statuses.length > 0) {
+    countParams.push([...opts.statuses]);
+    countWhere.push(`r.status = ANY($${countParams.length}::text[])`);
+  }
+  if (opts.agents !== undefined && opts.agents.length > 0) {
+    countParams.push([...opts.agents]);
+    countWhere.push(`r.agent_name = ANY($${countParams.length}::text[])`);
+  }
+  if (opts.tags !== undefined && opts.tags.length > 0) {
+    countParams.push([...opts.tags]);
+    countWhere.push(`r.tags && $${countParams.length}::text[]`);
+  }
+  if (opts.startedAfter !== undefined) {
+    countParams.push(opts.startedAfter);
+    countWhere.push(`r.started_at >= $${countParams.length}::timestamptz`);
+  }
+  if (opts.startedBefore !== undefined) {
+    countParams.push(opts.startedBefore);
+    countWhere.push(`r.started_at <= $${countParams.length}::timestamptz`);
+  }
+  if (opts.durationGte !== undefined) {
+    countParams.push(opts.durationGte);
+    countWhere.push(
+      `r.ended_at IS NOT NULL AND (EXTRACT(EPOCH FROM (r.ended_at - r.started_at)) * 1000) >= $${countParams.length}::numeric`,
+    );
+  }
+  if (opts.durationLte !== undefined) {
+    countParams.push(opts.durationLte);
+    countWhere.push(
+      `r.ended_at IS NOT NULL AND (EXTRACT(EPOCH FROM (r.ended_at - r.started_at)) * 1000) <= $${countParams.length}::numeric`,
+    );
+  }
+  if (opts.hasChildren !== undefined) {
+    if (opts.hasChildren) {
+      countWhere.push('EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id)');
+    } else {
+      countWhere.push('NOT EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id)');
+    }
+  }
+  if (opts.hasFailedEvent === true) {
+    countWhere.push(
+      `EXISTS (SELECT 1 FROM run_events e WHERE e.run_id = r.id AND e.type = 'error')`,
+    );
+  }
+  if (opts.q !== undefined && opts.q.trim().length > 0) {
+    const pattern = `%${opts.q.trim()}%`;
+    countParams.push(pattern);
+    const idx = countParams.length;
+    countWhere.push(`(
+      r.agent_name ILIKE $${idx}
+      OR r.id ILIKE $${idx}
+      OR EXISTS (
+        SELECT 1 FROM run_events e
+         WHERE e.run_id = r.id
+           AND (e.payload_jsonb::text ILIKE $${idx})
+      )
+    )`);
+  }
+  if (opts.models !== undefined && opts.models.length > 0) {
+    countParams.push([...opts.models]);
+    countWhere.push(
+      `EXISTS (SELECT 1 FROM usage_records u WHERE u.run_id = r.id AND u.model = ANY($${countParams.length}::text[]))`,
+    );
+  }
+  const countHaving: string[] = [];
+  if (opts.costGte !== undefined) {
+    countParams.push(opts.costGte);
+    countHaving.push(`COALESCE(SUM(u.usd), 0) >= $${countParams.length}::numeric`);
+  }
+  if (opts.costLte !== undefined) {
+    countParams.push(opts.costLte);
+    countHaving.push(`COALESCE(SUM(u.usd), 0) <= $${countParams.length}::numeric`);
+  }
+  // SELECT count(*) FROM (filter subquery) — the only portable way to
+  // count rows that pass a HAVING clause across pg / pglite / Neon.
+  const countSql =
+    countHaving.length === 0
+      ? `SELECT COUNT(*)::text AS total FROM runs r WHERE ${countWhere.join(' AND ')}`
+      : `SELECT COUNT(*)::text AS total FROM (
+           SELECT r.id
+             FROM runs r
+             LEFT JOIN usage_records u ON u.run_id = r.id
+            WHERE ${countWhere.join(' AND ')}
+            GROUP BY r.id
+            HAVING ${countHaving.join(' AND ')}
+         ) sub`;
+  const countRes = await db.query<{ total: string }>(countSql, countParams);
+  const total = Number(countRes.rows[0]?.total ?? 0);
+
+  return {
+    runs: rows.map(rowToRunSummary),
+    nextCursor,
+    total,
+  };
+}
+
+// --- wave-13 bulk run actions ----------------------------------------------
+
+export interface BulkRunActionOptions {
+  readonly tenantId: string;
+  readonly runIds: readonly string[];
+  readonly action: 'archive' | 'unarchive' | 'add-tag' | 'remove-tag';
+  readonly tag?: string | undefined;
+}
+
+/**
+ * Apply a bulk action to a set of run ids inside a single tenant. The
+ * SQL is filtered on (id = ANY($ids), tenant_id = $tenant) so a request
+ * carrying ids from another tenant cannot mutate them — the affected
+ * count just stays lower than `runIds.length`.
+ *
+ * Returns the number of rows that actually changed (`< runIds.length`
+ * for ids that were already in the target state).
+ */
+export async function bulkRunAction(
+  db: SqlClient,
+  opts: BulkRunActionOptions,
+): Promise<{ readonly affected: number }> {
+  if (opts.runIds.length === 0) return { affected: 0 };
+  const ids = [...opts.runIds];
+  switch (opts.action) {
+    case 'archive': {
+      const res = await db.query<{ id: string }>(
+        `UPDATE runs SET archived_at = now()
+          WHERE id = ANY($1::text[])
+            AND tenant_id = $2
+            AND archived_at IS NULL
+          RETURNING id`,
+        [ids, opts.tenantId],
+      );
+      return { affected: res.rows.length };
+    }
+    case 'unarchive': {
+      const res = await db.query<{ id: string }>(
+        `UPDATE runs SET archived_at = NULL
+          WHERE id = ANY($1::text[])
+            AND tenant_id = $2
+            AND archived_at IS NOT NULL
+          RETURNING id`,
+        [ids, opts.tenantId],
+      );
+      return { affected: res.rows.length };
+    }
+    case 'add-tag': {
+      if (opts.tag === undefined || opts.tag.length === 0) return { affected: 0 };
+      // `array_append` adds the tag only when it isn't already present
+      // (the `NOT (...)` predicate); idempotent across re-runs.
+      const res = await db.query<{ id: string }>(
+        `UPDATE runs SET tags = array_append(tags, $3)
+          WHERE id = ANY($1::text[])
+            AND tenant_id = $2
+            AND NOT (tags @> ARRAY[$3]::text[])
+          RETURNING id`,
+        [ids, opts.tenantId, opts.tag],
+      );
+      return { affected: res.rows.length };
+    }
+    case 'remove-tag': {
+      if (opts.tag === undefined || opts.tag.length === 0) return { affected: 0 };
+      const res = await db.query<{ id: string }>(
+        `UPDATE runs SET tags = array_remove(tags, $3)
+          WHERE id = ANY($1::text[])
+            AND tenant_id = $2
+            AND tags @> ARRAY[$3]::text[]
+          RETURNING id`,
+        [ids, opts.tenantId, opts.tag],
+      );
+      return { affected: res.rows.length };
+    }
+    default: {
+      const _exhaustive: never = opts.action;
+      void _exhaustive;
+      return { affected: 0 };
+    }
+  }
+}
+
+// --- wave-13 saved views ---------------------------------------------------
+
+export type SavedViewSurfaceLiteral = 'runs' | 'agents' | 'eval' | 'observability';
+
+export interface SavedViewRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly user_id: string;
+  readonly name: string;
+  readonly surface: string;
+  readonly query: unknown;
+  readonly is_shared: boolean;
+  readonly created_at: string | Date;
+  readonly updated_at: string | Date;
+  readonly [k: string]: unknown;
+}
+
+export interface SavedViewProjection {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly surface: SavedViewSurfaceLiteral;
+  readonly query: Record<string, unknown>;
+  readonly isShared: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+function projectSavedView(r: SavedViewRow): SavedViewProjection {
+  let q: Record<string, unknown> = {};
+  const raw = r.query;
+  if (raw !== null && raw !== undefined) {
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed !== null && typeof parsed === 'object') q = parsed as Record<string, unknown>;
+      } catch {
+        q = {};
+      }
+    } else if (typeof raw === 'object') {
+      q = raw as Record<string, unknown>;
+    }
+  }
+  return {
+    id: r.id,
+    userId: r.user_id,
+    name: r.name,
+    surface: r.surface as SavedViewSurfaceLiteral,
+    query: q,
+    isShared: Boolean(r.is_shared),
+    createdAt: toIso(r.created_at),
+    updatedAt: toIso(r.updated_at),
+  };
+}
+
+/**
+ * List saved views visible to (tenantId, userId) on `surface`. Returns
+ * the user's own views plus any shared views from other members of
+ * the same tenant. Ordered by most-recently-updated first.
+ */
+export async function listSavedViews(
+  db: SqlClient,
+  opts: {
+    readonly tenantId: string;
+    readonly userId: string;
+    readonly surface: string;
+  },
+): Promise<readonly SavedViewProjection[]> {
+  const res = await db.query<SavedViewRow>(
+    `SELECT id, tenant_id, user_id, name, surface, query, is_shared, created_at, updated_at
+       FROM saved_views
+      WHERE tenant_id = $1
+        AND surface = $2
+        AND (user_id = $3 OR is_shared = true)
+      ORDER BY updated_at DESC, id DESC`,
+    [opts.tenantId, opts.surface, opts.userId],
+  );
+  return res.rows.map(projectSavedView);
+}
+
+export async function getSavedView(
+  db: SqlClient,
+  opts: { readonly tenantId: string; readonly userId: string; readonly id: string },
+): Promise<SavedViewProjection | null> {
+  const res = await db.query<SavedViewRow>(
+    `SELECT id, tenant_id, user_id, name, surface, query, is_shared, created_at, updated_at
+       FROM saved_views
+      WHERE id = $1
+        AND tenant_id = $2
+        AND (user_id = $3 OR is_shared = true)`,
+    [opts.id, opts.tenantId, opts.userId],
+  );
+  const row = res.rows[0];
+  return row === undefined ? null : projectSavedView(row);
+}
+
+export async function insertSavedView(
+  db: SqlClient,
+  opts: {
+    readonly id: string;
+    readonly tenantId: string;
+    readonly userId: string;
+    readonly name: string;
+    readonly surface: string;
+    readonly query: unknown;
+    readonly isShared: boolean;
+  },
+): Promise<SavedViewProjection> {
+  await db.query(
+    `INSERT INTO saved_views (id, tenant_id, user_id, name, surface, query, is_shared)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+    [
+      opts.id,
+      opts.tenantId,
+      opts.userId,
+      opts.name,
+      opts.surface,
+      JSON.stringify(opts.query ?? {}),
+      opts.isShared,
+    ],
+  );
+  const out = await getSavedView(db, { tenantId: opts.tenantId, userId: opts.userId, id: opts.id });
+  if (out === null) throw new Error('saved view insert did not round-trip');
+  return out;
+}
+
+export interface UpdateSavedViewPatch {
+  readonly name?: string | undefined;
+  readonly query?: unknown;
+  readonly isShared?: boolean | undefined;
+}
+
+export async function updateSavedView(
+  db: SqlClient,
+  opts: {
+    readonly id: string;
+    readonly tenantId: string;
+    readonly userId: string;
+    readonly patch: UpdateSavedViewPatch;
+  },
+): Promise<SavedViewProjection | null> {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  if (opts.patch.name !== undefined) {
+    params.push(opts.patch.name);
+    sets.push(`name = $${params.length}`);
+  }
+  if (opts.patch.query !== undefined) {
+    params.push(JSON.stringify(opts.patch.query));
+    sets.push(`query = $${params.length}::jsonb`);
+  }
+  if (opts.patch.isShared !== undefined) {
+    params.push(opts.patch.isShared);
+    sets.push(`is_shared = $${params.length}`);
+  }
+  if (sets.length === 0) {
+    return getSavedView(db, { tenantId: opts.tenantId, userId: opts.userId, id: opts.id });
+  }
+  sets.push('updated_at = now()');
+  params.push(opts.id);
+  const idIdx = params.length;
+  params.push(opts.tenantId);
+  const tenantIdx = params.length;
+  params.push(opts.userId);
+  const userIdx = params.length;
+  // Only the OWNER can update — the shared flag exposes views read-only
+  // to other tenant members.
+  await db.query(
+    `UPDATE saved_views
+        SET ${sets.join(', ')}
+      WHERE id = $${idIdx}
+        AND tenant_id = $${tenantIdx}
+        AND user_id = $${userIdx}`,
+    params,
+  );
+  return getSavedView(db, { tenantId: opts.tenantId, userId: opts.userId, id: opts.id });
+}
+
+export async function deleteSavedView(
+  db: SqlClient,
+  opts: { readonly tenantId: string; readonly userId: string; readonly id: string },
+): Promise<boolean> {
+  const res = await db.query<{ id: string }>(
+    `DELETE FROM saved_views
+      WHERE id = $1
+        AND tenant_id = $2
+        AND user_id = $3
+      RETURNING id`,
+    [opts.id, opts.tenantId, opts.userId],
+  );
+  return res.rows.length > 0;
+}
 
 /**
  * Resolve the root run id for `id`. A run with `parent_run_id = NULL` is

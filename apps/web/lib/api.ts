@@ -17,26 +17,39 @@ import {
   AuthSessionResponse,
   type BillingUsagePeriod,
   BillingUsageResponse,
+  type BulkRunActionRequest,
+  BulkRunActionResponse,
   CheckAgentResponse,
   type CheckoutRequest,
   CheckoutResponse,
+  type CreateSavedViewRequest,
   DesignPartnerApplication,
   GetAgentResponse,
   GetRunResponse,
   GetRunTreeResponse,
   GetSubscriptionResponse,
+  ListActivityResponse,
   type ListAgentsQuery,
   ListAgentsResponse,
   ListDesignPartnerApplicationsResponse,
   ListModelsResponse,
+  ListNotificationsResponse,
   type ListRunsQuery,
   ListRunsResponse,
+  ListSavedViewsResponse,
   ListSecretsResponse,
   type LoginRequest,
+  MarkAllNotificationsReadResponse,
+  MarkNotificationReadResponse,
   type ObservabilityPeriod,
   ObservabilitySummary,
   type PortalRequest,
   PortalResponse,
+  RunCompareResponse,
+  type RunSearchRequest,
+  RunSearchResponse,
+  SavedView,
+  type SavedViewSurface,
   type SavingsPeriod,
   SavingsResponse,
   type SetSecretRequest,
@@ -45,6 +58,7 @@ import {
   type SwitchTenantRequest,
   SwitchTenantResponse,
   type UpdateDesignPartnerApplicationRequest,
+  type UpdateSavedViewRequest,
 } from '@aldo-ai/api-contract';
 import type { z } from 'zod';
 
@@ -265,6 +279,103 @@ export function getRun(id: string) {
  */
 export function getRunTree(rootRunId: string) {
   return request(`/v1/runs/${encodeURIComponent(rootRunId)}/tree`, GetRunTreeResponse);
+}
+
+/**
+ * `GET /v1/runs/compare?a=&b=` — wave-13 convenience endpoint.
+ *
+ * Returns both runs (full detail) + a server-derived diff in a single
+ * round-trip so the comparison view doesn't fan out four parallel
+ * calls. Both ids must belong to the caller's tenant; an unknown id
+ * returns 404 with the standard envelope.
+ */
+export function compareRuns(a: string, b: string) {
+  return request('/v1/runs/compare', RunCompareResponse, { query: { a, b } });
+}
+
+/**
+ * Wave-13 — `GET /v1/runs/search` — full-text + multi-faceted search.
+ *
+ * Multi-value filter keys (`status`, `agent`, `model`, `tag`) accept
+ * a string[] and we serialise them as comma-separated values
+ * (compact + the API parses both forms). Returns the same
+ * RunSummary[] shape plus a `total` count over the current tenant.
+ */
+export function searchRuns(
+  query: Partial<RunSearchRequest> & { cursor?: string; limit?: number } = {},
+) {
+  const flat: Record<string, string | number | undefined> = {};
+  for (const [k, v] of Object.entries(query)) {
+    if (v === undefined) continue;
+    if (Array.isArray(v)) {
+      if (v.length > 0) flat[k] = v.join(',');
+    } else if (typeof v === 'boolean') {
+      flat[k] = String(v);
+    } else if (typeof v === 'number') {
+      flat[k] = v;
+    } else if (typeof v === 'string') {
+      if (v.length > 0) flat[k] = v;
+    }
+  }
+  return request('/v1/runs/search', RunSearchResponse, { query: flat });
+}
+
+/**
+ * Wave-13 — `POST /v1/runs/bulk` — bulk action on a list of run ids.
+ * Single transaction; returns the affected-row count.
+ */
+export function bulkRunAction(req: BulkRunActionRequest) {
+  return request('/v1/runs/bulk', BulkRunActionResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/* ------------------------------- Saved views --------------------------- */
+
+/**
+ * Wave-13 — `GET /v1/views?surface=runs|agents|eval|observability`.
+ *
+ * Tenant + user scoped. Includes both views the caller authored and
+ * shared views from other members of the same tenant.
+ */
+export function listSavedViews(query: { surface: SavedViewSurface }) {
+  return request('/v1/views', ListSavedViewsResponse, { query });
+}
+
+/** Wave-13 — `POST /v1/views` — create a saved view. */
+export function createSavedView(req: CreateSavedViewRequest) {
+  return request('/v1/views', SavedView, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/** Wave-13 — `PATCH /v1/views/:id` — rename / re-save / flip share. */
+export function updateSavedView(id: string, req: UpdateSavedViewRequest) {
+  return request(`/v1/views/${encodeURIComponent(id)}`, SavedView, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/** Wave-13 — `DELETE /v1/views/:id`. Returns void on 204. */
+export async function deleteSavedView(id: string): Promise<void> {
+  const url = buildUrl(`/v1/views/${encodeURIComponent(id)}`);
+  const headers = await buildRequestHeaders(undefined);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers,
+    cache: 'no-store',
+    credentials: typeof window === 'undefined' ? 'omit' : 'include',
+  });
+  if (res.status === 204) return;
+  if (!res.ok) {
+    throw new ApiClientError(res.status >= 500 ? 'http_5xx' : 'http_4xx', `HTTP ${res.status}`);
+  }
 }
 
 /* ------------------------------- Agents --------------------------------- */
@@ -544,4 +655,60 @@ export async function logout(): Promise<void> {
     // cookie clear in `clearSession()` is what actually matters for the
     // user.
   }
+}
+
+/* ---------------------------- Notifications ---------------------------- */
+
+/**
+ * `GET /v1/notifications` — wave-13 bell-popover + /notifications page.
+ * Pagination is intentionally limited (max 100 per call); the page
+ * doesn't need a cursor — older rows are reachable via /activity if
+ * the user wants the full history.
+ */
+export function listNotificationsApi(
+  query: { unreadOnly?: boolean; kind?: string; limit?: number } = {},
+) {
+  const q: Record<string, string | number | undefined> = {};
+  if (query.unreadOnly !== undefined) q.unreadOnly = query.unreadOnly ? 'true' : 'false';
+  if (query.kind !== undefined) q.kind = query.kind;
+  if (query.limit !== undefined) q.limit = query.limit;
+  return request('/v1/notifications', ListNotificationsResponse, { query: q });
+}
+
+export function markNotificationReadApi(id: string) {
+  return request(
+    `/v1/notifications/${encodeURIComponent(id)}/mark-read`,
+    MarkNotificationReadResponse,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function markAllNotificationsReadApi() {
+  return request('/v1/notifications/mark-all-read', MarkAllNotificationsReadResponse, {
+    method: 'POST',
+  });
+}
+
+/* ----------------------------- Activity feed --------------------------- */
+
+export function listActivityApi(
+  query: {
+    actorUserId?: string;
+    verb?: string;
+    since?: string;
+    until?: string;
+    cursor?: string;
+    limit?: number;
+  } = {},
+) {
+  const q: Record<string, string | number | undefined> = {};
+  if (query.actorUserId !== undefined) q.actorUserId = query.actorUserId;
+  if (query.verb !== undefined) q.verb = query.verb;
+  if (query.since !== undefined) q.since = query.since;
+  if (query.until !== undefined) q.until = query.until;
+  if (query.cursor !== undefined) q.cursor = query.cursor;
+  if (query.limit !== undefined) q.limit = query.limit;
+  return request('/v1/activity', ListActivityResponse, { query: q });
 }

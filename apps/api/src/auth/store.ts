@@ -86,11 +86,12 @@ function toIso(v: unknown): string {
 }
 
 function toRole(v: unknown): TenantRole {
-  if (v === 'owner' || v === 'admin' || v === 'member') return v;
-  // Default to member if we ever see something unexpected — fail closed
+  if (v === 'owner' || v === 'admin' || v === 'member' || v === 'viewer') return v;
+  // Default to viewer if we ever see something unexpected — fail closed
   // (a malformed role row shouldn't crash the response, but it also
-  // shouldn't grant elevated privileges).
-  return 'member';
+  // shouldn't grant elevated privileges; viewer is the least-privileged
+  // role and matches the wave-13 brief's RBAC ladder).
+  return 'viewer';
 }
 
 /** Look up a user by email. Returns the password hash (call site only). */

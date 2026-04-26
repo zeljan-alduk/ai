@@ -92,13 +92,14 @@ interface AuthSessionPayload {
     readonly id: string;
     readonly slug: string;
     readonly name: string;
-    readonly role: 'owner' | 'admin' | 'member';
+    // Wave-13: TenantRole now includes 'viewer'.
+    readonly role: 'owner' | 'admin' | 'member' | 'viewer';
   };
   readonly memberships: readonly {
     readonly tenantId: string;
     readonly tenantSlug: string;
     readonly tenantName: string;
-    readonly role: 'owner' | 'admin' | 'member';
+    readonly role: 'owner' | 'admin' | 'member' | 'viewer';
   }[];
 }
 
@@ -173,6 +174,22 @@ export function authRoutes(deps: AuthRoutesDeps): Hono {
       { nowSeconds: now() },
     );
     const memberships = await listMemberships(deps.db, created.user.id);
+    // Wave 13: audit signup (best-effort). We can't go through
+    // `recordAudit(c)` here because the request hasn't been stamped
+    // with `auth` yet — we synthesise the row directly.
+    void writeAuthAudit(
+      deps.db,
+      c,
+      created.tenant.id,
+      created.user.id,
+      'auth.signup',
+      'user',
+      created.user.id,
+      {
+        email: created.user.email,
+        tenantSlug: created.tenant.slug,
+      },
+    );
     const body: AuthSessionPayload = {
       token,
       expiresIn: tokenTtlSeconds(),
@@ -225,6 +242,10 @@ export function authRoutes(deps: AuthRoutesDeps): Hono {
       role: primary.role,
     };
     const token = await signSessionToken(claims, deps.signingKey, { nowSeconds: now() });
+    void writeAuthAudit(deps.db, c, primary.tenantId, user.id, 'auth.login', 'user', user.id, {
+      email: user.email,
+      tenantSlug: primary.tenantSlug,
+    });
     const body: AuthSessionPayload = {
       token,
       expiresIn: tokenTtlSeconds(),
@@ -360,3 +381,46 @@ async function safeJson(req: Request): Promise<unknown> {
 // Re-export the SessionAuth type so route factories importing this
 // module don't need a second import.
 export type { SessionAuth };
+
+/**
+ * Best-effort audit row writer used inside auth routes BEFORE the
+ * bearer-token middleware has stamped a session — we synthesise the
+ * actor from the just-issued token's claims. Failures are logged to
+ * stderr and swallowed (an audit-write failure must never regress an
+ * auth flow).
+ */
+async function writeAuthAudit(
+  db: SqlClient,
+  c: import('hono').Context,
+  tenantId: string,
+  userId: string,
+  verb: string,
+  objectKind: string,
+  objectId: string | null,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const ip =
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? null;
+    const ua = c.req.header('user-agent') ?? null;
+    const { randomUUID } = await import('node:crypto');
+    await db.query(
+      `INSERT INTO audit_log
+         (id, tenant_id, actor_user_id, verb, object_kind, object_id, ip, user_agent, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+      [
+        randomUUID(),
+        tenantId,
+        userId,
+        verb,
+        objectKind,
+        objectId,
+        ip,
+        ua,
+        JSON.stringify(metadata),
+      ],
+    );
+  } catch (err) {
+    process.stderr.write(`[audit] auth-route audit failed: ${(err as Error).message}\n`);
+  }
+}

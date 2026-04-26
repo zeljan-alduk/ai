@@ -9,12 +9,16 @@
 
 import { randomUUID } from 'node:crypto';
 import {
+  BulkRunActionRequest,
+  BulkRunActionResponse,
   CreateRunRequest,
   CreateRunResponse,
   GetRunResponse,
   GetRunTreeResponse,
   ListRunsQuery,
   ListRunsResponse,
+  RunSearchRequest,
+  RunSearchResponse,
   type RunTreeNode,
 } from '@aldo-ai/api-contract';
 import { type RegisteredModel, createModelRegistry, createRouter } from '@aldo-ai/gateway';
@@ -28,18 +32,21 @@ import type {
 } from '@aldo-ai/types';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { getAuth } from '../auth/middleware.js';
+import { getAuth, requireRole, requireScope } from '../auth/middleware.js';
 import {
   DEPTH_OVERFLOW_ID,
+  bulkRunAction,
   decodeCursor,
   getRun,
   listRunSubtree,
   listRuns,
   projectSubtreeRow,
   resolveRunRoot,
+  searchRuns,
 } from '../db.js';
 import type { Deps } from '../deps.js';
 import { HttpError, notFound, validationError } from '../middleware/error.js';
+import { emitActivity } from '../notifications.js';
 import { loadModelCatalog } from './models.js';
 
 const RunIdParam = z.object({ id: z.string().min(1) });
@@ -63,6 +70,11 @@ export function runsRoutes(deps: Deps): Hono {
    * over without re-deciding privacy.
    */
   app.post('/v1/runs', async (c) => {
+    // Wave-13 RBAC + scope gates. Viewers cannot kick off runs;
+    // member is the lowest role with `runs:write`. API keys are
+    // additionally gated through requireScope.
+    requireRole(c, 'member');
+    requireScope(c, 'runs:write');
     let raw: unknown;
     try {
       raw = await c.req.json();
@@ -128,6 +140,21 @@ export function runsRoutes(deps: Deps): Hono {
     }
     const id = `run_${randomUUID()}`;
     const startedAt = new Date().toISOString();
+    // Wave-13 — activity feed entry. Best-effort; a failure here must
+    // never block the run from being created. The engine's
+    // NotificationSink takes over for terminal lifecycle events.
+    await emitActivity(deps.db, {
+      tenantId: getAuth(c).tenantId,
+      actorUserId: getAuth(c).userId,
+      verb: 'ran',
+      objectKind: 'agent',
+      objectId: spec.identity.name,
+      metadata: {
+        agentName: spec.identity.name,
+        agentVersion: spec.identity.version,
+        runId: id,
+      },
+    }).catch((err) => console.error('[notifications] emitActivity failed', err));
     const body = CreateRunResponse.parse({
       run: {
         id,
@@ -165,6 +192,117 @@ export function runsRoutes(deps: Deps): Hono {
       meta: { nextCursor: result.nextCursor, hasMore: result.hasMore },
     });
     return c.json(body);
+  });
+
+  /**
+   * `GET /v1/runs/search` — Wave-13 full-text + multi-faceted search.
+   *
+   * Tenant-scoped. Accepts repeated `status=...` / `agent=...` / `model=...`
+   * params, comma-separated lists, or a single string with newline
+   * separators (Hono's default for repeated params). Returns the same
+   * `RunSummary[]` shape as `/v1/runs` plus an exact `total` count over
+   * the current tenant.
+   *
+   * MVP: ILIKE-based substring scan over agent_name + run id + the
+   * JSON-serialised event payload text. Upgrade path:
+   *   - Add a `pg_trgm` GIN index on `runs(agent_name)` and a separate
+   *     GIN on `(run_events.payload_jsonb)` once a tenant accumulates
+   *     enough events that this scan dominates request latency.
+   *   - The same query interface (the Zod schema) stays stable across
+   *     the upgrade — only this function's body changes.
+   *
+   * LLM-agnostic: all filter values are opaque strings; the route never
+   * branches on a specific provider name.
+   */
+  app.get('/v1/runs/search', async (c) => {
+    const url = new URL(c.req.url);
+    const sp = url.searchParams;
+    // Hono's `searchParams.getAll(...)` returns repeated params as an
+    // array; comma-separated values are normalised inside the schema.
+    const raw: Record<string, unknown> = {};
+    for (const [k] of sp.entries()) {
+      const all = sp.getAll(k);
+      raw[k] = all.length > 1 ? all : all[0];
+    }
+    const parsed = RunSearchRequest.safeParse(raw);
+    if (!parsed.success) {
+      throw validationError('invalid runs.search query', parsed.error.issues);
+    }
+    const tenantId = getAuth(c).tenantId;
+    const cursor = parsed.data.cursor !== undefined ? decodeCursor(parsed.data.cursor) : undefined;
+    if (parsed.data.cursor !== undefined && cursor === null) {
+      throw validationError('invalid cursor');
+    }
+    const result = await searchRuns(deps.db, {
+      tenantId,
+      ...(parsed.data.q !== undefined ? { q: parsed.data.q } : {}),
+      ...(parsed.data.status !== undefined ? { statuses: parsed.data.status } : {}),
+      ...(parsed.data.agent !== undefined ? { agents: parsed.data.agent } : {}),
+      ...(parsed.data.model !== undefined ? { models: parsed.data.model } : {}),
+      ...(parsed.data.tag !== undefined ? { tags: parsed.data.tag } : {}),
+      ...(parsed.data.cost_gte !== undefined ? { costGte: parsed.data.cost_gte } : {}),
+      ...(parsed.data.cost_lte !== undefined ? { costLte: parsed.data.cost_lte } : {}),
+      ...(parsed.data.duration_gte !== undefined ? { durationGte: parsed.data.duration_gte } : {}),
+      ...(parsed.data.duration_lte !== undefined ? { durationLte: parsed.data.duration_lte } : {}),
+      ...(parsed.data.started_after !== undefined
+        ? { startedAfter: parsed.data.started_after }
+        : {}),
+      ...(parsed.data.started_before !== undefined
+        ? { startedBefore: parsed.data.started_before }
+        : {}),
+      ...(parsed.data.has_children !== undefined ? { hasChildren: parsed.data.has_children } : {}),
+      ...(parsed.data.has_failed_event !== undefined
+        ? { hasFailedEvent: parsed.data.has_failed_event }
+        : {}),
+      ...(parsed.data.include_archived !== undefined
+        ? { includeArchived: parsed.data.include_archived }
+        : {}),
+      limit: parsed.data.limit,
+      ...(cursor !== undefined && cursor !== null ? { cursor } : {}),
+    });
+    const body = RunSearchResponse.parse({
+      runs: result.runs,
+      nextCursor: result.nextCursor,
+      total: result.total,
+    });
+    return c.json(body);
+  });
+
+  /**
+   * `POST /v1/runs/bulk` — Wave-13 bulk actions on a list of run ids.
+   *
+   * Single transaction: all rows mutate or none do (Postgres holds a
+   * row-level lock per matching row). Cross-tenant ids in the
+   * `runIds[]` payload silently no-op — the SQL filter on
+   * `tenant_id = $auth_tenant` never lets them mutate. Returns the
+   * affected-row count so the UI can render "Archived 3 runs (2
+   * already archived, skipped)".
+   */
+  app.post('/v1/runs/bulk', async (c) => {
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      throw validationError('request body must be JSON');
+    }
+    const parsed = BulkRunActionRequest.safeParse(raw);
+    if (!parsed.success) {
+      throw validationError('invalid runs.bulk body', parsed.error.issues);
+    }
+    if (
+      (parsed.data.action === 'add-tag' || parsed.data.action === 'remove-tag') &&
+      (parsed.data.tag === undefined || parsed.data.tag.trim().length === 0)
+    ) {
+      throw validationError(`action '${parsed.data.action}' requires a non-empty tag`);
+    }
+    const tenantId = getAuth(c).tenantId;
+    const result = await bulkRunAction(deps.db, {
+      tenantId,
+      runIds: parsed.data.runIds,
+      action: parsed.data.action,
+      ...(parsed.data.tag !== undefined ? { tag: parsed.data.tag } : {}),
+    });
+    return c.json(BulkRunActionResponse.parse({ affected: result.affected }));
   });
 
   /**

@@ -19,6 +19,7 @@ import { type InternalAgentRun, LeafAgentRun, type SecretArgResolver } from './a
 import { type Checkpointer, InMemoryCheckpointer } from './checkpointer/index.js';
 import type { BreakpointStore } from './debugger/breakpoint-store.js';
 import type { PauseController } from './debugger/pause-controller.js';
+import type { NotificationSink } from './notification-sink.js';
 import type { RunStore } from './stores/postgres-run-store.js';
 
 /**
@@ -120,6 +121,12 @@ export interface RuntimeDeps {
    * single-agent run, which is wrong.
    */
   readonly orchestrator?: CompositeOrchestrator;
+  /**
+   * Wave-13: optional notification sink threaded through to every
+   * `LeafAgentRun.deps`. When unset, notifications stay disabled.
+   * Production wires `PostgresNotificationSink`.
+   */
+  readonly notificationSink?: NotificationSink;
 }
 
 /**
@@ -301,6 +308,7 @@ export class PlatformRuntime implements Runtime {
   private readonly secretResolver: SecretArgResolver | undefined;
   private readonly sandbox: SandboxRunner | undefined;
   private readonly orchestrator: CompositeOrchestrator | undefined;
+  private readonly notificationSink: NotificationSink | undefined;
 
   constructor(deps: RuntimeDeps) {
     this.modelGateway = deps.modelGateway;
@@ -315,6 +323,7 @@ export class PlatformRuntime implements Runtime {
     this.secretResolver = deps.secretResolver;
     this.sandbox = deps.sandbox;
     this.orchestrator = deps.orchestrator;
+    this.notificationSink = deps.notificationSink;
   }
 
   /**
@@ -421,6 +430,7 @@ export class PlatformRuntime implements Runtime {
         ...(this.runStore !== undefined ? { runStore: this.runStore } : {}),
         ...(this.secretResolver !== undefined ? { secretResolver: this.secretResolver } : {}),
         ...(this.sandbox !== undefined ? { sandbox: this.sandbox } : {}),
+        ...(this.notificationSink !== undefined ? { notificationSink: this.notificationSink } : {}),
       },
     );
     this.runs.set(id, run);

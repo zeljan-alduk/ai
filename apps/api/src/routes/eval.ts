@@ -54,7 +54,9 @@ import {
 // Re-export the engineer-A surface so tests + future integrations can
 // import from the same module they import the route factory from.
 export type { PromotionGate, PromotionGateReport, SweepRunner, SweepStore };
+import { getAuth } from '../auth/middleware.js';
 import { HttpError, notFound, validationError } from '../middleware/error.js';
+import { emitActivity, emitNotification } from '../notifications.js';
 
 // ---------------------------------------------------------------------------
 // Eval deps — injected by the app builder, swappable in tests.
@@ -211,7 +213,27 @@ export function evalRoutes(deps: Deps, opts: EvalRouteOptions = {}): Hono {
       startedAt,
     });
 
-    evalDeps.scheduleSweep(() => runSweep(evalDeps, sweepId, suite, req.models));
+    // Wave-13 — capture caller for the sweep_completed notification.
+    const auth = getAuth(c);
+    await emitActivity(deps.db, {
+      tenantId: auth.tenantId,
+      actorUserId: auth.userId,
+      verb: 'started_sweep',
+      objectKind: 'sweep',
+      objectId: sweepId,
+      metadata: {
+        suiteName: suite.name,
+        suiteVersion: suite.version,
+        agentName: suite.agent,
+      },
+    }).catch((err) => console.error('[notifications] emitActivity failed', err));
+    evalDeps.scheduleSweep(() =>
+      runSweep(evalDeps, sweepId, suite, req.models, {
+        db: deps.db,
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+      }),
+    );
 
     const body = StartSweepResponse.parse({ sweepId });
     return c.json(body);
@@ -312,19 +334,51 @@ async function runSweep(
   sweepId: string,
   suite: EvalSuite,
   models: readonly string[],
+  notifyCtx?: {
+    readonly db: import('@aldo-ai/storage').SqlClient;
+    readonly tenantId: string;
+    readonly userId: string;
+  },
 ): Promise<void> {
   // Move queued -> running so callers polling the detail endpoint can
   // distinguish "not started" from "in flight".
   await evalDeps.store.updateSweepStatus(sweepId, 'running', null);
+  let finalStatus: 'completed' | 'failed';
   try {
     const cells = await evalDeps.runner.run(suite, models);
     await evalDeps.store.putCells(sweepId, cells);
     await evalDeps.store.updateSweepStatus(sweepId, 'completed', evalDeps.now().toISOString());
+    finalStatus = 'completed';
   } catch {
     // Engineer A's runner is responsible for surfacing fine-grained
     // cell-level failures; if it throws outright, we mark the sweep
     // failed so the UI doesn't hang on a "running" row.
     await evalDeps.store.updateSweepStatus(sweepId, 'failed', evalDeps.now().toISOString());
+    finalStatus = 'failed';
+  }
+  // Wave-13 — fire a `sweep_completed` notification. We use the same
+  // kind for failed sweeps; the body text says which one. Best-effort.
+  if (notifyCtx) {
+    try {
+      await emitNotification(notifyCtx.db, {
+        tenantId: notifyCtx.tenantId,
+        userId: notifyCtx.userId,
+        kind: 'sweep_completed',
+        title: `Sweep ${finalStatus === 'completed' ? 'completed' : 'failed'}: ${suite.name}`,
+        body: `Sweep ${sweepId.slice(0, 12)} for suite ${suite.name}@${suite.version} ${
+          finalStatus === 'completed' ? 'completed' : 'failed'
+        }.`,
+        link: `/eval/sweeps/${sweepId}`,
+        metadata: {
+          sweepId,
+          suiteName: suite.name,
+          suiteVersion: suite.version,
+          status: finalStatus,
+        },
+      });
+    } catch (err) {
+      console.error('[notifications] sweep emitNotification failed', err);
+    }
   }
 }
 

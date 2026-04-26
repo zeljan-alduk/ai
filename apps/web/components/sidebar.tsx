@@ -1,6 +1,7 @@
 'use client';
 
 import { logoutAction } from '@/app/(auth)/actions';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { switchTenantAction } from '@/components/sidebar-actions';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -8,6 +9,11 @@ import { useState } from 'react';
 
 const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => boolean }> = [
   { href: '/runs', label: 'Runs', match: (p) => p === '/runs' || p.startsWith('/runs/') },
+  {
+    href: '/playground',
+    label: 'Playground',
+    match: (p) => p === '/playground' || p.startsWith('/playground/'),
+  },
   { href: '/agents', label: 'Agents', match: (p) => p === '/agents' || p.startsWith('/agents/') },
   {
     href: '/secrets',
@@ -20,12 +26,23 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     label: 'Observability',
     match: (p) => p === '/observability' || p.startsWith('/observability/'),
   },
+  // Wave-13 — between Observability and Billing per the brief.
+  {
+    href: '/activity',
+    label: 'Activity',
+    match: (p) => p === '/activity' || p.startsWith('/activity/'),
+  },
   {
     href: '/billing',
     label: 'Billing',
     match: (p) => p === '/billing' || p.startsWith('/billing/'),
   },
   { href: '/eval', label: 'Eval', match: (p) => p === '/eval' || p.startsWith('/eval/') },
+  {
+    href: '/settings',
+    label: 'Settings',
+    match: (p) => p === '/settings' || p.startsWith('/settings/'),
+  },
   { href: '/docs', label: 'Docs', match: (p) => p.startsWith('/docs') },
 ];
 
@@ -44,15 +61,20 @@ export function Sidebar({ user }: { user: SidebarUser | null }) {
   const runMatch = RUN_DETAIL_RE.exec(pathname);
   const runId = runMatch?.[1] ? decodeURIComponent(runMatch[1]) : null;
   const onDebug = runId ? pathname === `/runs/${encodeURIComponent(runId)}/debug` : false;
+  const onLive = runId ? pathname === `/runs/${encodeURIComponent(runId)}/live` : false;
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
       <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-200">
         <div className="h-6 w-6 rounded bg-slate-900" aria-hidden />
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold leading-tight text-slate-900">ALDO AI</div>
           <div className="text-[11px] uppercase tracking-wider text-slate-500">control plane</div>
         </div>
+        {/* Wave-13 notification bell. Visible only when a session is in
+            play — the chrome-suppressed routes (auth + marketing)
+            never render this sidebar. */}
+        {user ? <NotificationBell /> : null}
       </div>
       <nav className="flex flex-col gap-0.5 p-2">
         {NAV.map((item) => {
@@ -83,6 +105,14 @@ export function Sidebar({ user }: { user: SidebarUser | null }) {
               }`}
             >
               Detail
+            </Link>
+            <Link
+              href={`/runs/${encodeURIComponent(runId)}/live`}
+              className={`rounded px-3 py-1.5 text-xs transition-colors ${
+                onLive ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Live
             </Link>
             <Link
               href={`/runs/${encodeURIComponent(runId)}/debug`}

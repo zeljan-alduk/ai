@@ -12,6 +12,8 @@
 
 export * from './common.js';
 export * from './runs.js';
+export * from './runs-compare.js';
+export * from './playground.js';
 export * from './agents.js';
 export * from './models.js';
 export * from './debugger.js';
@@ -20,3 +22,6 @@ export * from './secrets.js';
 export * from './auth.js';
 export * from './design-partners.js';
 export * from './billing.js';
+export * from './views.js';
+export * from './admin.js';
+export * from './notifications.js';

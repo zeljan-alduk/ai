@@ -29,7 +29,8 @@ import {
 import type { SecretStore } from '@aldo-ai/secrets';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { getAuth } from '../auth/middleware.js';
+import { recordAudit } from '../auth/audit.js';
+import { getAuth, requireRole, requireScope } from '../auth/middleware.js';
 import type { Deps } from '../deps.js';
 import { notFound, validationError } from '../middleware/error.js';
 
@@ -43,6 +44,7 @@ export function secretsRoutes(deps: Deps): Hono {
   const app = new Hono();
 
   app.get('/v1/secrets', async (c) => {
+    requireScope(c, 'secrets:read');
     const store = requireStore(deps);
     const tenantId = getAuth(c).tenantId;
     const summaries = await store.list(tenantId);
@@ -53,6 +55,9 @@ export function secretsRoutes(deps: Deps): Hono {
   });
 
   app.post('/v1/secrets', async (c) => {
+    // Wave-13: viewer role is read-only across the platform.
+    requireRole(c, 'member');
+    requireScope(c, 'secrets:write');
     const store = requireStore(deps);
     const tenantId = getAuth(c).tenantId;
     const raw = await safeJson(c.req.raw);
@@ -61,11 +66,19 @@ export function secretsRoutes(deps: Deps): Hono {
       throw validationError('invalid secret payload', parsed.error.issues);
     }
     const summary = await store.set(tenantId, parsed.data.name, parsed.data.value);
+    await recordAudit(deps.db, c, {
+      verb: 'secret.set',
+      objectKind: 'secret',
+      objectId: parsed.data.name,
+      metadata: { fingerprint: summary.fingerprint },
+    });
     const body = SetSecretResponse.parse(toWireSummary(summary));
     return c.json(body);
   });
 
   app.delete('/v1/secrets/:name', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'secrets:write');
     const store = requireStore(deps);
     const tenantId = getAuth(c).tenantId;
     const parsed = SecretNameParam.safeParse({ name: c.req.param('name') });
@@ -81,6 +94,11 @@ export function secretsRoutes(deps: Deps): Hono {
       // tenant" because the WHERE clause filters on tenant_id.
       throw notFound(`secret not found: ${parsed.data.name}`);
     }
+    await recordAudit(deps.db, c, {
+      verb: 'secret.delete',
+      objectKind: 'secret',
+      objectId: parsed.data.name,
+    });
     return c.body(null, 204);
   });
 

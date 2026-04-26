@@ -17,6 +17,7 @@ export * from './badge';
 export * from './button';
 export * from './card';
 export * from './chart-container';
+export * from './checkbox';
 export * from './command-palette';
 export * from './data-table';
 export * from './dialog';

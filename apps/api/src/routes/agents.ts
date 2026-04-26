@@ -64,7 +64,8 @@ import type {
 } from '@aldo-ai/types';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { getAuth } from '../auth/middleware.js';
+import { recordAudit } from '../auth/audit.js';
+import { getAuth, requireRole, requireScope } from '../auth/middleware.js';
 import type { Deps, Env } from '../deps.js';
 import { notFound, validationError } from '../middleware/error.js';
 import { loadModelCatalog } from './models.js';
@@ -122,6 +123,9 @@ export function agentsRoutes(deps: Deps): Hono {
   // validation; the route forwards the spec verbatim into the store.
   // ------------------------------------------------------------------
   app.post('/v1/agents', async (c) => {
+    // Wave-13: viewer is read-only; require member or higher.
+    requireRole(c, 'member');
+    requireScope(c, 'agents:write');
     const tenantId = getAuth(c).tenantId;
     const yamlText = await readAgentBody(c.req);
     if (yamlText === null) {
@@ -133,6 +137,12 @@ export function agentsRoutes(deps: Deps): Hono {
     }
     const spec = res.spec;
     const stored = await deps.agentStore.register(tenantId, spec, yamlText);
+    await recordAudit(deps.db, c, {
+      verb: 'agent.register',
+      objectKind: 'agent',
+      objectId: stored.name,
+      metadata: { version: stored.version },
+    });
     const body = RegisterAgentResponse.parse({
       agent: {
         name: stored.name,

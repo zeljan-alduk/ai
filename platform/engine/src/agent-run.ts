@@ -27,6 +27,7 @@ import type { Checkpoint, Checkpointer } from './checkpointer/index.js';
 import type { Breakpoint, BreakpointKind, BreakpointStore } from './debugger/breakpoint-store.js';
 import { rewriteCheckpoint } from './debugger/edit-and-resume.js';
 import type { PauseController } from './debugger/pause-controller.js';
+import type { NotificationSink } from './notification-sink.js';
 import type { RunStore } from './stores/postgres-run-store.js';
 
 /**
@@ -65,6 +66,21 @@ export interface AgentRunDeps {
    * `SandboxRunner` (in-process driver, no real isolation).
    */
   readonly sandbox?: SandboxRunner;
+  /**
+   * Wave-13 — optional notification sink. Fired on terminal run events
+   * (run.completed / error / cancelled) and on guard blocks. Absent ⇒
+   * notifications stay disabled for this run; the runtime never
+   * fabricates one. Production wires `PostgresNotificationSink` from
+   * apps/api; tests pass a capturing in-memory implementation.
+   */
+  readonly notificationSink?: NotificationSink;
+  /**
+   * Wave-13 — optional id of the user who owns this run, threaded
+   * through to the notification sink so the bell-popover only shows
+   * the row to its requester. Composite-child runs can leave this
+   * unset; the sink falls back to a tenant-wide notification.
+   */
+  readonly ownerUserId?: string | null;
 }
 
 /**
@@ -726,6 +742,65 @@ export class LeafAgentRun implements InternalAgentRun {
         void this.deps.runStore.recordRunEnd({ runId: this.id, status: 'failed' });
       }
     }
+    // Wave-13 — side-channel notifications. Fire-and-forget; the sink
+    // is contractually allowed to throw and we swallow so a bad
+    // notification path can never break the run loop.
+    if (this.deps.notificationSink) {
+      const sink = this.deps.notificationSink;
+      const ownerUserId = this.deps.ownerUserId ?? null;
+      const link = `/runs/${this.id}`;
+      const baseMeta = {
+        runId: this.id,
+        agentName: this.ref.name,
+        agentVersion: this.ref.version ?? null,
+      };
+      if (e.type === 'run.completed') {
+        void sink
+          .emit({
+            tenantId: this.tenant,
+            userId: ownerUserId,
+            kind: 'run_completed',
+            title: `Run completed: ${this.ref.name}`,
+            body: `Run ${this.id.slice(0, 12)} for agent ${this.ref.name} finished successfully.`,
+            link,
+            metadata: baseMeta,
+          })
+          .catch(() => undefined);
+      } else if (e.type === 'error') {
+        const reason = readErrorReason(e.payload);
+        void sink
+          .emit({
+            tenantId: this.tenant,
+            userId: ownerUserId,
+            kind: 'run_failed',
+            title: `Run failed: ${this.ref.name}`,
+            body: `Run ${this.id.slice(0, 12)} failed${reason ? `: ${reason}` : '.'}`,
+            link,
+            metadata: { ...baseMeta, ...(reason ? { reason } : {}) },
+          })
+          .catch(() => undefined);
+      } else if (e.type === 'tool_result') {
+        // Wave-7 guards/sandbox blocks surface here as a tool_result
+        // with `ok: false`. Surface the most actionable ones (guards
+        // output_scanner / quarantine) as a `guards_blocked`
+        // notification — sandbox blocks are noisier and stay in the
+        // observability feed only.
+        const guardsReason = readGuardsReason(e.payload);
+        if (guardsReason !== null) {
+          void sink
+            .emit({
+              tenantId: this.tenant,
+              userId: ownerUserId,
+              kind: 'guards_blocked',
+              title: `Guards blocked output in ${this.ref.name}`,
+              body: `A guard (${guardsReason}) intercepted output from run ${this.id.slice(0, 12)}.`,
+              link,
+              metadata: { ...baseMeta, reason: guardsReason },
+            })
+            .catch(() => undefined);
+        }
+      }
+    }
     if (this.eventWaiters.length > 0) {
       const waiter = this.eventWaiters.shift();
       waiter?.(e);
@@ -775,6 +850,55 @@ function isSandboxError(err: unknown): err is SandboxError {
     (err as { name?: unknown }).name === 'SandboxError' &&
     typeof (err as { code?: unknown }).code === 'string'
   );
+}
+
+/**
+ * Wave-13 — pull a short reason out of an `error`-typed RunEvent
+ * payload for the run-failed notification body. Defensive against any
+ * shape the engine + downstream nodes may emit.
+ */
+function readErrorReason(payload: unknown): string | null {
+  if (payload === null || payload === undefined) return null;
+  if (typeof payload === 'string') return payload.slice(0, 240);
+  if (typeof payload !== 'object') return null;
+  const p = payload as Record<string, unknown>;
+  for (const k of ['message', 'reason', 'code', 'error']) {
+    const v = p[k];
+    if (typeof v === 'string' && v.length > 0) return v.slice(0, 240);
+    if (v !== null && typeof v === 'object') {
+      const inner = (v as Record<string, unknown>).message;
+      if (typeof inner === 'string') return inner.slice(0, 240);
+    }
+  }
+  return null;
+}
+
+/**
+ * Wave-13 — pull a guards-block reason out of a `tool_result` payload.
+ * Returns null when the payload is a plain (allowed) tool result —
+ * the notification path is gated on this returning non-null.
+ */
+function readGuardsReason(payload: unknown): string | null {
+  if (payload === null || typeof payload !== 'object') return null;
+  const p = payload as Record<string, unknown>;
+  if (p.ok !== false) return null;
+  for (const k of ['guard', 'guardsReason', 'reason']) {
+    const v = p[k];
+    if (typeof v === 'string') {
+      const reason = v.toLowerCase();
+      if (
+        reason === 'output_scanner' ||
+        reason === 'quarantine' ||
+        reason === 'pii_detected' ||
+        reason === 'prompt_injection' ||
+        reason === 'tool_output_too_large' ||
+        reason === 'guard_deny'
+      ) {
+        return reason;
+      }
+    }
+  }
+  return null;
 }
 
 function now(): string {

@@ -21,6 +21,7 @@ import { NeutralBadge, StatusBadge } from '@/components/badge';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorView } from '@/components/error-boundary';
 import { PageHeader } from '@/components/page-header';
+import { CompareWithButton } from '@/components/runs-compare/compare-with-button';
 import { CostBreakdownChart } from '@/components/runs/cost-breakdown-chart';
 import { CostRollupCard } from '@/components/runs/cost-rollup-card';
 import { ReplayScrubber } from '@/components/runs/replay-scrubber';
@@ -32,6 +33,7 @@ import { ApiClientError, getRun, getRunTree } from '@/lib/api';
 import { formatAbsolute, formatDuration, formatRelativeTime, formatUsd } from '@/lib/format';
 import type { RunDetail, RunTreeNode } from '@aldo-ai/api-contract';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +51,15 @@ export default async function RunDetailPage({
     data = await getRun(id);
   } catch (err) {
     error = err;
+  }
+
+  // Wave-13 — auto-redirect to /runs/[id]/live when the run is still
+  // in flight. The live page renders the SSE stream + filter chips;
+  // landing on it directly avoids the "is this still running?"
+  // double-take. Terminal-status runs stay on the detail page (where
+  // the timeline / replay tabs live).
+  if (data !== null && data.run.status === 'running') {
+    redirect(`/runs/${encodeURIComponent(id)}/live`);
   }
 
   if (data !== null) {
@@ -70,12 +81,15 @@ export default async function RunDetailPage({
         title={`Run ${id.slice(0, 12)}`}
         description="Trace, events, and replay. Click any bar to drill into a span."
         actions={
-          <Link
-            href="/runs"
-            className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
-          >
-            Back to runs
-          </Link>
+          <div className="flex items-center gap-2">
+            <CompareWithButton currentRunId={id} />
+            <Link
+              href="/runs"
+              className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
+            >
+              Back to runs
+            </Link>
+          </div>
         }
       />
       {error ? (

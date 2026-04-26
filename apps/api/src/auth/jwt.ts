@@ -31,8 +31,17 @@
 import { randomBytes } from 'node:crypto';
 import { type JWTPayload, SignJWT, errors as joseErrors, jwtVerify } from 'jose';
 
-/** Roles a `tenant_members.role` row can carry. */
-export type TenantRole = 'owner' | 'admin' | 'member';
+/**
+ * Roles a `tenant_members.role` row can carry.
+ *
+ * Wave 13 added `viewer` (read-only). Promotion ladder:
+ *   viewer → member → admin → owner.
+ *
+ * The mutating routes consult `roleAllowsMutation()` (see middleware.ts);
+ * a `viewer` carrying a session JWT is denied with 403 `forbidden` before
+ * the route body runs.
+ */
+export type TenantRole = 'owner' | 'admin' | 'member' | 'viewer';
 
 /** Decoded shape after verification — what the middleware exposes. */
 export interface SessionAuth {
@@ -123,7 +132,7 @@ function narrowClaims(p: JWTPayload): SessionAuth {
     typeof sub !== 'string' ||
     typeof tid !== 'string' ||
     typeof slug !== 'string' ||
-    (role !== 'owner' && role !== 'admin' && role !== 'member')
+    (role !== 'owner' && role !== 'admin' && role !== 'member' && role !== 'viewer')
   ) {
     throw new JwtVerifyError('invalid', 'token claims are malformed');
   }
