@@ -18,7 +18,7 @@
     "@aldo-ai/types": "workspace:*",
     "semver": "^7.6.3",
     "yaml": "^2.6.0",
-    "zod": "^3.23.8"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@electric-sql/pglite": "~0.4.4",

@@ -17,7 +17,7 @@
     "@aldo-ai/sandbox": "workspace:*",
     "@aldo-ai/storage": "workspace:*",
     "@aldo-ai/types": "workspace:*",
-    "zod": "^3.23.8"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@aldo-ai/secrets": "workspace:*",
