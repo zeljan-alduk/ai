@@ -55,7 +55,11 @@ export interface CommandDialogProps {
 export function CommandDialog({ open, onOpenChange, children }: CommandDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-hidden p-0 shadow-2xl">
+      {/* Wave-15E — on small screens the palette becomes a full-screen
+          surface (top-anchored) so result rows and the input have
+          breathing room and 44px touch targets. From `sm:` up we
+          revert to the original centred modal. */}
+      <DialogContent className="left-0 top-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none p-0 shadow-2xl sm:left-1/2 sm:top-1/2 sm:h-auto sm:w-[90vw] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg">
         {/* Title + description are visually hidden but exist for SR. */}
         <DialogTitle className="sr-only">Command palette</DialogTitle>
         <DialogDescription className="sr-only">
@@ -93,7 +97,13 @@ export const CommandList = forwardRef<
 >(({ className, ...props }, ref) => (
   <CommandPrimitive.List
     ref={ref}
-    className={cn('max-h-[360px] overflow-y-auto overflow-x-hidden', className)}
+    className={cn(
+      // Wave-15E — fill the full-screen palette on mobile, but cap at
+      // 360px on `sm:` and above so the centred modal still feels like
+      // a focus target rather than a take-over surface.
+      'max-h-[calc(100vh-3.5rem)] overflow-y-auto overflow-x-hidden sm:max-h-[360px]',
+      className,
+    )}
     {...props}
   />
 ));
@@ -142,7 +152,9 @@ export const CommandItem = forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-sm text-fg outline-none aria-selected:bg-bg-subtle aria-selected:text-fg data-[disabled='true']:pointer-events-none data-[disabled='true']:opacity-50",
+      // Wave-15E — `min-h-touch` (44px) hits the WCAG target-size
+      // floor on phones; `sm:min-h-[36px]` keeps the desktop density.
+      "relative flex min-h-touch cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-sm text-fg outline-none aria-selected:bg-bg-subtle aria-selected:text-fg data-[disabled='true']:pointer-events-none data-[disabled='true']:opacity-50 sm:min-h-[36px]",
       className,
     )}
     {...props}

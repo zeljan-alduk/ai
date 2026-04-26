@@ -67,8 +67,11 @@ export function MarketingTopNav({ initialTheme }: MarketingTopNavProps) {
           ? 'border-b border-border bg-bg-elevated/80 backdrop-blur'
           : 'border-b border-transparent bg-transparent',
       )}
+      // Wave-15E — honor the iPhone notch / status-bar safe-area so
+      // the brand row never sits underneath the system chrome.
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:gap-6 sm:px-6">
         <Link href="/" className="flex items-center gap-2" aria-label="ALDO AI home">
           <Logomark />
           <div className="leading-tight">
@@ -100,7 +103,7 @@ export function MarketingTopNav({ initialTheme }: MarketingTopNavProps) {
           <ThemeToggle initialTheme={initialTheme} />
           <Link
             href="/login"
-            className="hidden rounded-md px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg sm:inline-flex"
+            className="hidden min-h-touch items-center rounded-md px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:inline-flex"
           >
             Log in
           </Link>

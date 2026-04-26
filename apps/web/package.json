@@ -6,10 +6,13 @@
   "description": "ALDO AI control-plane web app (Next.js 15 App Router).",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "pnpm run generate-api-docs && pnpm run build-docs-search-index",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "generate-api-docs": "tsx scripts/generate-api-docs.ts",
+    "build-docs-search-index": "tsx scripts/build-docs-search-index.ts"
   },
   "dependencies": {
     "@aldo-ai/api-contract": "workspace:*",
@@ -29,6 +32,8 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
     "diff": "^9.0.0",
+    "fuse.js": "^7.3.0",
+    "gray-matter": "^4.0.3",
     "isomorphic-dompurify": "^2.16.0",
     "js-yaml": "^4.1.1",
     "lucide-react": "^0.460.0",
@@ -37,6 +42,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.8.1",
+    "shiki": "^4.0.2",
     "tailwind-merge": "^2.5.4",
     "zod": "^3.23.8"
   },

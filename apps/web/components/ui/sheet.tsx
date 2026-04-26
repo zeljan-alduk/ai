@@ -39,11 +39,15 @@ SheetOverlay.displayName = 'SheetOverlay';
 
 export type SheetSide = 'left' | 'right' | 'top' | 'bottom';
 
+// Wave-15E — sheets are full-width up to a point on mobile (so the
+// content has breathing room) and cap at the original 420px from
+// `sm:` and up. Vertical sheets keep their max-height but cap top at
+// 80vh on mobile to not eat the whole screen accidentally.
 const SIDE_CLASSES: Record<SheetSide, string> = {
-  right: 'inset-y-0 right-0 h-full w-[420px] border-l',
-  left: 'inset-y-0 left-0 h-full w-[420px] border-r',
-  top: 'inset-x-0 top-0 w-full max-h-[60vh] border-b',
-  bottom: 'inset-x-0 bottom-0 w-full max-h-[60vh] border-t',
+  right: 'inset-y-0 right-0 h-full w-full max-w-[420px] border-l sm:w-[420px]',
+  left: 'inset-y-0 left-0 h-full w-full max-w-[420px] border-r sm:w-[420px]',
+  top: 'inset-x-0 top-0 w-full max-h-[80vh] border-b sm:max-h-[60vh]',
+  bottom: 'inset-x-0 bottom-0 w-full max-h-[80vh] border-t sm:max-h-[60vh]',
 };
 
 export interface SheetContentProps

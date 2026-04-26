@@ -233,7 +233,7 @@ function TotalsRow({
   period: BillingUsagePeriod;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 xs:grid-cols-2 sm:grid-cols-3">
       <Card>
         <CardContent>
           <div className="text-[11px] uppercase tracking-wider text-slate-500">

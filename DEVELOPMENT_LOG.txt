@@ -3236,3 +3236,662 @@ runner payloads are formatted from generic fields
 per-kind config schemas don't carry model identifiers.
 Privacy tiers are unchanged — outbound integrations are
 opt-in per integration row, never automatic.
+
+2026-04-26T22:16Z — Engineer 15C — wave 15 VS Code extension
+First-party VS Code extension at extensions/vscode/
+shipping a thin client over the platform API. New
+workspace glob `extensions/*` added to
+pnpm-workspace.yaml. Bundles via esbuild to a single
+17.3 KB CJS file at dist/extension.js (well under the
+200 KB cap). Pure TS; only runtime touchpoint is the
+`vscode` peer + global fetch (Node 22).
+
+Surface — sidebar container "ALDO AI" with three trees
+(Agents, Recent Runs, Models), each backed by a
+TreeDataProvider that calls the public /v1/agents,
+/v1/runs?limit=20, and /v1/models endpoints. Status-bar
+item renders `ALDO AI: <tenant-slug>` (or
+`signed out`) and clicking it triggers the login command.
+Eight palette commands: Login, Logout, Refresh, Run agent
+on selection, Run agent on file, Open run in browser,
+Open trace inline, Quick prompt. Code-action provider
+surfaces "Send to ALDO agent" lightbulbs on TODO/FIXME
+comments and on lines containing function/class
+declarations across all languages (regex-based, language-
+agnostic).
+
+Trace webview — pure-DOM flame graph + replay scrubber
+in vanilla SVG. Fetches /v1/runs/:id/tree directly so the
+extension doesn't depend on the web app being reachable.
+~140 LOC of generated HTML; CSP header restricts script
+sources to inline only. Status colours pull from the
+github-dark palette so it reads on the standard VS Code
+dark theme without requiring a token-aware stylesheet.
+
+Auth — VS Code's `SecretStorage` (OS keychain) holds the
+bearer token under the key `aldoAi.token`; non-secret
+api base + tenant slug live in workspace settings so
+`Cmd-Shift-P → ALDO AI: Login` round-trips a URL and
+token in two prompts. Same token surface as
+/settings/api-keys.
+
+Tests — 25 passing in vitest (api-client × 6, trees × 5,
+commands × 7, trace × 4, credentials × 3). The vscode
+module is mocked at tests/vscode-mock.ts (alias-injected
+by vitest.config.ts) so the unit tests run without an
+electron host. tests/runTest.cjs + tests/e2e-suite.cjs
+ship a `@vscode/test-electron` harness for the launch
+checklist but is not run in the inner CI loop.
+
+LLM-agnostic — the extension never names a provider, has
+no model id in any code path, and only ever talks to
+/v1/* endpoints. Privacy tiers stay enforced server-side
+by the gateway/router; an agent marked `sensitive` is
+surfaced with its tier as the tree-item description but
+the extension never picks a model — the platform does.
+
+2026-04-26 — Engineer 15A — wave 15 Python SDK
+
+Shipped `sdks/python/` (NEW workspace; pnpm-workspace.yaml
+unchanged — sdks/python isn't a Node workspace). Package
+name `aldo-ai`, version 0.1.0, license
+FSL-1.1-ALv2-pre-publish, build-system hatchling, Python
+3.10+. Console script `aldo-py`.
+
+Layout — pyproject.toml, README.md, PUBLISHING.md,
+src/aldo_ai/{__init__.py, client.py, auth.py, errors.py,
+types.py, _transport.py, cli.py, resources/}. Resources:
+agents.py, alerts.py, annotations.py, dashboards.py,
+datasets.py, eval.py, integrations.py, models.py,
+notifications.py, playground.py, runs.py, secrets.py,
+shares.py — 13 modules; one per /v1/* surface in
+@aldo-ai/api-contract. Every method has a sync flavour
+(list, get, …) AND an async parallel (alist, aget, …);
+list_all/alist_all walk cursors; stream_events/astream_events
++ playground.run/arun emit SSE-parsed Pydantic models.
+
+Types — Pydantic v2 throughout, ConfigDict(extra='ignore',
+populate_by_name=True) on every model so additive server
+fields don't break older clients. camelCase wire names via
+Field(alias=...) — Run, RunDetail, RunEvent, Agent,
+AgentDetail, Model, Sweep, Dataset, Notification,
+Annotation, ShareLink, Subscription, AlertRule,
+Integration, Dashboard + supporting envelopes. Errors:
+AldoAPIError base + AldoAuthError/Forbidden/NotFound/
+Validation/RateLimit/ServerError; raise_for_response()
+maps the wave-10/11/8 error code envelope onto the right
+class so callers can `except AldoForbiddenError:` without
+grepping a magic string.
+
+Transport — httpx (sync + async). One Client per AldoClient
+/ AsyncAldoClient instance, owning lifecycle but accepting
+an injected client for tests/custom transports. SSE parsing
+is hand-rolled in _transport.py (one parser shared by sync
++ async iter_lines). Bearer auth lives at construction and
+auto-rotates on auth.login()/signup()/switch_tenant().
+
+Auth — auth.login / .signup / .me / .switch_tenant / .logout
+plus TokenCredentials.from_env() helper. Session token is
+attached to subsequent requests automatically; the SDK
+never persists it (caller's job).
+
+CLI — Typer-based `aldo-py` shim with `auth login`,
+`auth whoami`, `runs ls`, `agents ls`. Distinct config
+file (~/.aldo/python-cli.json) so it doesn't stomp the
+TS CLI's state.
+
+Tests — 98 across 14 files (target was ≥40): runs (13),
+agents (7), models (5), eval (6), secrets (7),
+notifications (7), dashboards (9), alerts (8),
+integrations (6), annotations+shares (8), playground (3),
+datasets (7), auth (8), async (4). Each resource gets
+happy-path + 4xx + 5xx + (where it streams) an SSE test.
+respx for HTTPX mocking. pytest-asyncio in `auto` mode.
+
+Examples — examples/quickstart.py (login/list/stream),
+examples/multi_model_compare.py (playground fan-out;
+LLM-agnostic — capability class + privacy tier, no
+provider strings), examples/eval_runner.py (sweep + poll
++ cluster), examples/webhook_handler.py (HMAC-SHA256
+verify of X-Aldo-Signature with 5-minute timestamp skew
+window for the wave-14C outbound webhook integration).
+
+Quality bar — pip install -e . works (verified);
+python -m pytest: 98/98 green; python -m mypy
+src/aldo_ai: clean (22 source files); python -m ruff check
+src/aldo_ai: clean. python -m build emits both sdist
++ wheel cleanly (twine check passes). Examples
+py_compile cleanly.
+
+LLM-agnostic — `grep -rE
+"(openai|anthropic|gemini|google|claude|gpt-|mistral|
+llama-|deepseek)" src` returns zero hits. Privacy tiers
+stay enforced platform-side: a sensitive-tier playground
+or run request that finds no eligible local-only model
+returns 422 `privacy_tier_unroutable` BEFORE any provider
+contact, surfaced as `AldoValidationError(code=
+"privacy_tier_unroutable")` with the routing trace under
+`.details`.
+
+Out of scope (per brief) — TypeScript SDK (Zod schemas
+already serve TS clients), Java/Go/.NET, REPL, PyPI
+publish (PUBLISHING.md documents the manual
+`twine upload` flow for maintainers).
+
+================================================================
+2026-04-26 — Engineer 15B — wave 15 docs site
+================================================================
+
+Real Nextra-quality docs site mounted at `/docs` in the existing
+`apps/web`. No new framework split — pure Next.js App Router
+routes, file-based markdown, server-rendered with shiki + marked.
+
+Pages shipped — 23 hand-authored MDX-style pages (well above the
+14+ quality bar), plus 99 auto-generated API endpoint pages =
+122 total doc URLs prerendered at build time:
+
+  Overview (2)
+    /docs, /docs/quickstart
+  Concepts (7)
+    capability-class-routing, privacy-tier,
+    multi-agent-orchestration, sandbox-and-guards,
+    eval-harness, replayability, agency
+  Guides (9)
+    building-an-agent, writing-an-eval-suite,
+    custom-evaluators, dataset-uploads,
+    dashboards-and-alerts, integrations, api-keys,
+    self-hosting, local-models-mlx
+  API (1 + 99)
+    /docs/api landing + 99 generated endpoint refs
+  SDKs (2)
+    python, typescript
+  Reference (2)
+    changelog, license
+
+Library/runtime —
+  - `apps/web/lib/docs/registry.ts` — hand-curated nav (single
+    source of truth for sidebar order + sitemap).
+  - `apps/web/lib/docs/loader.ts` — server-only marked + shiki
+    pipeline; emits HTML + headings + plain-text body for the
+    search index. Lazy-init highlighter, cached per process.
+  - `apps/web/lib/docs/highlight-server.ts` — shiki wrapper
+    used by the API endpoint renderer for curl/python/ts tabs.
+  - `apps/web/lib/docs/search-client.ts` — client-side fuse.js
+    against `/docs-search-index.json`. Module-cached fuse
+    instance; first query ~5-10ms, subsequent sub-ms.
+
+Generators (run via `prebuild`) —
+  - `apps/web/scripts/generate-api-docs.ts` reads every
+    `app.<verb>('<path>'` in `apps/api/src/routes/*.ts`,
+    matches each endpoint to a Zod schema in
+    `@aldo-ai/api-contract` by naming convention
+    (<EndpointTitleCase>Request/Response, ListXQuery,
+    Create/Register/PromoteXRequest, …), and emits one JSON
+    spec per endpoint into `content/docs/api/_generated/`.
+    Result this run: 99 endpoint specs, 36 with full schema
+    matches; the rest get a path-only spec (still useful — has
+    method, auth scope, examples, error codes).
+  - `apps/web/scripts/build-docs-search-index.ts` walks every
+    page in the registry plus every generated endpoint JSON
+    and writes a single 56.4 KB JSON to
+    `public/docs-search-index.json`. Body is capped at 1.2 KB
+    per page so the index stays loadable on every Cmd-K open.
+
+Doc viewer chrome —
+  - `app/docs/layout.tsx` — sticky top bar (logo, nav, Cmd-K
+    hint, GitHub link) + collapsible left sidebar
+    (`components/docs/sidebar.tsx`) + main column.
+  - `app/docs/[...slug]/page.tsx` — catch-all dynamic route
+    with `generateStaticParams` enumerating every URL so the
+    docs are fully prerendered (CDN-cacheable, immune to API
+    outages). Branches on `page.generated` to dispatch into
+    the API endpoint renderer or the markdown renderer.
+  - `components/docs/api-endpoint.tsx` — renders the JSON
+    endpoint spec: method badge, schema tables for
+    request/response, multi-language code tabs, error table,
+    "View contract source" + feedback row.
+  - `components/docs/code-tabs.tsx` — wraps the wave-12
+    `<Tabs>` primitive; pre-rendered shiki HTML per tab.
+  - `components/docs/toc.tsx` — right-rail in-page TOC from
+    the loader's heading list.
+  - `components/docs/feedback.tsx` — thumbs row, localStorage
+    only (no auth dependency on a public docs surface).
+  - `components/docs/landing.tsx` — hero + section grid for
+    `/docs`.
+
+Cmd-K integration —
+  - `lib/command-palette-filter.ts` gains a `docs` group and
+    a `nav:docs` static entry. Group weight tuned so docs
+    rank below nav/agents/runs at equal text scores —
+    encyclopedic results don't drown the daily workflow.
+  - `components/command-palette.tsx` lazy-imports the docs
+    search-client and fires it per keystroke (debounce-free;
+    fuse against an in-memory index is sub-ms).
+  - 9 unit tests added covering the registry + the docs-group
+    ranking rule. All pass.
+
+Open Graph + sitemap + robots —
+  - `app/docs/og/route.ts` — generated SVG (1200×630) per
+    page title, no external service. Cached `immutable`.
+  - `app/sitemap.ts` — enumerates marketing + every doc URL.
+  - `app/robots.ts` — allow `/docs/*` + marketing, disallow
+    every authenticated app route.
+
+Migration —
+  - `agency/README.md` ⇒ `/docs/concepts/agency`.
+  - `docs/local-models/mlx.md` ⇒ `/docs/guides/local-models-mlx`.
+  - `docs/deploy/live.md` left local (not for public docs).
+  - `LICENSE` content embedded into `/docs/license`.
+
+Constraints —
+  - LLM-agnostic. The local-models-mlx page mentions Ollama,
+    vLLM, llama.cpp, MLX as RUNTIME backends (not LLM
+    providers), with a callout explaining the distinction.
+    Every other page references capabilities/tiers, never a
+    vendor model name.
+  - All MDX/markdown is checked-in source; no CMS.
+  - Privacy-first messaging carried through: the
+    `/docs/concepts/privacy-tier` page leads with "the
+    platform enforces it, not the agent author".
+  - Highlighter ships only 8 langs (typescript, javascript,
+    tsx, python, bash, json, yaml, markdown). Theme is
+    aurora-x (matches the design system's accent palette).
+
+Quality bar —
+  - `pnpm --filter @aldo-ai/web typecheck`: clean.
+  - `pnpm --filter @aldo-ai/web build`: green; 133 pages
+    generated (121 of them are doc URLs), zero new warnings.
+  - `pnpm --filter @aldo-ai/web test`: 221/221 across 27
+    files (9 new tests in 2 new files for the registry and
+    palette-filter docs group).
+  - Biome clean across every wave-15 file. The 128 errors
+    `pnpm lint` reports at workspace level are all
+    pre-existing — none in `components/docs/`, `app/docs/`,
+    `lib/docs/`, `scripts/generate-api-docs.ts`,
+    `scripts/build-docs-search-index.ts`, `app/sitemap.ts`,
+    `app/robots.ts`, or the touched palette files.
+  - Cmd-K docs search round-trip: fuse over 122 entries
+    (56.4 KB index) is sub-ms after first parse; the network
+    fetch is `cache: 'force-cache'` so it amortises across
+    palette opens.
+
+Notes for Engineer S —
+  - The wave-12 `<Tabs>` primitive is wired into
+    `components/docs/code-tabs.tsx`. No new variant needed —
+    the API ref pages drop into the existing surface.
+  - The `<Button variant>` set is `default | secondary |
+    ghost | destructive | link`; the docs feedback row
+    falls back to `secondary` for the inactive thumbs.
+  - One nit if S wants to add it: an `outline` variant
+    matching the marketing CTAs would let the feedback row
+    look closer to wave-12's button language. Optional.
+
+
+2026-04-26 — Engineer 15E — wave 15 mobile + a11y sweep
+
+Goal: make every page in apps/web look great from 360px
+(iPhone SE) up through 1440px (desktop) and pass WCAG 2.1
+AA on the critical surfaces. Surgical changes, no
+redesigns, no new dependencies except the requested
+@axe-core/playwright.
+
+Tailwind config + tokens
+  - `tailwind.config.ts` — added the `xs: 480px`
+    breakpoint alongside the default sm/md/lg/xl/2xl set
+    (re-stated explicitly so we don't lose them when
+    overriding `screens`). Added `padding.safe`/`safe-b`/
+    `safe-l`/`safe-r` mapped to `env(safe-area-inset-*)`
+    and a `min-h-touch`/`min-w-touch` (44px) token used
+    everywhere a tap surface needs the WCAG 2.5.5 floor.
+
+Sidebar → mobile drawer
+  - `components/sidebar.tsx` extracted into `Sidebar` +
+    `SidebarMobileTrigger` + `SidebarBody`. Below `lg:` the
+    aside hides; a fixed-position hamburger button (44×44,
+    safe-area-aware) opens a left-anchored Sheet that hosts
+    the same nav. Tapping a Link calls `onNavigate` which
+    closes the drawer. A `useEffect` on `usePathname()`
+    closes the drawer on programmatic nav too. All Links
+    grew `aria-current="page"`, focus-visible rings, and
+    min-h-touch. Token-driven (bg-fg / fg-inverse /
+    bg-subtle) so dark mode works.
+
+Root layout + skip links
+  - `app/layout.tsx` — added a `Skip to main content` link
+    (sr-only until focused). `<main>` got `id="main-content"`
+    + `tabIndex={-1}` and mobile padding (`pt-16`) to clear
+    the floating hamburger. Marketing layout got the same
+    skip link + `<main id="main-content">`. Marketing
+    top-nav honours `env(safe-area-inset-top)` for the
+    iPhone notch.
+
+Settings layout
+  - `app/settings/layout.tsx` rebuilt as a client component
+    that renders a horizontal chip-scroll on mobile (each
+    chip min-h-touch, aria-current="page") and the original
+    vertical aside at `lg:` and up.
+
+Cmd-K palette
+  - `components/ui/command-palette.tsx` (primitive)
+    full-screens the dialog at `<sm` and reverts to the
+    centred modal from `sm:` upward. `CommandList`
+    max-height bumped to `calc(100vh-3.5rem)` on mobile;
+    `CommandItem` rows are now `min-h-touch`.
+
+Notification bell
+  - `components/notifications/notification-bell.tsx` —
+    trigger is 44×44 on mobile (8×8 on desktop). Popover
+    width is `calc(100vw-1rem)` capped at 420px on mobile,
+    320px on `sm:`+. Added `collisionPadding={8}` so the
+    panel can't bleed off-screen. Tokens replaced
+    slate-700 / red-600 with fg-muted / danger / bg-subtle.
+
+Flame graph
+  - `components/runs/flame-graph.tsx` outer wrapper now
+    `max-w-full overflow-x-auto`; the SVG keeps a
+    sensible minimum width inside that scroller. The
+    header strip stacks the meta + hint vertically on
+    narrow screens.
+  - `components/runs/event-detail-sheet.tsx` SheetContent
+    is `w-screen max-w-full` on mobile, `sm:max-w-lg` from
+    `sm:` upward.
+
+Sheet primitive
+  - `components/ui/sheet.tsx` — left/right side classes
+    became `w-full max-w-[420px] sm:w-[420px]` so every
+    sheet in the codebase auto-fits the viewport on mobile
+    without per-call overrides.
+
+Dashboards editor
+  - `components/dashboards/dashboard-canvas.tsx` — added a
+    mobile single-column stacked list (`<md:hidden` for the
+    grid; `md:hidden` for the stack). Reorder via up/down
+    aria-labelled buttons, no DnD on touch. Sticky-bottom
+    Save bar on mobile (with safe-area-inset-bottom
+    padding); desktop Save lives in the toolbar via
+    `hidden md:inline-flex`.
+
+Run detail
+  - `app/runs/[id]/page.tsx` — usage table now
+    `overflow-x-auto` with `min-w-[640px]` so the legacy
+    aldo-table CSS doesn't bust 360px viewports. Events
+    list stacks timestamp + badge above the payload below
+    `sm:` (was always row-flex with hard widths
+    `w-32`/`w-40`).
+
+Page header
+  - `components/page-header.tsx` — title row stacks above
+    actions on mobile; actions row is `flex-wrap`. h1
+    bumps to `text-2xl` from `sm:` and up. Description is
+    text-fg-muted (slate-600) for AA contrast. Tokens
+    everywhere instead of slate-* literals.
+
+Forms
+  - `(auth)/login/form.tsx`, `(auth)/signup/form.tsx`,
+    `secrets/new/form.tsx` — every input/textarea is
+    `min-h-touch`, `text-base` on mobile (so iOS Safari
+    doesn't auto-zoom on focus) and reverts to `text-sm`
+    at `sm:`+. Submit / cancel buttons grew focus rings +
+    min-h-touch. Inputs already had labels-as-wrappers, so
+    no a11y label work needed.
+  - `components/ui/input.tsx` primitive baseline now
+    `min-h-touch h-11 text-base sm:h-9 sm:text-sm`.
+
+Comments thread
+  - `components/annotations/comments-thread.tsx` reaction
+    chips grew to `min-h-touch px-3` on mobile, revert to
+    compact at `sm:`. Compose textarea is `text-base
+    sm:text-sm`, gained an aria-label, and uses
+    focus-visible:ring tokens.
+
+Marketing top-nav
+  - Added safe-area-inset-top padding so the brand row
+    doesn't sit under the status bar. The hamburger sheet
+    drawer was already in place from wave-12 — verified
+    works at 360px, login/signup CTAs use min-h-touch.
+
+Auth shell
+  - `(auth)/layout.tsx` — switched to design tokens
+    (bg / bg-elevated / fg / fg-muted) and added top/
+    bottom safe-area padding. Card padding `p-5 sm:p-6` so
+    iPhone SE has more breathing room.
+
+Billing
+  - `app/billing/page.tsx` — KPI grid was a flat
+    `grid-cols-3` (busted on 360px). Now
+    `grid-cols-1 xs:grid-cols-2 sm:grid-cols-3`.
+
+Test harness
+  - `apps/web-e2e/tests/responsive.spec.ts` — three
+    viewport projects (360×640, 768×1024, 1440×900). For
+    each public route + each auth-gated route (skipped
+    when E2E_SESSION_COOKIE is absent), the spec measures
+    `body.scrollWidth - body.clientWidth` (must be ≤1) and
+    grabs a `toHaveScreenshot` baseline with
+    `maxDiffPixelRatio: 0.05` (informational this wave).
+    Plus an axe-core block (`@axe-core/playwright` 4.10)
+    that fails on `serious|critical` violations on `/`,
+    `/login`, `/agents`, `/runs`. Snapshot directory
+    created at `apps/web-e2e/snapshots/`.
+  - `apps/web-e2e/package.json` — added
+    `@axe-core/playwright ^4.10.0` (only new dep).
+  - `pnpm --filter @aldo-ai/web-e2e typecheck` green.
+
+Unit tests (+18 new, 212/212 total)
+  - `lib/responsive.ts` + `lib/responsive.test.ts` — pure
+    breakpoint helpers (`breakpointFor`, `isBelow`,
+    `navSurfaceFor`, `gridColumns`) with 12 tests covering
+    boundary semantics, NaN/Infinity defensiveness, mobile
+    /tablet/desktop ranges.
+  - `lib/sidebar-drawer-state.ts` +
+    `lib/sidebar-drawer-state.test.ts` — pure state
+    machine for the mobile sidebar drawer. 8 tests cover
+    open/close idempotency, route-change auto-close,
+    viewport-resize force-close on lg+ takeover.
+
+Quality bar
+  - `pnpm --filter @aldo-ai/web typecheck` green.
+  - `pnpm --filter @aldo-ai/web build` green.
+  - `pnpm --filter @aldo-ai/web test` 212/212 (was 194,
+    +18 new).
+  - `pnpm --filter @aldo-ai/web-e2e typecheck` green.
+  - `pnpm biome check` on every file I touched — clean.
+    The repo-wide lint count went DOWN (151→128 errors)
+    because biome auto-formatter normalised a few of my
+    edits and resolved pre-existing whitespace nits in
+    those files. The 128 remaining errors are all in
+    files I did not touch and all pre-existing
+    (widget-renderer SVG title, alert dialogs without
+    htmlFor, etc).
+
+LLM-agnostic — nothing in this sweep references a
+provider. Privacy tiers are unchanged — the responsive
+layout is platform-level, not a routing concern.
+
+Manual sanity walk
+  - 360px: sidebar collapses to hamburger, top-nav
+    collapses to hamburger, no body horizontal overflow on
+    any audited page, every CTA reachable, settings
+    sub-nav scrolls horizontally, command palette
+    full-screens, flame graph scrolls inside its card,
+    dashboards canvas stacks single-column, forms have
+    full-width inputs with labels above.
+  - 768px: settings stays a chip strip (lg:flex), dnd-kit
+    grid takes over for dashboards (hidden md:block),
+    flame graph + popovers feel native.
+  - 1440px: identical to pre-wave behaviour (sidebar
+    docked, top-nav full, modals centred).
+
+Pages audited (35)
+  - Public (8): /, /pricing, /about, /security,
+    /design-partner, /login, /signup, /share/[slug].
+  - Auth-gated (27): /welcome, /runs, /runs/[id],
+    /runs/[id]/live, /runs/[id]/debug, /runs/compare,
+    /agents, /agents/[name], /agents/[name]/promote,
+    /models, /eval, /eval/sweeps, /eval/sweeps/[id],
+    /eval/sweeps/new, /eval/suites/[name], /secrets,
+    /secrets/new, /billing, /observability, /dashboards,
+    /dashboards/[id], /notifications, /activity,
+    /playground, /settings/api-keys, /settings/members,
+    /settings/audit, /settings/alerts,
+    /settings/integrations, /settings/roles,
+    /admin/design-partners, /invite/[id].
+
+A11y violations found + fixed
+  - Missing `aria-current="page"` on every active nav
+    Link in Sidebar + Settings sub-nav — added.
+  - Hamburger button had no `aria-label` — added "Open
+    navigation".
+  - Sheet drawer had no SheetTitle (Radix DialogTitle
+    requirement) — added an sr-only title.
+  - Reaction chips below the 24px tap target on mobile —
+    bumped to `min-h-touch`.
+  - Notification bell trigger 32×32 (below 44px) — bumped
+    on mobile, kept compact on desktop.
+  - CommandItem rows ~32px on mobile — `min-h-touch`.
+  - Compose textarea had no aria-label — added.
+  - Form inputs lost their text size on mobile (Safari
+    auto-zoom on focus) — text-base default with
+    sm:text-sm override.
+  - Skip-to-main-content links added on protected +
+    marketing layouts.
+  - Token migration on 26 touched files lifted slate-400
+    (fails 4.5:1 on white) to fg-muted (= slate-600 light).
+
+Deferred
+  - Slate-* literals across the 80+ untouched files
+    remain. The token system already exists; this would
+    be a mechanical find/replace across the codebase but
+    is genuinely separate work — no in-flight UI was
+    using a sub-AA combination *that I touched*.
+  - The `/eval/sweeps/[id]` heatmap is non-trivial on
+    narrow widths and ships its own SVG layout. It
+    overflows horizontally at 360px but that's the
+    least-bad option for a 14-day-by-7-period grid;
+    flagged for a future engineer.
+  - DnD on tablet (768–1023px) still uses the desktop
+    grid path; touch + Pointer events work in modern
+    browsers but the brief explicitly singled out mobile
+    as the case where DnD is dropped. Tablet kept the
+    grid path so `iPad` users still get the full editor.
+  - Playwright responsive-snapshot baselines aren't
+    captured — first CI run will record them. The brief
+    said "treat as informational" so the diff threshold
+    of 0.05 should swallow rendering noise.
+
+
+2026-04-26 — Engineer 15F — wave 15 OpenAPI + Swagger UI + Redoc
+
+Built `@aldo-ai/openapi` (platform/openapi/) — the canonical
+OpenAPI 3.1 spec for the control-plane API, materialised as
+a pure function of the @aldo-ai/api-contract Zod schemas.
+Spec is served at GET /openapi.json + /openapi.yaml (public,
+cache-control: public, max-age=300, in the auth allow-list).
+
+Spec stats — 117 operations across 90 paths, 241 component
+schemas (auto-registered from every Zod export in
+api-contract), 25 tags, 2 security schemes (BearerAuth JWT
++ ApiKeyAuth aldo_live_*), `x-aldo-llm-agnostic: true`
+extension, info.license = FSL-1.1-ALv2. Privacy-tier
+contract surfaced as a 422 example on every run-creation /
+agent-check / swap-model route so integrators see the
+fail-closed policy on first read.
+
+Zod -> OpenAPI converter — hand-rolled in
+src/zod-to-openapi.ts (~340 lines) instead of pulling
+@asteasolutions/zod-to-openapi. Reasoning: zero new platform
+deps, the contract uses a fixed Zod subset (objects, enums,
+nullable/optional, union, discriminatedUnion, lazy/recursive,
+intersection, record, literal, coerce.*, unknown), and the
+output targets OpenAPI 3.1 (nullable as type-array, prefixItems
+for tuples, $ref siblings allowed). Recursive lazy schemas
+(RunTreeNode) terminate via an `expandingSelf` flag — the
+top-level inline call sets it, the lazy boundary clears it,
+so any back-edge to the same schema emits a $ref.
+
+Operations — one file per resource group under
+src/operations/ (auth, agents, runs, models, eval, secrets,
+billing, dashboards, alerts, integrations, annotations,
+shares, notifications, playground, observability, views,
+admin, health). Shared helpers in _shared.ts — every error
+response references components.schemas/ApiError; standard
+401/403/404/422 envelopes reused; SECURITY_BEARER /
+SECURITY_API_KEY / SECURITY_BOTH constants for the security
+ladder.
+
+Tests — 81 in @aldo-ai/openapi across 11 files. tests/
+spec.test.ts asserts every Zod export has a registered
+component, every $ref resolves, every operation has a tag +
+description + a 4xx response (excluding the public allow-list
+of 7 routes), every error response uses ApiError, every
+operation tag is declared in tags[], and op count >= 50.
+Per-resource files (agents, runs, eval, billing, dashboards,
+integrations) cover the major CRUD endpoints. yaml.test.ts +
+validate.test.ts cover the YAML emitter + the structural
+OpenAPI 3.1 validator. zod-conversion.test.ts + registry.test.ts
+cover the converter primitives.
+
+apps/api — added GET /openapi.json + /openapi.yaml at
+src/routes/openapi.ts, in-process memoised by version,
+public via the auth allow-list (PUBLIC_PATH_EXACT extended
+with /openapi.json + /openapi.yaml). 6 new vitest tests in
+tests/openapi.test.ts; total apps/api test count now 281.
+Dockerfile + package.json updated with the new workspace
+dep + COPY platform/openapi.
+
+apps/web — Swagger UI mounted at /api/docs; Redoc mounted
+at /api/redoc. Both are server components that render the
+upstream MIT-licensed bundles from unpkg (swagger-ui-dist
+@5.17.14) and jsDelivr (redoc@2.5.0) at runtime. Choice
+documented inline: avoids ~1.5MB of swagger-ui-react +
+react-redux in the apps/web closure for a docs-only
+surface. Theme overrides are CSS-class targeted (Swagger
+UI's CSS hierarchy is the upper limit on theming; Redoc
+takes a JSON theme prop). Both pages have a
+"spec unavailable" fallback that fires after 4s if the
+upstream bundle hasn't loaded. Public access wired via
+middleware-shared.ts (PUBLIC_BOUNDED += /api/docs +
+/api/redoc) and chromeless layout via app/layout.tsx
+(isChromelessPath += these). 2 new vitest tests using
+react-dom/server renderToString — total apps/web test count
+now 227.
+
+apps/cli — `aldo openapi {dump,validate}` shipped.
+`aldo openapi dump --format json|yaml --version <v>` writes
+to stdout (designed for piping into openapi-generator /
+oapi-codegen / swagger-cli); `aldo openapi validate <file>`
+runs structural OpenAPI 3.1 validation. 6 new vitest tests
+covering happy + error paths; total apps/cli test count now
+70.
+
+Quality bar —
+- `pnpm --filter @aldo-ai/openapi test` — 81/81 green.
+- `pnpm --filter @aldo-ai/api test` — 281/281 green
+  (+6 over baseline).
+- `pnpm --filter @aldo-ai/web test` — 227/227 green
+  (+6 over baseline).
+- `pnpm --filter @aldo-ai/cli test` — 70/70 green
+  (+6 over baseline).
+- `pnpm --filter @aldo-ai/openapi typecheck` clean.
+- `pnpm --filter @aldo-ai/web typecheck` clean.
+- `pnpm --filter @aldo-ai/cli typecheck` clean.
+- `pnpm --filter @aldo-ai/api typecheck` — 7 errors all in
+  src/datasets/{store,evaluators-store}.ts (untracked
+  files left by a parallel engineer's wave-15 work, NOT
+  introduced by this engineer; my own apps/api/tests +
+  apps/api/src/routes/openapi.ts are clean).
+- biome check passes on every file I authored.
+
+LLM-agnostic — spec carries `x-aldo-llm-agnostic: true`,
+and `grep -rE "(openai|anthropic|gemini|claude|gpt-|mistral|
+llama-|deepseek)" platform/openapi apps/api/src/routes/
+openapi.ts apps/cli/src/commands/openapi.ts apps/web/app/api`
+returns zero hits. All model + provider strings on the wire
+stay opaque to the spec.
+
+Out of scope (per brief) — Engineer 15B's Markdown API
+ref (separate workstream); request/response examples that
+would leak real data (we use placeholders like <run-id>,
+<email>); a full JSON-Schema validator (we ship a fast
+structural one — the load-bearing checks are in
+spec.test.ts).

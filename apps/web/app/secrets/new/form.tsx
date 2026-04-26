@@ -71,8 +71,8 @@ export function NewSecretForm() {
             autoCapitalize="characters"
             autoCorrect="off"
             autoComplete="off"
-            className={`rounded border bg-white px-2 py-1 font-mono text-sm ${
-              nameInvalid ? 'border-red-300' : 'border-slate-300'
+            className={`min-h-touch rounded border bg-bg-elevated px-3 py-2 font-mono text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:py-1 sm:text-sm ${
+              nameInvalid ? 'border-danger' : 'border-border'
             }`}
           />
           <span className="text-[11px] text-slate-500">
@@ -101,7 +101,7 @@ export function NewSecretForm() {
             autoComplete="off"
             data-1p-ignore
             data-lpignore="true"
-            className="rounded border border-slate-300 bg-white px-2 py-1 font-mono text-sm"
+            className="rounded border border-border bg-bg-elevated px-3 py-2 font-mono text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:py-1 sm:text-sm"
           />
           <span className="text-[11px] text-slate-500">
             Stored encrypted. Only a fingerprint and the last 4 characters are ever returned. You
@@ -117,18 +117,18 @@ export function NewSecretForm() {
         </div>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
           onClick={() => router.push('/secrets')}
-          className="rounded border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
+          className="min-h-touch rounded border border-border bg-bg-elevated px-3 py-2 text-sm hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={submitting}
-          className="rounded bg-slate-900 px-3 py-1 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-touch rounded bg-fg px-3 py-2 text-sm font-medium text-fg-inverse hover:bg-fg/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? 'Saving…' : 'Save secret'}
         </button>

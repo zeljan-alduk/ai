@@ -27,7 +27,7 @@ export function SignupForm({ next }: { next: string | null }) {
           spellCheck={false}
           autoComplete="organization"
           placeholder="Acme Robotics"
-          className={`rounded border bg-white px-2 py-1.5 text-sm ${
+          className={`min-h-touch rounded border bg-bg-elevated px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:text-sm ${
             state.fieldErrors.tenantName ? 'border-red-300' : 'border-slate-300'
           }`}
         />
@@ -47,7 +47,7 @@ export function SignupForm({ next }: { next: string | null }) {
           required
           autoComplete="email"
           spellCheck={false}
-          className={`rounded border bg-white px-2 py-1.5 text-sm ${
+          className={`min-h-touch rounded border bg-bg-elevated px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:text-sm ${
             state.fieldErrors.email ? 'border-red-300' : 'border-slate-300'
           }`}
         />
@@ -75,7 +75,7 @@ export function SignupForm({ next }: { next: string | null }) {
           data-bwignore="true"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className={`rounded border bg-white px-2 py-1.5 text-sm ${
+          className={`min-h-touch rounded border bg-bg-elevated px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:text-sm ${
             state.fieldErrors.password || passwordTooShort ? 'border-red-300' : 'border-slate-300'
           }`}
         />
@@ -121,7 +121,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+      className="min-h-touch rounded bg-fg px-3 py-2 text-sm font-medium text-fg-inverse hover:bg-fg/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? 'Creating workspace…' : 'Create workspace'}
     </button>

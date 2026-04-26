@@ -43,6 +43,12 @@ const PUBLIC_BOUNDED: ReadonlyArray<string> = [
   // server allow-list (apps/api/src/auth/middleware.ts) so an
   // unauthenticated browser can resolve the slug end-to-end.
   '/share',
+  // Wave 15 (Engineer 15F): OpenAPI surfaces (Swagger UI + Redoc).
+  // Both serve the public `/openapi.json` from apps/api. The web
+  // route is public so integrators can browse the spec without
+  // signing up.
+  '/api/docs',
+  '/api/redoc',
 ];
 
 export function isPublicPath(pathname: string): boolean {

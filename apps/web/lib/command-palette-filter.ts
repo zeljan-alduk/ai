@@ -22,7 +22,7 @@ export interface CommandResult {
   readonly label: string;
   /** Optional secondary text (e.g. agent description, run id). */
   readonly description?: string;
-  /** Result group: 'nav', 'agents', 'runs', 'models', 'settings'. */
+  /** Result group: 'nav', 'agents', 'runs', 'models', 'settings', 'docs'. */
   readonly group: CommandGroup;
   /** Where the row navigates on Enter / click. */
   readonly href: string;
@@ -30,7 +30,7 @@ export interface CommandResult {
   readonly keywords?: ReadonlyArray<string>;
 }
 
-export type CommandGroup = 'nav' | 'agents' | 'runs' | 'models' | 'settings';
+export type CommandGroup = 'nav' | 'agents' | 'runs' | 'models' | 'settings' | 'docs';
 
 /** Higher = wins ties. */
 const GROUP_WEIGHT: Record<CommandGroup, number> = {
@@ -39,6 +39,10 @@ const GROUP_WEIGHT: Record<CommandGroup, number> = {
   agents: 60,
   runs: 40,
   models: 20,
+  // Docs are a long-tail source; nav/agents/runs always outrank a
+  // doc-page hit at equal text-match scores so the user's daily
+  // workflow isn't drowned out by encyclopedic results.
+  docs: 10,
 };
 
 /**
@@ -159,6 +163,14 @@ export const STATIC_NAV_RESULTS: ReadonlyArray<CommandResult> = [
     group: 'nav',
     href: '/billing',
     keywords: ['subscription', 'plan', 'invoice'],
+  },
+  {
+    id: 'nav:docs',
+    label: 'Documentation',
+    description: 'Quickstart, concepts, guides, API, SDKs',
+    group: 'nav',
+    href: '/docs',
+    keywords: ['docs', 'documentation', 'help', 'reference'],
   },
   {
     id: 'settings:theme-light',

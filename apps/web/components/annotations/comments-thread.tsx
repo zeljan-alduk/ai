@@ -327,7 +327,9 @@ function CommentCard({
               aria-label={`React with ${REACTION_LABEL[r.kind]}`}
               aria-pressed={r.reactedByMe}
               className={cn(
-                'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs',
+                // Wave-15E — bump reaction chips to a 44px touch
+                // target on mobile; revert to compact spacing at sm:
+                'inline-flex min-h-touch items-center gap-1 rounded-full border px-3 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0 sm:px-2 sm:py-0.5',
                 r.reactedByMe
                   ? 'border-accent/40 bg-accent/10 text-accent'
                   : 'border-border bg-bg text-fg-muted hover:bg-bg-subtle',
@@ -445,7 +447,11 @@ function ComposeBox({
       </div>
       {tab === 'write' ? (
         <textarea
-          className="min-h-[100px] w-full rounded border border-border bg-bg p-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent/40"
+          aria-label={placeholder}
+          // Wave-15E — `text-base` on mobile keeps iOS Safari from
+          // auto-zooming on focus; full-width comes from `w-full` and
+          // is preserved across breakpoints.
+          className="min-h-[120px] w-full rounded border border-border bg-bg p-3 text-base text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:p-2 sm:text-sm"
           value={text}
           placeholder={placeholder}
           onChange={(e) => setText(e.target.value)}

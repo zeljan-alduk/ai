@@ -134,9 +134,31 @@ export function DashboardCanvas({
 
   const rows = Math.max(8, layoutHeight(layout));
 
+  // Wave-15E — on the mobile breakpoint we abandon the 12-col grid in
+  // favour of a single-column stacked list. DnD on touch is a UX
+  // hazard; the stacked variant lets the operator reorder via up/down
+  // buttons in editing mode and otherwise just see the widgets in
+  // their current layout order.
+  const moveUp = (id: string) =>
+    setLayout((prev) => {
+      const i = prev.findIndex((w) => w.id === id);
+      if (i <= 0) return prev;
+      const next = [...prev];
+      [next[i - 1], next[i]] = [next[i] as DashboardWidget, next[i - 1] as DashboardWidget];
+      return next;
+    });
+  const moveDown = (id: string) =>
+    setLayout((prev) => {
+      const i = prev.findIndex((w) => w.id === id);
+      if (i < 0 || i >= prev.length - 1) return prev;
+      const next = [...prev];
+      [next[i + 1], next[i]] = [next[i] as DashboardWidget, next[i + 1] as DashboardWidget];
+      return next;
+    });
+
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {canEdit ? (
           <>
             <Button
@@ -148,7 +170,16 @@ export function DashboardCanvas({
             </Button>
             {editing ? (
               <>
-                <Button size="sm" variant="default" onClick={save} disabled={pending}>
+                {/* Desktop only — mobile has a sticky-bottom Save bar
+                    rendered below. Hidden until `md:` so we don't show
+                    Save twice on phones. */}
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={save}
+                  disabled={pending}
+                  className="hidden md:inline-flex"
+                >
                   {pending ? 'Saving…' : 'Save layout'}
                 </Button>
                 <AddWidgetMenu onAdd={addWidget} />
@@ -159,7 +190,7 @@ export function DashboardCanvas({
             ) : null}
           </>
         ) : (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-fg-muted">
             Read-only — shared by another tenant member.
           </span>
         )}
@@ -167,32 +198,87 @@ export function DashboardCanvas({
           Refresh
         </Button>
       </div>
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      {/* Mobile: stacked single-column list with optional reorder
+          buttons. We render this list as the primary surface below
+          `md:` and switch to the grid above. `dnd-kit` is still
+          mounted around the grid (desktop) but not the stack so it
+          can't fight pointer events on touch devices. */}
+      <ul className="flex flex-col gap-3 md:hidden">
+        {layout.map((w, i) => (
+          <li key={w.id} className="rounded-lg border border-border bg-bg-elevated p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="truncate text-xs font-semibold text-fg">{w.title}</h3>
+              {editing ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => moveUp(w.id)}
+                    disabled={i === 0}
+                    aria-label={`Move ${w.title} up`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded text-fg-muted hover:bg-bg-subtle disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveDown(w.id)}
+                    disabled={i === layout.length - 1}
+                    aria-label={`Move ${w.title} down`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded text-fg-muted hover:bg-bg-subtle disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    ↓
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div className="h-64 overflow-hidden">
+              <WidgetRenderer kind={w.kind} data={data[w.id]} />
+            </div>
+          </li>
+        ))}
+      </ul>
+      {/* Desktop / tablet: original 12-col grid + dnd-kit. */}
+      <div className="hidden md:block">
+        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+          <div
+            className="relative grid gap-2"
+            style={{
+              gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
+              gridAutoRows: '60px',
+              minHeight: rows * 64,
+            }}
+          >
+            {layout.map((w) => (
+              <WidgetSlot
+                key={w.id}
+                widget={w}
+                data={data[w.id]}
+                editing={editing}
+                onResize={(size) =>
+                  setLayout((prev) =>
+                    prev.map((p) =>
+                      p.id === w.id ? { ...p, layout: { ...p.layout, w: size.w, h: size.h } } : p,
+                    ),
+                  )
+                }
+              />
+            ))}
+          </div>
+        </DndContext>
+      </div>
+      {/* Mobile editing: sticky-bottom Save bar so a long widget list
+          doesn't bury the action. On `md:` we hide it (the desktop
+          editor exposes Save in the toolbar above). */}
+      {editing ? (
         <div
-          className="relative grid gap-2"
-          style={{
-            gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
-            gridAutoRows: '60px',
-            minHeight: rows * 64,
-          }}
+          className="sticky bottom-0 left-0 z-20 mt-4 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-elevated/95 px-4 py-3 backdrop-blur md:hidden"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         >
-          {layout.map((w) => (
-            <WidgetSlot
-              key={w.id}
-              widget={w}
-              data={data[w.id]}
-              editing={editing}
-              onResize={(size) =>
-                setLayout((prev) =>
-                  prev.map((p) =>
-                    p.id === w.id ? { ...p, layout: { ...p.layout, w: size.w, h: size.h } } : p,
-                  ),
-                )
-              }
-            />
-          ))}
+          <Button size="md" variant="default" onClick={save} disabled={pending}>
+            {pending ? 'Saving…' : 'Save layout'}
+          </Button>
         </div>
-      </DndContext>
+      ) : null}
     </div>
   );
 }

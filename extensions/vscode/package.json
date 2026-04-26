@@ -1,0 +1,94 @@
+{
+  "name": "aldo-ai-vscode",
+  "displayName": "ALDO AI",
+  "description": "Run ALDO agents, browse runs, and view traces inline in VS Code.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "aldo-tech-labs",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "engines": {
+    "vscode": "^1.95.0",
+    "node": ">=22.0.0"
+  },
+  "categories": ["AI", "Other"],
+  "keywords": ["ai", "agents", "llm", "aldo", "ollama"],
+  "main": "./dist/extension.js",
+  "icon": "media/icon.png",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aldoAi",
+          "title": "ALDO AI",
+          "icon": "media/sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "aldoAi": [
+        { "id": "aldoAi.agents", "name": "Agents" },
+        { "id": "aldoAi.runs", "name": "Recent Runs" },
+        { "id": "aldoAi.models", "name": "Models" }
+      ]
+    },
+    "commands": [
+      { "command": "aldoAi.login", "title": "ALDO AI: Login" },
+      { "command": "aldoAi.logout", "title": "ALDO AI: Logout" },
+      { "command": "aldoAi.refresh", "title": "ALDO AI: Refresh", "icon": "$(refresh)" },
+      { "command": "aldoAi.runOnSelection", "title": "ALDO AI: Run agent on selection" },
+      { "command": "aldoAi.runOnFile", "title": "ALDO AI: Run agent on file" },
+      { "command": "aldoAi.openRunInBrowser", "title": "ALDO AI: Open run in browser" },
+      { "command": "aldoAi.openTraceInline", "title": "ALDO AI: Open trace inline" },
+      { "command": "aldoAi.quickPrompt", "title": "ALDO AI: Quick prompt" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "aldoAi.refresh", "when": "view == aldoAi.agents", "group": "navigation" },
+        { "command": "aldoAi.refresh", "when": "view == aldoAi.runs", "group": "navigation" },
+        { "command": "aldoAi.refresh", "when": "view == aldoAi.models", "group": "navigation" }
+      ],
+      "editor/context": [
+        { "command": "aldoAi.runOnSelection", "when": "editorHasSelection", "group": "aldoAi" },
+        { "command": "aldoAi.runOnFile", "group": "aldoAi" }
+      ]
+    },
+    "configuration": {
+      "title": "ALDO AI",
+      "properties": {
+        "aldoAi.apiBaseUrl": {
+          "type": "string",
+          "default": "https://aldo-ai-api.fly.dev",
+          "description": "Base URL for the ALDO AI API."
+        },
+        "aldoAi.tenantSlug": {
+          "type": "string",
+          "default": "",
+          "description": "Tenant slug shown in the status bar."
+        },
+        "aldoAi.webBaseUrl": {
+          "type": "string",
+          "default": "https://aldo-ai-web.vercel.app",
+          "description": "Base URL of the ALDO AI web app (used for 'Open run in browser')."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "node ./tests/runTest.cjs",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

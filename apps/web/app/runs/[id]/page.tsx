@@ -162,19 +162,24 @@ function RunDetailBody({
       ) : (
         <ol>
           {run.events.map((ev, idx) => (
+            // Wave-15E — stack the timestamp + badge above the payload
+            // on mobile; revert to the row layout on `sm:` and up so
+            // the desktop density is preserved.
             <li
               key={ev.id}
-              className={`flex items-start gap-4 px-4 py-3 ${
-                idx === run.events.length - 1 ? '' : 'border-b border-slate-100'
+              className={`flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-4 ${
+                idx === run.events.length - 1 ? '' : 'border-b border-border'
               }`}
             >
-              <div className="w-32 shrink-0 text-xs text-slate-500" title={ev.at}>
-                {formatAbsolute(ev.at).slice(11, 19)}
+              <div className="flex items-center gap-2 sm:contents">
+                <div className="text-xs text-fg-muted sm:w-32 sm:shrink-0" title={ev.at}>
+                  {formatAbsolute(ev.at).slice(11, 19)}
+                </div>
+                <div className="sm:w-40 sm:shrink-0">
+                  <NeutralBadge>{ev.type}</NeutralBadge>
+                </div>
               </div>
-              <div className="w-40 shrink-0">
-                <NeutralBadge>{ev.type}</NeutralBadge>
-              </div>
-              <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-words text-xs text-slate-700">
+              <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-words text-xs text-fg-muted">
                 {summarizePayload(ev.payload)}
               </pre>
             </li>
@@ -305,8 +310,11 @@ function RunDetailBody({
             />
           </CardContent>
         ) : (
-          <div className="overflow-hidden">
-            <table className="aldo-table">
+          // Wave-15E — wrap usage table in horizontal scroll for narrow
+          // viewports. The aldo-table legacy CSS uses fixed column
+          // widths that bust the viewport at 360px without this.
+          <div className="overflow-x-auto">
+            <table className="aldo-table min-w-[640px]">
               <thead>
                 <tr>
                   <th>When</th>

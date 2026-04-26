@@ -29,6 +29,7 @@ COPY platform/guards/package.json platform/guards/
 COPY platform/integrations/package.json platform/integrations/
 COPY platform/local-discovery/package.json platform/local-discovery/
 COPY platform/observability/package.json platform/observability/
+COPY platform/openapi/package.json platform/openapi/
 COPY platform/orchestrator/package.json platform/orchestrator/
 COPY platform/registry/package.json platform/registry/
 COPY platform/sandbox/package.json platform/sandbox/
@@ -87,6 +88,10 @@ COPY platform/local-discovery ./platform/local-discovery
 COPY platform/engine ./platform/engine
 COPY platform/observability ./platform/observability
 COPY platform/orchestrator ./platform/orchestrator
+# Wave 15: the canonical OpenAPI 3.1 spec is materialised at runtime
+# from the contract Zod schemas by @aldo-ai/openapi (used by the
+# /openapi.json + /openapi.yaml routes).
+COPY platform/openapi ./platform/openapi
 # Wave 10: on boot, apps/api walks `agency/` and seeds the canonical
 # `default` tenant's registry from the YAML specs. Without this COPY
 # the seed is silently skipped and every new tenant who calls

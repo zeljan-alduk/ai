@@ -20,6 +20,7 @@
     "@aldo-ai/integrations": "workspace:*",
     "@aldo-ai/local-discovery": "workspace:*",
     "@aldo-ai/observability": "workspace:*",
+    "@aldo-ai/openapi": "workspace:*",
     "@aldo-ai/orchestrator": "workspace:*",
     "@aldo-ai/registry": "workspace:*",
     "@aldo-ai/secrets": "workspace:*",

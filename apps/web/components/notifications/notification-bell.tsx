@@ -142,19 +142,28 @@ export function NotificationBell() {
         <button
           type="button"
           aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
-          className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-slate-700 hover:bg-slate-100"
+          className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:h-8 sm:w-8"
         >
           <BellIcon />
           {badge !== null ? (
-            <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white">
+            <span className="absolute right-1 top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-white sm:-right-0.5 sm:-top-0.5">
               {badge}
             </span>
           ) : null}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" align="end">
+      {/* Wave-15E — on mobile (xs/sm) the popover stretches to the
+          viewport width minus a comfortable margin and grows to a
+          near-full-height sheet so notifications are easy to read +
+          tap. On `sm:` and up it reverts to the original 320px panel. */}
+      <PopoverContent
+        className="w-[calc(100vw-1rem)] max-w-[420px] sm:w-80"
+        align="end"
+        sideOffset={8}
+        collisionPadding={8}
+      >
         <div className="flex items-center justify-between pb-2">
-          <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
+          <h3 className="text-sm font-semibold text-fg">Notifications</h3>
           {unreadCount > 0 ? (
             <button
               type="button"

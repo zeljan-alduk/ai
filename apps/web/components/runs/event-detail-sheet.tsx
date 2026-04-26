@@ -43,7 +43,10 @@ export function EventDetailSheet({
         if (!next) onClose();
       }}
     >
-      <SheetContent side="right" className="w-full max-w-lg">
+      {/* Wave-15E — full-screen sheet on mobile (`w-screen` + override
+          the primitive's default 420px width); cap at `max-w-lg` from
+          `sm:` upward. */}
+      <SheetContent side="right" className="w-screen max-w-full sm:max-w-lg">
         {node !== null ? (
           <>
             <SheetHeader>

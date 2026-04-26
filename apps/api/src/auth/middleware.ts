@@ -68,6 +68,11 @@ const PUBLIC_PATH_EXACT = new Set<string>([
   // request body. The route handler verifies the token via argon2
   // before touching any state (mirrors the wave-11 webhook pattern).
   '/v1/invitations/accept',
+  // Wave 15: machine-readable API spec. Public — the spec IS the
+  // public docs surface, integrators must be able to fetch it
+  // without auth (Swagger UI / Redoc / openapi-generator).
+  '/openapi.json',
+  '/openapi.yaml',
 ]);
 
 /**

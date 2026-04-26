@@ -43,6 +43,7 @@ import { membersRoutes } from './routes/members.js';
 import { modelsRoutes } from './routes/models.js';
 import { notificationsRoutes } from './routes/notifications.js';
 import { observabilityRoutes } from './routes/observability.js';
+import { openApiRoutes } from './routes/openapi.js';
 import { playgroundRoutes } from './routes/playground.js';
 import { runsCompareRoutes } from './routes/runs-compare.js';
 import { runsRoutes } from './routes/runs.js';
@@ -99,6 +100,9 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   });
 
   app.route('/', healthRoutes(deps));
+  // Wave 15: machine-readable spec endpoints (`/openapi.json` +
+  // `/openapi.yaml`). Public per the auth allow-list; cacheable.
+  app.route('/', openApiRoutes(deps));
   app.route('/', authRoutes({ db: deps.db, signingKey: deps.signingKey }));
   // Wave-13 — register the compare route BEFORE the generic /v1/runs/:id
   // matcher in `runsRoutes` so Hono picks the more specific path first.

@@ -25,6 +25,7 @@
     "@aldo-ai/gateway": "workspace:*",
     "@aldo-ai/local-discovery": "workspace:*",
     "@aldo-ai/observability": "workspace:*",
+    "@aldo-ai/openapi": "workspace:*",
     "@aldo-ai/registry": "workspace:*",
     "@aldo-ai/runtime-config": "workspace:*",
     "@aldo-ai/storage": "workspace:*",

@@ -68,12 +68,16 @@ export function FlameGraph({
   const ticks = makeTicks(durationOfRoot(tree));
 
   return (
-    <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
-        <span className="text-[11px] uppercase tracking-wider text-slate-500">
+    // Wave-15E — `max-w-full` clips the outer card to the viewport so
+    // the SVG below scrolls horizontally inside it on mobile instead
+    // of busting the page width. The SVG keeps a sensible minimum
+    // width so spans stay legible even when scrolled.
+    <div className="max-w-full overflow-x-auto rounded-md border border-border bg-bg-elevated">
+      <div className="flex flex-col gap-1 border-b border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        <span className="text-[11px] uppercase tracking-wider text-fg-muted">
           Trace · {layout.bars.length} span{layout.bars.length === 1 ? '' : 's'}
         </span>
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-fg-faint">
           Click a bar for details · colour by status, never provider
         </span>
       </div>

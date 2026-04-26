@@ -33,6 +33,7 @@ import {
   STATIC_NAV_RESULTS,
   filterResults,
 } from '@/lib/command-palette-filter';
+import { searchDocs } from '@/lib/docs/search-client';
 import { setThemeAction } from '@/lib/theme-actions';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -43,9 +44,17 @@ const GROUP_LABELS: Record<CommandGroupKey, string> = {
   runs: 'Recent runs',
   models: 'Models',
   settings: 'Settings',
+  docs: 'Docs',
 };
 
-const GROUP_ORDER: ReadonlyArray<CommandGroupKey> = ['nav', 'agents', 'runs', 'models', 'settings'];
+const GROUP_ORDER: ReadonlyArray<CommandGroupKey> = [
+  'nav',
+  'agents',
+  'runs',
+  'models',
+  'settings',
+  'docs',
+];
 
 interface DynamicResults {
   agents: CommandResult[];
@@ -60,6 +69,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [dynamic, setDynamic] = useState<DynamicResults>(EMPTY_DYNAMIC);
+  const [docsHits, setDocsHits] = useState<CommandResult[]>([]);
 
   // Bind Cmd-K / Ctrl-K globally.
   useEffect(() => {
@@ -87,9 +97,39 @@ export function CommandPalette() {
     };
   }, [open, dynamic]);
 
+  // Docs search: fire on each keystroke. Fuse runs client-side against
+  // the prebuilt /docs-search-index.json — typical query is sub-ms,
+  // the network fetch is cached after the first hit. We don't debounce
+  // because the index is small and the cost is amortised.
+  useEffect(() => {
+    if (!open) {
+      setDocsHits([]);
+      return;
+    }
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setDocsHits([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const hits = await searchDocs(trimmed, 8);
+      if (!cancelled) setDocsHits(hits);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, query]);
+
   const allResults = useMemo<CommandResult[]>(
-    () => [...STATIC_NAV_RESULTS, ...dynamic.agents, ...dynamic.runs, ...dynamic.models],
-    [dynamic],
+    () => [
+      ...STATIC_NAV_RESULTS,
+      ...dynamic.agents,
+      ...dynamic.runs,
+      ...dynamic.models,
+      ...docsHits,
+    ],
+    [dynamic, docsHits],
   );
 
   const ranked = useMemo(() => filterResults(allResults, query), [allResults, query]);
@@ -120,13 +160,15 @@ export function CommandPalette() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder="Search agents, runs, models, or settings…"
+        placeholder="Search agents, runs, models, settings, or docs…"
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
         <CommandEmpty>
-          {query.length === 0 ? 'Type to search agents, runs, models, or settings.' : 'No matches.'}
+          {query.length === 0
+            ? 'Type to search agents, runs, models, settings, or docs.'
+            : 'No matches.'}
         </CommandEmpty>
         {GROUP_ORDER.map((groupKey, idx) => {
           const items = grouped[groupKey];
@@ -165,6 +207,7 @@ function groupResults(
     runs: [],
     models: [],
     settings: [],
+    docs: [],
   };
   for (const r of results) {
     out[r.group].push(r);

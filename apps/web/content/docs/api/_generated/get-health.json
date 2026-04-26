@@ -1,0 +1,47 @@
+{
+  "slug": "get-health",
+  "method": "GET",
+  "path": "/health",
+  "title": "GET /health",
+  "summary": "Read resources under ``.",
+  "authScope": null,
+  "contractFile": "health.ts",
+  "request": null,
+  "response": null,
+  "examples": [
+    {
+      "language": "curl",
+      "code": "curl -X GET https://app.aldo-ai.dev/health \\\n  -H \"Authorization: Bearer $ALDO_API_KEY\" \\\n  -H \"Content-Type: application/json\""
+    },
+    {
+      "language": "python",
+      "code": "import os, requests\n\nrequests.get(\n    \"https://app.aldo-ai.dev/health\",\n    headers={\"Authorization\": f\"Bearer {os.environ['ALDO_API_KEY']}\"},\n)"
+    },
+    {
+      "language": "typescript",
+      "code": "await fetch(\"https://app.aldo-ai.dev/health\", {\n  method: \"GET\",\n  headers: { Authorization: `Bearer ${process.env.ALDO_API_KEY}` },\n});"
+    }
+  ],
+  "errors": [
+    {
+      "status": 400,
+      "code": "invalid_request",
+      "description": "Request body or query failed Zod validation."
+    },
+    {
+      "status": 404,
+      "code": "not_found",
+      "description": "Resource does not exist (or belongs to another tenant)."
+    },
+    {
+      "status": 429,
+      "code": "rate_limited",
+      "description": "Too many requests. Honour the `Retry-After` header."
+    },
+    {
+      "status": 500,
+      "code": "internal_error",
+      "description": "Server error. Include the `request_id` when reporting."
+    }
+  ]
+}

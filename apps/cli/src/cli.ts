@@ -18,6 +18,7 @@ import { runInit } from './commands/init.js';
 import { runMcpLs } from './commands/mcp-ls.js';
 import { runModelsDiscover } from './commands/models-discover.js';
 import { runModelsLs } from './commands/models-ls.js';
+import { runOpenApiDump, runOpenApiValidate } from './commands/openapi.js';
 import { runRun } from './commands/run.js';
 import { runRunsLs } from './commands/runs-ls.js';
 import { runRunsView } from './commands/runs-view.js';
@@ -397,6 +398,36 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           },
           io,
         );
+    });
+
+  // --- openapi --------------------------------------------------------------
+  // Wave-15: pipe-friendly access to the canonical OpenAPI 3.1 spec.
+  // `dump` writes the spec to stdout (json or yaml); `validate` runs
+  // structural validation over a saved spec file.
+  const openapi = program.command('openapi').description('OpenAPI 3.1 spec utilities');
+
+  openapi
+    .command('dump')
+    .description('emit the OpenAPI 3.1 spec to stdout')
+    .option('--format <fmt>', 'one of json|yaml', 'json')
+    .option('--version <v>', 'version string to stamp on info.version', '0.0.0')
+    .action((o: { format?: string; version?: string }) => {
+      action = () =>
+        runOpenApiDump(
+          {
+            ...(o.format !== undefined ? { format: o.format as 'json' | 'yaml' } : {}),
+            ...(o.version !== undefined ? { version: o.version } : {}),
+          },
+          io,
+        );
+    });
+
+  openapi
+    .command('validate <file>')
+    .description('structurally validate an OpenAPI 3.1 JSON file')
+    .option('--json', 'emit JSON output', false)
+    .action((file: string, o: { json?: boolean }) => {
+      action = () => runOpenApiValidate(file, { json: o.json === true }, io);
     });
 
   // --- dev ------------------------------------------------------------------
