@@ -26,7 +26,7 @@ export const PASSWORD_MIN_LEN = 12;
 export const AuthUser = z.object({
   id: z.string(),
   email: z.string().email(),
-  createdAt: z.string(),
+  createdAt: z.string().optional(),
 });
 export type AuthUser = z.infer<typeof AuthUser>;
 
@@ -34,6 +34,7 @@ export const AuthTenant = z.object({
   id: z.string(),
   slug: z.string(),
   name: z.string(),
+  role: z.string().optional(),
 });
 export type AuthTenant = z.infer<typeof AuthTenant>;
 
