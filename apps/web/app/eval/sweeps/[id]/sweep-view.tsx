@@ -1,7 +1,9 @@
 'use client';
 
 import { SweepMatrix } from '@/components/eval/matrix';
+import { SweepCharts } from '@/components/eval/sweep-charts';
 import { SweepStatusBadge } from '@/components/eval/sweep-status-badge';
+import { Card } from '@/components/ui/card';
 import { ApiClientError } from '@/lib/api';
 import { getSweep, isTerminalSweepStatus } from '@/lib/eval-client';
 import { formatRelativeTime, formatUsd } from '@/lib/format';
@@ -51,7 +53,7 @@ export function SweepView({ initialSweep }: { initialSweep: Sweep }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid grid-cols-2 gap-4 rounded-md border border-slate-200 bg-white p-5 lg:grid-cols-4">
+      <Card className="grid grid-cols-2 gap-4 p-5 lg:grid-cols-4">
         <Field label="Status">
           <div className="flex items-center gap-2">
             <SweepStatusBadge status={sweep.status} />
@@ -95,13 +97,20 @@ export function SweepView({ initialSweep }: { initialSweep: Sweep }) {
         <Field label="Cells received">
           <span className="text-sm tabular-nums text-slate-800">{sweep.cells.length}</span>
         </Field>
-      </section>
+      </Card>
 
       {pollError ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
           Last refresh failed: {pollError}. Will keep retrying every 5s.
         </div>
       ) : null}
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Analytics
+        </h2>
+        <SweepCharts sweep={sweep} />
+      </section>
 
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">

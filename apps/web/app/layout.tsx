@@ -4,9 +4,12 @@
 // `lib/api` call in the same request scope. See lib/api-server-init.ts.
 import '@/lib/api-server-init';
 
+import { CommandPalette } from '@/components/command-palette';
 import { Sidebar, type SidebarUser } from '@/components/sidebar';
 import { ApiClientError, getAuthMe } from '@/lib/api';
 import { getSession } from '@/lib/session';
+import { themeClass } from '@/lib/theme';
+import { getTheme } from '@/lib/theme-server';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
@@ -90,11 +93,20 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const pathname = hdrs.get('x-aldo-pathname');
   const chromeless = isChromelessPath(pathname);
 
-  const user = chromeless ? null : await loadSidebarUser();
+  const [user, theme] = await Promise.all([
+    chromeless ? Promise.resolve(null) : loadSidebarUser(),
+    getTheme(),
+  ]);
+
+  // Apply the right `class="dark"` server-side so the SSR'd page
+  // matches the user's stored preference — no flash of wrong theme.
+  // For `'system'` we leave the class off and let the ThemeToggle
+  // client effect set it from the media query on first hydrate.
+  const htmlClass = `h-full${themeClass(theme) === 'dark' ? ' dark' : ''}`;
 
   return (
-    <html lang="en" className="h-full">
-      <body className="h-full">
+    <html lang="en" className={htmlClass}>
+      <body className="h-full bg-bg text-fg">
         {chromeless ? (
           children
         ) : (
@@ -103,6 +115,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <main className="flex-1 overflow-y-auto p-6">{children}</main>
           </div>
         )}
+        {/* Global Cmd-K palette — mounted everywhere except auth pages.
+            Auth pages already redirect on submit, so a hotkey navigation
+            mid-flow would be confusing. */}
+        {pathname === '/login' || pathname === '/signup' ? null : <CommandPalette />}
       </body>
     </html>
   );

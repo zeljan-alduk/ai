@@ -1,5 +1,12 @@
 'use client';
 
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { formatUsd } from '@/lib/format';
 import type { Sweep, SweepCellResult } from '@aldo-ai/api-contract';
 import { useMemo, useState } from 'react';
@@ -16,15 +23,9 @@ import { CellDetail } from './cell-detail';
  *   grey   — pending (no result yet — the sweep is still running, or
  *            the runner has not produced this cell)
  *
- * Click a cell to expand a drill-down panel beneath the matrix.
- *
- * CONTRACT ASSUMPTION: while a sweep is `queued` or `running`, the
- * server may include a partial `cells[]` array; cells that have not
- * been produced are simply absent. We render those as `pending`. The
- * full set of cases is recovered from the union of seen `caseId`s — if
- * the sweep produces zero cells we render an empty-state message rather
- * than a placeholder grid (we don't know the case ids without hitting
- * the suite endpoint).
+ * Click a cell to open the detail Sheet (S's primitive — replaces the
+ * wave-7.5 inline expansion). The Sheet anchors right and shows the
+ * full evaluator output + cost + duration.
  */
 export function SweepMatrix({ sweep }: { sweep: Sweep }) {
   const { caseIds, models, cellMap } = useMemo(() => buildIndex(sweep), [sweep]);
@@ -72,13 +73,7 @@ export function SweepMatrix({ sweep }: { sweep: Sweep }) {
                       <CellButton
                         cell={cell}
                         selected={isSelected}
-                        onClick={() =>
-                          setSelected((prev) =>
-                            prev?.caseId === caseId && prev?.model === model
-                              ? null
-                              : { caseId, model },
-                          )
-                        }
+                        onClick={() => setSelected({ caseId, model })}
                       />
                     </td>
                   );
@@ -111,28 +106,25 @@ export function SweepMatrix({ sweep }: { sweep: Sweep }) {
           </tbody>
         </table>
       </div>
+      <p className="text-xs text-slate-500">
+        Click any cell to inspect output, detail, and cost in the side panel.
+      </p>
 
-      {selected ? (
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Cell detail
-            </h3>
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50"
-            >
-              Close
-            </button>
-          </div>
-          <CellDetail cell={selectedCell} caseId={selected.caseId} model={selected.model} />
-        </div>
-      ) : (
-        <p className="text-xs text-slate-500">
-          Click any cell to inspect output, detail, and cost.
-        </p>
-      )}
+      <Sheet open={selected !== null} onOpenChange={(o) => (o ? null : setSelected(null))}>
+        <SheetContent side="right">
+          {selected ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>Cell detail</SheetTitle>
+                <SheetDescription>
+                  {selected.caseId} <span className="text-slate-400">·</span> {selected.model}
+                </SheetDescription>
+              </SheetHeader>
+              <CellDetail cell={selectedCell} caseId={selected.caseId} model={selected.model} />
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -173,7 +165,7 @@ function CellButton({
 }
 
 function cellKey(caseId: string, model: string): string {
-  return `${caseId}${model}`;
+  return `${caseId}${model}`;
 }
 
 function buildIndex(sweep: Sweep) {

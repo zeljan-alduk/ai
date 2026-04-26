@@ -33,6 +33,7 @@ import { designPartnersRoutes } from './routes/design-partners.js';
 import { evalRoutes } from './routes/eval.js';
 import { healthRoutes } from './routes/health.js';
 import { modelsRoutes } from './routes/models.js';
+import { observabilityRoutes } from './routes/observability.js';
 import { runsRoutes } from './routes/runs.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { tenantsRoutes } from './routes/tenants.js';
@@ -89,6 +90,7 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', runsRoutes(deps));
   app.route('/', agentsRoutes(deps));
   app.route('/', modelsRoutes(deps));
+  app.route('/', observabilityRoutes(deps));
   app.route('/', debuggerRoutes(deps));
   app.route('/', evalRoutes(deps, deps.evalDeps !== undefined ? { evalDeps: deps.evalDeps } : {}));
   app.route('/', secretsRoutes(deps));

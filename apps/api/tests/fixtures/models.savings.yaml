@@ -1,0 +1,71 @@
+apiVersion: aldo/models.v1
+kind: ModelCatalog
+
+# Wave-12 savings/observability fixtures. The cloud + local rows share
+# a `capabilityClass` so /v1/models/savings has an "equivalent" cloud
+# model to credit local-run savings against. The orphan-local row is
+# in a class with NO cloud equivalent so the savings endpoint MUST
+# count it under `unmatchedLocalRunCount` and contribute $0 to the
+# total — the figure has to be honest.
+
+models:
+  - id: cloud-medium-savings
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 3.0
+      usdPerMtokOut: 15.0
+    providerConfig:
+      apiKeyEnv: GROQ_API_KEY
+
+  - id: cloud-cheaper-savings
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 1.0
+      usdPerMtokOut: 5.0
+    providerConfig:
+      apiKeyEnv: GROQ_API_KEY
+
+  - id: local-medium-savings
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1
+
+  - id: local-orphan-savings
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: only-local-class
+    provides:
+      - 128k-context
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1

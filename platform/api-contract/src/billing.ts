@@ -92,3 +92,65 @@ export const GetSubscriptionResponse = z.object({
   subscription: Subscription,
 });
 export type GetSubscriptionResponse = z.infer<typeof GetSubscriptionResponse>;
+
+// ─────────────────────────────────────── /v1/billing/usage
+//
+// Aggregated cost analytics. Tenant-scoped; the server derives every
+// number from the same `usage_records` table the run-detail endpoint
+// reads from, plus any `composite.usage_rollup` events the orchestrator
+// emitted for in-flight rollups. Period is bucketed into one of three
+// canonical windows so the chart query stays O(1) and we don't have to
+// teach the UI how to pick a date range.
+//
+// Wire shape is INTENTIONALLY orthogonal to subscription state — the
+// /billing analytics charts must render even when Stripe isn't
+// configured (subscription endpoint returns `not_configured`). The
+// platform tracks usage either way; subscription state just decides
+// whether we charge for it.
+//
+// LLM-agnostic by construction: `byModel` keys on the opaque `model`
+// string the gateway recorded; `byAgent` keys on the agent name. No
+// provider enums leak through.
+
+export const BillingUsagePeriod = z.enum(['24h', '7d', '30d']);
+export type BillingUsagePeriod = z.infer<typeof BillingUsagePeriod>;
+
+export const BillingUsageQuery = z.object({
+  period: BillingUsagePeriod.optional(),
+});
+export type BillingUsageQuery = z.infer<typeof BillingUsageQuery>;
+
+export const BillingUsageByDay = z.object({
+  /** ISO date (YYYY-MM-DD) in UTC. */
+  date: z.string(),
+  usd: z.number().nonnegative(),
+});
+export type BillingUsageByDay = z.infer<typeof BillingUsageByDay>;
+
+export const BillingUsageByModel = z.object({
+  /** Opaque model id as recorded in usage_records.model. */
+  model: z.string(),
+  usd: z.number().nonnegative(),
+});
+export type BillingUsageByModel = z.infer<typeof BillingUsageByModel>;
+
+export const BillingUsageByAgent = z.object({
+  agent: z.string(),
+  usd: z.number().nonnegative(),
+});
+export type BillingUsageByAgent = z.infer<typeof BillingUsageByAgent>;
+
+export const BillingUsageResponse = z.object({
+  period: BillingUsagePeriod,
+  totalUsd: z.number().nonnegative(),
+  byDay: z.array(BillingUsageByDay),
+  byModel: z.array(BillingUsageByModel),
+  byAgent: z.array(BillingUsageByAgent),
+  /**
+   * Naive linear projection for the current calendar month. `null` when
+   * the period is too short or the tenant has zero history (an honest
+   * "we don't know yet" beats a confidently-wrong forecast).
+   */
+  monthlyProjectionUsd: z.number().nonnegative().nullable(),
+});
+export type BillingUsageResponse = z.infer<typeof BillingUsageResponse>;

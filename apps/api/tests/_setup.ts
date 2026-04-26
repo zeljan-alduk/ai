@@ -18,7 +18,7 @@ import { type SqlClient, fromDatabaseUrl, migrate } from '@aldo-ai/storage';
 import { buildApp } from '../src/app.js';
 import { signSessionToken } from '../src/auth/jwt.js';
 import { type Deps, type Env, SEED_TENANT_UUID, createDeps } from '../src/deps.js';
-import { resetDiscoveryCache } from '../src/routes/models.js';
+import { resetDiscoveryCache, resetHealthProbeCache } from '../src/routes/models.js';
 
 export interface TestEnv {
   readonly deps: Deps;
@@ -57,6 +57,7 @@ export async function setupTestEnv(envOverrides: Env = {}): Promise<TestEnv> {
   // /v1/models keeps a module-scoped discovery cache; reset between
   // harness instances so back-to-back setups don't share state.
   resetDiscoveryCache();
+  resetHealthProbeCache();
   const db = await fromDatabaseUrl({ driver: 'pglite' });
   await migrate(db);
   // Disable local-LLM discovery in the test harness so /v1/models
@@ -66,6 +67,12 @@ export async function setupTestEnv(envOverrides: Env = {}): Promise<TestEnv> {
   const env: Env = {
     DATABASE_URL: '',
     ALDO_LOCAL_DISCOVERY: 'none',
+    // Wave-12 — `/v1/models` can opt into a live HTTP probe of local
+    // OpenAI-compat servers. The default is opt-in (`live`) only for
+    // production; the test harness leaves it unset so the existing
+    // suite (which relies on env-var presence == available) keeps its
+    // semantics. Individual tests that exercise the probe set this to
+    // `live` via `envOverrides`.
     ...envOverrides,
   };
   const registry = new AgentRegistry({ storage: new PostgresStorage({ client: db }) });

@@ -26,6 +26,9 @@
 
 import type { ApiError } from '@aldo-ai/api-contract';
 import {
+  type BillingUsagePeriod,
+  BillingUsageQuery,
+  BillingUsageResponse,
   CheckoutRequest,
   CheckoutResponse,
   GetSubscriptionResponse,
@@ -196,6 +199,31 @@ export function billingRoutes(deps: Deps): Hono {
     return c.json({ received: true, handled: result.handled, reason: result.reason });
   });
 
+  // ─── GET /v1/billing/usage ───────────────────────────────────────
+  //
+  // Aggregated cost analytics. ORTHOGONAL to subscription state — runs
+  // happen and accumulate usage even when Stripe isn't configured. The
+  // /billing page renders these charts in placeholder mode too.
+  //
+  // Tenant-scoped: every aggregate is filtered by `runs.tenant_id` so
+  // a tenant only sees its own spend.
+  //
+  // LLM-agnostic: rolls up by the opaque `model` and `agent_name`
+  // strings recorded at write time; never branches on a provider enum.
+  app.get('/v1/billing/usage', async (c) => {
+    const auth = getAuth(c);
+    const parsed = BillingUsageQuery.safeParse(
+      Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+    );
+    if (!parsed.success) {
+      throw validationError('invalid usage query', parsed.error.issues);
+    }
+    const period: BillingUsagePeriod = parsed.data.period ?? '7d';
+    const usage = await aggregateBillingUsage(deps.db, auth.tenantId, period);
+    const body = BillingUsageResponse.parse(usage);
+    return c.json(body);
+  });
+
   // ─── GET /v1/billing/subscription ────────────────────────────────
 
   app.get('/v1/billing/subscription', async (c) => {
@@ -258,4 +286,133 @@ async function safeJson(req: Request): Promise<unknown> {
   } catch {
     return {};
   }
+}
+
+// ─────────────────────────────────────────────── usage aggregation
+
+const PERIOD_TO_DAYS: Record<BillingUsagePeriod, number> = {
+  '24h': 1,
+  '7d': 7,
+  '30d': 30,
+};
+
+interface BillingUsageAggregateRow {
+  readonly bucket: string | Date;
+  readonly model: string | null;
+  readonly agent_name: string | null;
+  readonly usd: string | number | null;
+  readonly [k: string]: unknown;
+}
+
+/**
+ * Pull every (model, agent, day) bucket of usage in the requested
+ * window and reshape into the wire shape. Single round-trip; the
+ * GROUP BY is pushed into SQL so the API never reads a bottomless
+ * stream of usage_records into memory.
+ *
+ * IMPORTANT — the `runs r` join is what binds usage to a tenant. The
+ * `usage_records` table doesn't carry tenant_id directly (FK to runs),
+ * so we MUST filter on `r.tenant_id = $1` to keep cross-tenant
+ * isolation tight.
+ */
+export async function aggregateBillingUsage(
+  db: import('@aldo-ai/storage').SqlClient,
+  tenantId: string,
+  period: BillingUsagePeriod,
+): Promise<{
+  readonly period: BillingUsagePeriod;
+  readonly totalUsd: number;
+  readonly byDay: ReadonlyArray<{ readonly date: string; readonly usd: number }>;
+  readonly byModel: ReadonlyArray<{ readonly model: string; readonly usd: number }>;
+  readonly byAgent: ReadonlyArray<{ readonly agent: string; readonly usd: number }>;
+  readonly monthlyProjectionUsd: number | null;
+}> {
+  const days = PERIOD_TO_DAYS[period];
+  const now = Date.now();
+  const since = new Date(now - days * 86400_000).toISOString();
+
+  // One query per axis is simpler than one big GROUP BY GROUPING SETS
+  // (pglite's planner doesn't optimise grouping sets well, and the
+  // intent is clearer this way).
+  const dayRes = await db.query<BillingUsageAggregateRow>(
+    `SELECT
+        to_char(date_trunc('day', u.at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS bucket,
+        COALESCE(SUM(u.usd), 0)::text AS usd
+       FROM usage_records u
+       JOIN runs r ON r.id = u.run_id
+      WHERE r.tenant_id = $1
+        AND u.at >= $2::timestamptz
+      GROUP BY 1
+      ORDER BY 1 ASC`,
+    [tenantId, since],
+  );
+
+  const modelRes = await db.query<BillingUsageAggregateRow>(
+    `SELECT u.model AS model, COALESCE(SUM(u.usd), 0)::text AS usd
+       FROM usage_records u
+       JOIN runs r ON r.id = u.run_id
+      WHERE r.tenant_id = $1
+        AND u.at >= $2::timestamptz
+      GROUP BY u.model
+      ORDER BY SUM(u.usd) DESC`,
+    [tenantId, since],
+  );
+
+  const agentRes = await db.query<BillingUsageAggregateRow>(
+    `SELECT r.agent_name AS agent_name, COALESCE(SUM(u.usd), 0)::text AS usd
+       FROM usage_records u
+       JOIN runs r ON r.id = u.run_id
+      WHERE r.tenant_id = $1
+        AND u.at >= $2::timestamptz
+      GROUP BY r.agent_name
+      ORDER BY SUM(u.usd) DESC`,
+    [tenantId, since],
+  );
+
+  const byDay = dayRes.rows.map((r) => ({
+    date: typeof r.bucket === 'string' ? r.bucket : new Date(r.bucket).toISOString().slice(0, 10),
+    usd: Number(r.usd ?? 0),
+  }));
+  const byModel = modelRes.rows
+    .filter((r): r is BillingUsageAggregateRow & { model: string } => typeof r.model === 'string')
+    .map((r) => ({ model: r.model, usd: Number(r.usd ?? 0) }));
+  const byAgent = agentRes.rows
+    .filter(
+      (r): r is BillingUsageAggregateRow & { agent_name: string } =>
+        typeof r.agent_name === 'string',
+    )
+    .map((r) => ({ agent: r.agent_name, usd: Number(r.usd ?? 0) }));
+
+  const totalUsd = byModel.reduce((acc, b) => acc + b.usd, 0);
+  const monthlyProjectionUsd = projectMonthly(byDay, days);
+
+  return {
+    period,
+    totalUsd,
+    byDay,
+    byModel,
+    byAgent,
+    monthlyProjectionUsd,
+  };
+}
+
+/**
+ * Naive linear projection: average daily spend across the observed
+ * window times the number of days in the current calendar month.
+ * Returns null when there's no usage history in the window — better an
+ * empty card than a confidently-wrong forecast.
+ */
+function projectMonthly(
+  byDay: ReadonlyArray<{ readonly date: string; readonly usd: number }>,
+  windowDays: number,
+): number | null {
+  if (byDay.length === 0) return null;
+  const total = byDay.reduce((acc, d) => acc + d.usd, 0);
+  if (total === 0) return null;
+  const perDay = total / Math.max(1, windowDays);
+  const now = new Date();
+  const daysInMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  return Number((perDay * daysInMonth).toFixed(6));
 }

@@ -2050,3 +2050,214 @@ file touched, billing 55/55 tests, api 140/140 (+12 new), storage
 webhook.spec.ts` smoke spec gated behind `E2E_ALLOW_WRITES=true` AND
 `STRIPE_TEST_MODE=true` (skips otherwise). Not committed —
 orchestrator integrates.
+
+[2026-04-26 12:40 UTC] engineer-T — wave 12 trace flame graph + cost analytics
+Rebuilt the runs surface around an SVG flame graph + the billing
+page around three Recharts figures, all driven by a new
+auth-required, tenant-scoped `GET /v1/billing/usage?period=24h|7d|
+30d` endpoint that aggregates usage_records joined to runs.
+
+Wire shape: `{ period, totalUsd, byDay:[{date,usd}],
+byModel:[{model,usd}], byAgent:[{agent,usd}],
+monthlyProjectionUsd }`. Aggregation pushed into SQL (three GROUP
+BYs, single round-trip per axis); never reads a bottomless usage
+stream into memory. Cross-tenant isolation enforced by the
+runs.tenant_id join — usage_records doesn't carry tenant_id
+itself. Period filter on usage_records.at; monthly projection is
+naive (avg-daily × days-in-month), null when there's no history.
+
+Web: /runs list became Card rows with status badges + sparkline +
+filter pills (status / agent / time-range / search) and an
+illustrated empty state linking to /agents. /runs/[id] grew four
+tabs (Timeline | Events | Tree | Replay), with the trace flame
+graph as the centrepiece — pure SVG, layout math in a separate
+`flame-graph-layout.ts` so geometry is unit-tested without jsdom.
+Bars coloured by status only (never provider). Click a bar →
+opens Engineer S's `Sheet` with the span's events, JSON
+syntax-highlighted via a tiny zero-dep escaper (no prismjs in
+the bundle for one component). Replay tab is a rAF-driven
+scrubber with 0.5×–64× speeds — the "wow" feature the brief
+called out. /billing rebuilt around the new endpoint: trend
+AreaChart, model PieChart, agent BarChart (all Recharts);
+not_configured collapses Stripe-related cards into the existing
+amber banner but the analytics keep rendering — orthogonal to
+subscription state.
+
+Engineer S's design system at `components/ui/*` was already in
+when I rebased; my consumers use `Card`/`Button`/`Sheet`/`Tabs`
+directly from there. Initial stub `components/ui/index.tsx` got
+overwritten by S's barrel — clean integration. Tabs are
+client-only (Radix), so I wrapped them in `RunDetailTabs` so
+the rest of the run-detail page stays SSR. CostBreakdownChart
++ FlameGraph + ReplayScrubber + EventDetailSheet are the only
+new client islands.
+
+Quality bar: pnpm -r typecheck green; biome check clean on every
+wave-12 file (one a11y suppression on the SVG `<g role="button">`
+since SVG can't be a real <button>). 7 new API tests for the
+usage endpoint (auth/validation: 2, empty result: 1, aggregation
+correctness: 1, period filtering: 1, cross-tenant isolation: 1,
+default period: 1) — apps/api now 163/163. 12 new flame-graph
+layout tests in apps/web — apps/web now 116/116. apps/web build
+green; /runs/[id] = 33.2kB, /billing = 6.64kB. recharts@^3.8.1
+was already added to apps/web/package.json by S/another wave.
+Recharts 3.x's stricter `Formatter<ValueType,NameType>` types
+forced `(value) => Number(value ?? 0).toFixed(...)` instead of
+the natural `(v: number) => ...` pattern; matches the
+observability-pie-chart convention so we're consistent.
+
+Files: `apps/web/components/runs/{flame-graph,flame-graph-
+layout,event-detail-sheet,replay-scrubber,timeline-view,run-
+detail-tabs,cost-breakdown-chart,sparkline}.tsx`,
+`apps/web/components/billing/usage-charts.tsx`,
+`apps/web/app/runs/{page,filters}.tsx`,
+`apps/web/app/runs/[id]/page.tsx`, `apps/web/app/billing/page.tsx`,
+`apps/api/src/routes/billing.ts` (added /usage),
+`apps/api/tests/billing-usage.test.ts` (new),
+`platform/api-contract/src/billing.ts` (additive
+BillingUsage* schemas), `apps/web/lib/api.ts`
+(added getBillingUsage). Not committed — orchestrator integrates.
+
+[2026-04-26 12:43 UTC] engineer-V — wave 12 models redesign + observability
+Redesigned /models around the platform's moat concepts and shipped
+the new /observability page that exposes the safety story as live
+data. Pages: /models (cards-default + compare-table toggle, filter
+chips for locality/privacy/capability-class, search box, top KPIs
+covering total/cloud/local/on-prem and avg $/Mtok cloud-vs-local),
+/observability (new — KPIs row of 7, three Card sections: privacy-
+router decisions table with tier filter, sandbox+guards activity
+feed linking to /runs/[id], local-vs-cloud breakdown with Recharts
+pie + per-agent-model table, period toggle 24h/7d/30d, 15s poll).
+Sidebar grew an Observability link between Models and Billing.
+Endpoints: `GET /v1/models/savings?period=7d|30d|90d` (cloud-spend-
+saved aggregation; only credits local-runs whose capability_class
+has a genuinely-equivalent cloud row in the catalog — orphan-class
+local rows land in `unmatchedLocalRunCount` and contribute $0,
+math is honest); `GET /v1/observability/summary?period=24h|7d|30d`
+(KPIs + privacy-router feed + safety feed + locality breakdown +
+per-(agent,model) breakdown in one round-trip, all tenant-scoped).
+`/v1/models` extended with optional `lastProbedAt: string` on every
+row (additive — older clients ignore it). Live availability probe
+added behind `ALDO_HEALTH_PROBE=live` opt-in: hits `${baseUrl}/models`
+for OpenAI-compat local servers and `${baseUrl}/health` for `mlx`,
+60s cache, 1s per-probe timeout, never blocks /v1/models latency
+when off (default). Cloud rows continue to resolve via env-var
+presence so we don't burn a request budget per render. KPI list:
+events/sec (1h), runs in flight, cloud spend MTD, local spend MTD,
+sandbox blocks 24h, guards blocks 24h, privacy-tier mismatches 24h
+(structurally always 0 — that's the point). Recharts wired on the
+cost-comparison BarChart (sorted ascending by usdPerMtokIn+Out so
+local rows pile at the bottom, bar color keyed off locality) and
+the locality-pie on /observability. The savings card uses an
+inline SVG sparkline (single series, kept tight). Tests: 16 new
+api tests (savings 9: zero-savings/orphan-class/honest-math/cross-
+tenant/period-filter/cloud-only/invalid-period + lastProbedAt
+stamping + live-probe-503 path; observability 7: empty state, KPI
+aggregation, privacy-router surfacing, sandbox-block surfacing,
+cross-tenant isolation, invalid-period 400, auth-required 401);
+13 new web tests in components/models/filters.test.ts covering
+filter chip semantics (locality/privacy/class/search) + the
+cost-ascending sort + computeLocalityKpis. Files added:
+`platform/api-contract/src/models.ts` (extended — SavingsResponse,
+ObservabilitySummary, ObservabilityPeriod, SavingsPeriod,
+PrivacyRouterEvent, SafetyEvent, LocalityBreakdown, ModelBreakdown
+schemas; lastProbedAt on ModelSummary), `apps/api/src/routes/
+observability.ts` (new), `apps/api/src/routes/models.ts` (extended
+— /v1/models/savings + probeAvailability + lastProbedAt threading
++ resetHealthProbeCache export for the test harness), `apps/api/
+src/app.ts` (mounted observabilityRoutes), `apps/api/tests/{
+savings,observability}.test.ts` + `tests/fixtures/models.savings.
+yaml`, `apps/web/components/models/{filters,filters.test,locality-
+badge,cost-comparison-chart,savings-card,models-explorer}.tsx/.ts`,
+`apps/web/components/observability/{locality-pie-chart,
+observability-page}.tsx`, `apps/web/app/{models,observability}/
+page.tsx`, `apps/web/lib/api.ts` (added getModelSavings +
+getObservabilitySummary). Quality bar: pnpm -r typecheck green;
+biome clean on every wave-12 file I touched (some pre-existing
+issues in other engineers' files outside scope); apps/api 163/163
+tests (16 new); apps/web 116/116 tests (13 new); apps/web build
+green (/models 5.91 kB, /observability 6.8 kB). All endpoints
+authenticated + tenant-scoped, never branch on a hardcoded
+provider name (LLM-agnostic constraint), and savings math only
+counts when an equivalent cloud model genuinely existed in the
+live catalog. Not committed — orchestrator integrates.
+
+[2026-04-26 12:45 UTC] engineer-U — wave 12 agents gallery + eval analytics + composite diagram
+Rebuilt /agents from a plain table into a card gallery: 3-col
+desktop, 2-col tablet, 1-col mobile, each card showing a
+deterministic SVG avatar, agent name + team.role, top-3 tag
+chips with "(N more)", privacy-tier badge, last-10-runs
+sparkline (oldest-first colored dots), and a "Try this agent"
+button that opens a Dialog explaining wave-13 plumbing — never
+fakes a run. Filter chips for team / privacy / has_composite +
+debounced search box; URL-driven state for deep links.
+Empty-registry state offers the seed-default-agency CTA hooked
+into the existing /v1/tenants/me/seed-default action. Avatar
+hash is FNV-1a 32-bit (`fnv1a32`) over the UTF-8 codepoints,
+deterministic across Node + browsers + edge workers, palette
+index = hash % palettes.length over a curated 12-palette deck
+(color-blind-distinguishable). The same name yields the same
+avatar across page loads, users, and SSR/client renders.
+
+Redesigned /agents/[name] with a header card (avatar + name +
+version + privacy + tags + description) and S's Tabs primitive
+splitting content into Spec | Safety | Composite | Eval | Runs.
+Spec tab pretty-prints YAML (js-yaml.dump on the JSON spec).
+Safety keeps the wave-7.5 sandbox + guards panels + routing
+dry-run, restyled. Composite tab renders the visual diagram
+when `composite` is set, otherwise "leaf" hint. Eval tab pulls
+/v1/eval/sweeps?agent=<name> (already supported on the API)
+and renders per-suite pass-rate-over-time lines + per-model
+aggregate bar. Runs tab is the last 20 runs of THIS agent in
+a tight table, click → /runs/[id].
+
+Composite diagram is pure SVG (no DAG library): sequential
+chains, parallel fans out + joins, debate fans out + names the
+aggregator, iterative renders a self-loop with maxRounds +
+terminate annotated. Each subagent node click → /agents/[that-
+name]; missing agents (not in the registry) get a red warning
+indicator + tooltip. Layout positions are pure functions
+(`computeLayout`) and pinned by vitest — 6 tests across the 4
+strategies + missing-agent path.
+
+/eval/sweeps/[id] gained an Analytics section above the matrix
+with three Recharts panels: cumulative pass-rate-per-model line
+(spots early-failure clumps), cost-per-pass scatter (each model
+is a dot; bottom-right = cost-effective frontier), per-model
+capability radar with 4 capability-CLASS axes (latency / cost /
+pass-rate / coverage) — never provider-specific. The cell-detail
+side-panel now uses S's Sheet primitive instead of the inline
+custom expansion. /eval/sweeps was rebuilt as a card grid; each
+card carries a thumbnail of the matrix (cell-color SVG, no
+labels), filters expanded to agent / suite / status / date-range.
+
+Components shipped:
+  components/agents/agent-avatar.tsx + .test.ts (10 tests)
+  components/agents/agent-card.tsx
+  components/agents/agent-detail-tabs.tsx
+  components/agents/agent-runs-panel.tsx
+  components/agents/composite-diagram.tsx + .test.ts (6 tests)
+  components/agents/eval-analytics.tsx + .test.ts (6 tests)
+  components/agents/gallery-filters.ts + .test.ts (9 tests)
+  components/agents/gallery-filters-ui.tsx
+  components/agents/run-status-sparkline.tsx + .test.tsx (4 tests)
+  components/agents/try-agent-dialog.tsx
+  components/eval/sweep-charts.tsx + .test.ts (6 tests)
+  components/eval/sweep-thumbnail.tsx
+  components/ui/sheet.tsx (added; S's stack already had the rest)
+
+Charts implemented: per-suite pass-rate-over-time line +
+per-model aggregate bar (agent eval tab); cumulative pass-rate
+line + cost-per-pass scatter + capability-class radar (sweep
+detail). All Recharts identifiers stay opaque — no provider
+branching anywhere in the chart code.
+
+Deps added (apps/web): recharts ^3.8.1, js-yaml ^4.1.1,
+@types/js-yaml ^4.0.9. No platform-package deps changed.
+
+Quality bar: pnpm -r typecheck green; pnpm --filter @aldo-ai/web
+test 116/116 (41 new across the 6 wave-12 test files); pnpm
+--filter @aldo-ai/api test 163/163; pnpm --filter @aldo-ai/web
+build green. The pre-existing lint warnings on
+components/marketing/top-nav, command-palette, and theme-* files
+are not from wave 12 — every file I touched is biome-clean.

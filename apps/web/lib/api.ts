@@ -15,6 +15,8 @@ import {
   ApiError,
   AuthMeResponse,
   AuthSessionResponse,
+  type BillingUsagePeriod,
+  BillingUsageResponse,
   CheckAgentResponse,
   type CheckoutRequest,
   CheckoutResponse,
@@ -31,8 +33,12 @@ import {
   ListRunsResponse,
   ListSecretsResponse,
   type LoginRequest,
+  type ObservabilityPeriod,
+  ObservabilitySummary,
   type PortalRequest,
   PortalResponse,
+  type SavingsPeriod,
+  SavingsResponse,
   type SetSecretRequest,
   SetSecretResponse,
   type SignupRequest,
@@ -290,6 +296,28 @@ export function listModels() {
   return request('/v1/models', ListModelsResponse);
 }
 
+/**
+ * `GET /v1/models/savings?period=7d|30d|90d` — wave-12 "cloud spend you
+ * saved by going local" aggregation. Cross-tenant safe, defaults to 30d.
+ * Only counts savings where the local model had a genuinely-equivalent
+ * cloud model in the catalog at probe time.
+ */
+export function getModelSavings(query: { period?: SavingsPeriod } = {}) {
+  return request('/v1/models/savings', SavingsResponse, { query });
+}
+
+/* ----------------------------- Observability ---------------------------- */
+
+/**
+ * `GET /v1/observability/summary?period=24h|7d|30d` — wave-12 KPIs +
+ * privacy-router decision feed + sandbox/guards activity feed +
+ * local-vs-cloud breakdown, all in one round-trip. Authed and
+ * tenant-scoped.
+ */
+export function getObservabilitySummary(query: { period?: ObservabilityPeriod } = {}) {
+  return request('/v1/observability/summary', ObservabilitySummary, { query });
+}
+
 /* ------------------------------- Secrets -------------------------------- */
 
 export function listSecrets() {
@@ -453,6 +481,20 @@ export function updateDesignPartnerApplication(
  */
 export function getSubscription() {
   return request('/v1/billing/subscription', GetSubscriptionResponse);
+}
+
+/**
+ * `GET /v1/billing/usage` — aggregated cost analytics for the caller's
+ * tenant over the requested period. ORTHOGONAL to subscription state:
+ * always returns 200 (or auth/validation errors) regardless of whether
+ * Stripe is configured. The `/billing` analytics charts call this
+ * directly even in placeholder mode.
+ *
+ * Provider-agnostic: the response keys on `model` (opaque string) and
+ * `agent` (the agent name); never on a provider enum.
+ */
+export function getBillingUsage(query: { period?: BillingUsagePeriod } = {}) {
+  return request('/v1/billing/usage', BillingUsageResponse, { query });
 }
 
 /**

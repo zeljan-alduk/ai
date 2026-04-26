@@ -2,20 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens.
+ *
+ * The platform uses CSS custom properties for everything that may flip
+ * between light and dark mode. Tailwind config (`tailwind.config.ts`)
+ * exposes these via the `colors` extension so authors can write
+ * `bg-bg`, `text-fg`, `border-border` etc. instead of `bg-[var(--bg)]`.
+ *
+ * Light theme (default): slate-50 base, blue-600 accent.
+ * Dark theme (`html.dark`): slate-950 base, blue-500 accent.
+ *
+ * Tokens are semantic (`bg`, `bg-elevated`, `fg`, `fg-muted`, `accent`)
+ * rather than literal (`slate-50`, `blue-500`). That makes a future
+ * re-skin a token-file edit, not a codebase-wide find/replace.
+ *
+ * Channel format: `R G B` (no commas). Tailwind's `<alpha-value>`
+ * placeholder lets us write classes like `bg-accent/20`. See the
+ * `colors` extension in `tailwind.config.ts`.
+ */
 :root {
-  --bg: #f8fafc;
-  --bg-elevated: #ffffff;
-  --fg: #0f172a;
-  --fg-muted: #475569;
-  --fg-faint: #94a3b8;
-  --border: #e2e8f0;
-  --accent: #2563eb;
+  /* Surfaces. */
+  --bg: 248 250 252; /* slate-50 */
+  --bg-elevated: 255 255 255; /* white */
+  --bg-subtle: 241 245 249; /* slate-100 */
+
+  /* Foreground. */
+  --fg: 15 23 42; /* slate-900 */
+  --fg-muted: 71 85 105; /* slate-600 */
+  --fg-faint: 148 163 184; /* slate-400 */
+  --fg-inverse: 248 250 252; /* slate-50 (text on a dark surface) */
+
+  /* Borders / dividers. */
+  --border: 226 232 240; /* slate-200 */
+  --border-strong: 203 213 225; /* slate-300 */
+
+  /* Accent (primary action). */
+  --accent: 37 99 235; /* blue-600 */
+  --accent-fg: 255 255 255;
+  --accent-hover: 29 78 216; /* blue-700 */
+  --accent-subtle: 219 234 254; /* blue-100 */
+
+  /* Status. */
+  --success: 22 163 74; /* green-600 */
+  --warning: 217 119 6; /* amber-600 */
+  --danger: 220 38 38; /* red-600 */
+
+  /* Focus ring. */
+  --ring: 59 130 246; /* blue-500 */
+
+  color-scheme: light;
+}
+
+html.dark {
+  --bg: 2 6 23; /* slate-950 */
+  --bg-elevated: 15 23 42; /* slate-900 */
+  --bg-subtle: 30 41 59; /* slate-800 */
+
+  --fg: 248 250 252; /* slate-50 */
+  --fg-muted: 148 163 184; /* slate-400 */
+  --fg-faint: 100 116 139; /* slate-500 */
+  --fg-inverse: 15 23 42; /* slate-900 */
+
+  --border: 30 41 59; /* slate-800 */
+  --border-strong: 51 65 85; /* slate-700 */
+
+  --accent: 59 130 246; /* blue-500 */
+  --accent-fg: 248 250 252;
+  --accent-hover: 96 165 250; /* blue-400 */
+  --accent-subtle: 30 58 138; /* blue-900 */
+
+  --success: 34 197 94; /* green-500 */
+  --warning: 245 158 11; /* amber-500 */
+  --danger: 239 68 68; /* red-500 */
+
+  --ring: 96 165 250; /* blue-400 */
+
+  color-scheme: dark;
 }
 
 html,
 body {
-  background: var(--bg);
-  color: var(--fg);
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
 }
 
 body {
@@ -24,7 +93,46 @@ body {
   font-feature-settings: "cv11", "ss01", "ss03";
 }
 
-/* Subtle table styling re-used across pages. */
+/*
+ * Animations.
+ *
+ * `motion-safe:animate-fade-in` is used by the marketing hero so users
+ * with `prefers-reduced-motion: reduce` see the headline statically.
+ */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-slow {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes blob-float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(20px, -30px) scale(1.05);
+  }
+  66% {
+    transform: translate(-15px, 15px) scale(0.97);
+  }
+}
+
+/* Subtle table styling re-used across pages (legacy; kept for non-redesigned routes). */
 .aldo-table {
   width: 100%;
   border-collapse: collapse;
@@ -34,13 +142,13 @@ body {
 .aldo-table td {
   text-align: left;
   padding: 0.625rem 0.875rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgb(var(--border));
   vertical-align: middle;
 }
 .aldo-table th {
-  color: var(--fg-muted);
+  color: rgb(var(--fg-muted));
   font-weight: 500;
-  background: #f1f5f9;
+  background: rgb(var(--bg-subtle));
 }
 .aldo-table tr:last-child td {
   border-bottom: 0;

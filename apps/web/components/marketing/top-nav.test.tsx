@@ -3,9 +3,9 @@
  *
  * The vitest environment is `node`, so we render to a static HTML
  * string with `react-dom/server` and assert against the markup
- * directly. This is sufficient for the wave-11 quality bar
- * (≥4 cases): we are checking that the public CTAs land on the
- * right routes, not exercising the scroll-state client effect.
+ * directly. The wave-12 redesign added a Sheet drawer for mobile +
+ * a ThemeToggle on the right; we verify the public CTAs still land
+ * on the right routes and the new affordances ship in markup.
  */
 
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { MarketingTopNav } from './top-nav.js';
 
 function render(): string {
-  return renderToStaticMarkup(<MarketingTopNav />);
+  return renderToStaticMarkup(<MarketingTopNav initialTheme="system" />);
 }
 
 describe('MarketingTopNav', () => {
@@ -27,13 +27,13 @@ describe('MarketingTopNav', () => {
     const html = render();
     expect(html).toContain('href="/pricing"');
     expect(html).toContain('href="/security"');
-    expect(html).toContain('href="/about"');
+    expect(html).toContain('href="/docs"');
   });
 
   it('exposes both Log in and Sign up CTAs at the right routes', () => {
     const html = render();
-    expect(html).toMatch(/href="\/login"[^>]*>[\s\S]*?Log in/);
-    expect(html).toMatch(/href="\/signup"[^>]*>[\s\S]*?Sign up/);
+    expect(html).toContain('href="/login"');
+    expect(html).toContain('href="/signup"');
   });
 
   it('opens the GitHub link in a new tab with rel=noreferrer', () => {

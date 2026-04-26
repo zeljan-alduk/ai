@@ -1,12 +1,24 @@
-import { NeutralBadge, PrivacyBadge } from '@/components/badge';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorView } from '@/components/error-boundary';
+import { ModelsExplorer } from '@/components/models/models-explorer';
+import { SavingsCard } from '@/components/models/savings-card';
 import { PageHeader } from '@/components/page-header';
 import { listModels } from '@/lib/api';
-import { formatUsd } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Wave-12 redesigned /models surface.
+ *
+ * Server component fetches the catalogue and KPIs once; the explorer
+ * island handles filter state, view-toggle, and the cost-comparison
+ * chart locally. The "savings" card is its own client island so it
+ * can poll `/v1/models/savings` independently — keeping the heavy
+ * catalogue render path off the polling clock.
+ *
+ * LLM-agnostic: every badge/colour is keyed off opaque strings from
+ * the API. Provider names are displayed as-is and never branched on.
+ */
 export default async function ModelsPage() {
   let data: Awaited<ReturnType<typeof listModels>> | null = null;
   let error: unknown = null;
@@ -20,79 +32,21 @@ export default async function ModelsPage() {
     <>
       <PageHeader
         title="Models"
-        description="Registered models. Provider strings are opaque — switch providers via config, not code."
+        description="The runtime catalogue. Filter by locality, privacy tier, or capability class — every column is opaque so swapping providers stays a config change."
       />
+      <div className="mb-6">
+        <SavingsCard />
+      </div>
       {error ? (
         <ErrorView error={error} context="models" />
       ) : data ? (
         data.models.length === 0 ? (
           <EmptyState
-            title="No models registered."
-            hint="Add provider configuration to apps/api to make models available."
+            title="No models in catalog yet"
+            hint="Add provider configuration to apps/api or seed the bundled fixture to make models available."
           />
         ) : (
-          <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
-            <table className="aldo-table">
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Provider</th>
-                  <th>Locality</th>
-                  <th>Capability</th>
-                  <th>Privacy allowed</th>
-                  <th className="text-right">$/Mtok in</th>
-                  <th className="text-right">$/Mtok out</th>
-                  <th>Available</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.models.map((m) => (
-                  <tr
-                    key={m.id}
-                    className={m.available ? 'hover:bg-slate-50' : 'opacity-60 hover:bg-slate-50'}
-                  >
-                    <td>
-                      <span className="font-mono text-xs text-slate-900">{m.id}</span>
-                      <div className="mt-0.5 flex flex-wrap gap-1">
-                        {m.provides.map((p) => (
-                          <NeutralBadge key={p}>{p}</NeutralBadge>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="text-sm text-slate-700">{m.provider}</td>
-                    <td className="text-sm text-slate-700">{m.locality}</td>
-                    <td className="text-sm text-slate-700">{m.capabilityClass}</td>
-                    <td>
-                      <div className="flex flex-wrap gap-1">
-                        {m.privacyAllowed.map((t) => (
-                          <PrivacyBadge key={t} tier={t} />
-                        ))}
-                      </div>
-                    </td>
-                    <td className="text-right text-sm tabular-nums">
-                      {formatUsd(m.cost.usdPerMtokIn)}
-                    </td>
-                    <td className="text-right text-sm tabular-nums">
-                      {formatUsd(m.cost.usdPerMtokOut)}
-                    </td>
-                    <td>
-                      {m.available ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          available
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                          <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                          not configured
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ModelsExplorer models={data.models} />
         )
       ) : null}
     </>

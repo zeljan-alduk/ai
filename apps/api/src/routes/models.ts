@@ -28,11 +28,18 @@
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { ListModelsResponse, type ModelSummary } from '@aldo-ai/api-contract';
+import {
+  ListModelsResponse,
+  type ModelSummary,
+  SavingsQuery,
+  SavingsResponse,
+} from '@aldo-ai/api-contract';
 import { type DiscoveredModel, discover as runLocalDiscovery } from '@aldo-ai/local-discovery';
 import { Hono } from 'hono';
 import YAML from 'yaml';
+import { getAuth } from '../auth/middleware.js';
 import type { Deps, Env } from '../deps.js';
+import { validationError } from '../middleware/error.js';
 
 interface FixtureModel {
   readonly id: string;
@@ -126,7 +133,100 @@ export function isModelAvailable(model: FixtureModel, env: Env): boolean {
   return typeof v === 'string' && v.length > 0;
 }
 
-function toModelSummary(model: FixtureModel, env: Env): ModelSummary {
+/**
+ * Wave-12 health-probe cache. The brief asks for live availability —
+ * a real ping against local OpenAI-compatible servers (`/v1/models`)
+ * and `mlx` (`/health`). Cloud models still resolve via env-var
+ * presence (we don't burn a request budget on them just to render a
+ * dot). 60-second TTL keeps the catalogue snappy on a 15s-poll UI
+ * while still reflecting a hot-restarted local server within one
+ * window.
+ *
+ * Test seam: `ALDO_HEALTH_PROBE=none` short-circuits — the harness
+ * sets it so /v1/models tests don't burn the per-probe timeout
+ * budget against closed localhost ports.
+ */
+interface HealthProbeEntry {
+  readonly fetchedAt: number;
+  readonly available: boolean;
+}
+const HEALTH_PROBE_TTL_MS = 60_000;
+const healthProbeCache = new Map<string, HealthProbeEntry>();
+let healthInFlight = new Map<string, Promise<boolean>>();
+
+export function resetHealthProbeCache(): void {
+  healthProbeCache.clear();
+  healthInFlight = new Map();
+}
+
+function probeUrlFor(model: FixtureModel): { url: string; method: 'GET' } | null {
+  const baseUrl = model.providerConfig?.baseUrl;
+  if (typeof baseUrl !== 'string' || baseUrl.length === 0) return null;
+  // mlx serves `/health` at the root; the OpenAI-compat servers serve
+  // `/v1/models` at the configured base. The base URL in the fixture
+  // for OpenAI-compat already ends in `/v1`, so we hit `${baseUrl}/models`.
+  if (model.provider === 'mlx') {
+    return { url: `${stripTrailingSlash(baseUrl)}/health`, method: 'GET' };
+  }
+  return { url: `${stripTrailingSlash(baseUrl)}/models`, method: 'GET' };
+}
+
+function stripTrailingSlash(s: string): string {
+  return s.endsWith('/') ? s.slice(0, -1) : s;
+}
+
+async function probeOnce(url: string, signal: AbortSignal): Promise<boolean> {
+  try {
+    const res = await fetch(url, { method: 'GET', signal });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve liveness for a single local model with a 60s cache. Cloud
+ * models bypass this (env-var presence is the signal). The probe is
+ * OPT-IN via `ALDO_HEALTH_PROBE=live` — by default the env-var-derived
+ * `isModelAvailable` value is returned untouched. The opt-in lets
+ * production deploys flip live probing on without breaking the test
+ * harness, which never wants to spend its budget hitting closed
+ * localhost ports during a typecheck run.
+ */
+export async function probeAvailability(model: FixtureModel, env: Env): Promise<boolean> {
+  const baseAvailable = isModelAvailable(model, env);
+  if (env.ALDO_HEALTH_PROBE !== 'live') return baseAvailable;
+  if (!isLocalLocality(model.locality)) return baseAvailable;
+  const probe = probeUrlFor(model);
+  if (probe === null) return baseAvailable;
+  const cacheKey = `${model.id}::${probe.url}`;
+  const now = Date.now();
+  const cached = healthProbeCache.get(cacheKey);
+  if (cached !== undefined && now - cached.fetchedAt < HEALTH_PROBE_TTL_MS) {
+    return cached.available;
+  }
+  const inflight = healthInFlight.get(cacheKey);
+  if (inflight !== undefined) return inflight;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 1_000);
+  const p = probeOnce(probe.url, ac.signal)
+    .then((ok) => {
+      healthProbeCache.set(cacheKey, { fetchedAt: Date.now(), available: ok });
+      return ok;
+    })
+    .catch(() => {
+      healthProbeCache.set(cacheKey, { fetchedAt: Date.now(), available: false });
+      return false;
+    })
+    .finally(() => {
+      clearTimeout(t);
+      healthInFlight.delete(cacheKey);
+    });
+  healthInFlight.set(cacheKey, p);
+  return p;
+}
+
+function toModelSummary(model: FixtureModel, env: Env, probedAt: string): ModelSummary {
   const privacyAllowed = (model.privacyAllowed ?? []).filter(
     (p): p is ModelSummary['privacyAllowed'][number] =>
       p === 'public' || p === 'internal' || p === 'sensitive',
@@ -144,6 +244,7 @@ function toModelSummary(model: FixtureModel, env: Env): ModelSummary {
     },
     effectiveContextTokens: model.effectiveContextTokens ?? 0,
     available: isModelAvailable(model, env),
+    lastProbedAt: probedAt,
     ...(model.latencyP95Ms !== undefined ? { latencyP95Ms: model.latencyP95Ms } : {}),
   };
   return summary;
@@ -155,7 +256,7 @@ function toModelSummary(model: FixtureModel, env: Env): ModelSummary {
  * the web UI treats local-locality + capability/cost rows uniformly,
  * so a discovered model lands next to the YAML-seeded ones.
  */
-function discoveredToSummary(m: DiscoveredModel): ModelSummary {
+function discoveredToSummary(m: DiscoveredModel, probedAt: string): ModelSummary {
   return {
     id: m.id,
     provider: m.provider,
@@ -169,6 +270,7 @@ function discoveredToSummary(m: DiscoveredModel): ModelSummary {
     },
     effectiveContextTokens: m.effectiveContextTokens,
     available: true,
+    lastProbedAt: probedAt,
     ...(m.latencyP95Ms !== undefined ? { latencyP95Ms: m.latencyP95Ms } : {}),
   };
 }
@@ -229,14 +331,170 @@ export function modelsRoutes(deps: Deps): Hono {
     const catalog = await loadModelCatalog(deps.env);
     const known = new Set(catalog.models.map((m) => m.id));
     const discovered = await getDiscovered(deps.env);
-    const summaries: ModelSummary[] = catalog.models.map((m) => toModelSummary(m, deps.env));
+    const probedAt = new Date().toISOString();
+    const liveProbe = deps.env.ALDO_HEALTH_PROBE === 'live';
+    const probedAvailability = liveProbe
+      ? await Promise.all(catalog.models.map((m) => probeAvailability(m, deps.env)))
+      : null;
+    const summaries: ModelSummary[] = catalog.models.map((m, i) => {
+      const summary = toModelSummary(m, deps.env, probedAt);
+      if (probedAvailability !== null) {
+        return { ...summary, available: probedAvailability[i] ?? summary.available };
+      }
+      return summary;
+    });
     for (const d of discovered) {
       if (known.has(d.id)) continue; // YAML wins on collision.
       known.add(d.id);
-      summaries.push(discoveredToSummary(d));
+      summaries.push(discoveredToSummary(d, probedAt));
     }
     const body = ListModelsResponse.parse({ models: summaries });
     return c.json(body);
   });
+
+  /**
+   * `GET /v1/models/savings?period=7d|30d|90d` — wave-12 "cloud spend
+   * you saved by going local" aggregation. Reads the caller's tenant's
+   * `usage_records` joined to `runs.tenant_id` so cross-tenant rows
+   * never appear in the math. For every local-locality usage row, we
+   * compute what the cheapest cloud model in the same `capability_class`
+   * would have charged at this row's `tokens_in/tokens_out`. If no
+   * equivalent cloud model exists in the catalog, the row is COUNTED
+   * UNDER `unmatchedLocalRunCount` and contributes ZERO to the savings
+   * total — the figure has to be honest.
+   */
+  app.get('/v1/models/savings', async (c) => {
+    const auth = getAuth(c);
+    const parsed = SavingsQuery.safeParse({
+      period: c.req.query('period') ?? undefined,
+    });
+    if (!parsed.success) {
+      throw validationError('invalid savings query', parsed.error.issues);
+    }
+    const period = parsed.data.period;
+    const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const catalog = await loadModelCatalog(deps.env);
+    const cheapestCloudByClass = computeCheapestCloudByClass(catalog.models);
+    const localityById = new Map<string, string>();
+    for (const m of catalog.models) localityById.set(m.id, m.locality);
+
+    const result = await deps.db.query<{
+      model: string;
+      tokens_in: number | string;
+      tokens_out: number | string;
+      at: string | Date;
+    }>(
+      `SELECT u.model, u.tokens_in, u.tokens_out, u.at
+         FROM usage_records u
+         JOIN runs r ON r.id = u.run_id
+        WHERE r.tenant_id = $1
+          AND u.at >= $2`,
+      [auth.tenantId, cutoff.toISOString()],
+    );
+
+    let totalSaved = 0;
+    let localCount = 0;
+    let unmatched = 0;
+    const dailyMap = new Map<string, number>();
+
+    for (const row of result.rows) {
+      const usage = catalog.models.find((m) => m.id === row.model);
+      const locality = usage?.locality ?? localityById.get(row.model);
+      if (locality !== 'local' && locality !== 'on-prem') continue;
+      // We need the row's class to find the cheapest cloud equivalent.
+      const klass = usage?.capabilityClass;
+      if (klass === undefined) {
+        unmatched += 1;
+        continue;
+      }
+      const equivalent = cheapestCloudByClass.get(klass);
+      if (equivalent === undefined) {
+        unmatched += 1;
+        continue;
+      }
+      localCount += 1;
+      const ti = Number(row.tokens_in) || 0;
+      const to = Number(row.tokens_out) || 0;
+      const wouldHaveCost =
+        (ti / 1_000_000) * equivalent.usdPerMtokIn + (to / 1_000_000) * equivalent.usdPerMtokOut;
+      // Local rows are nominally $0; if a future fixture changes that we
+      // still subtract whatever the local price was, never letting the
+      // saving go negative.
+      const localCost =
+        (ti / 1_000_000) * (usage?.cost?.usdPerMtokIn ?? 0) +
+        (to / 1_000_000) * (usage?.cost?.usdPerMtokOut ?? 0);
+      const saved = Math.max(0, wouldHaveCost - localCost);
+      totalSaved += saved;
+      const day = isoDay(row.at);
+      dailyMap.set(day, (dailyMap.get(day) ?? 0) + saved);
+    }
+
+    // Build the sparkline buckets — ALL `days` days emitted so the UI
+    // doesn't have to forward-fill. Oldest first; UTC.
+    const dailySavings: Array<{ date: string; savedUsd: number }> = [];
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(today.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      dailySavings.push({ date: key, savedUsd: round(dailyMap.get(key) ?? 0) });
+    }
+
+    const body = SavingsResponse.parse({
+      period,
+      totalSavedUsd: round(totalSaved),
+      localRunCount: localCount,
+      unmatchedLocalRunCount: unmatched,
+      dailySavings,
+    });
+    return c.json(body);
+  });
+
   return app;
+}
+
+interface CheapestCloudEntry {
+  readonly id: string;
+  readonly usdPerMtokIn: number;
+  readonly usdPerMtokOut: number;
+}
+
+/**
+ * Build a `capability_class -> cheapest-cloud-row` map. "Cheapest" is
+ * defined as the minimum sum of `usdPerMtokIn + usdPerMtokOut` across
+ * cloud-locality entries. Excludes models with `privacyAllowed` that
+ * doesn't include `internal` — sensitive workloads can't have routed
+ * to them anyway, so they don't represent a "would have cost"
+ * counterfactual. Free cloud rows (e.g. groq) are still considered;
+ * if every cloud row in a class is $0 the saving is just $0 — the
+ * platform doesn't lie with a positive number.
+ */
+function computeCheapestCloudByClass(
+  models: readonly FixtureModel[],
+): Map<string, CheapestCloudEntry> {
+  const out = new Map<string, CheapestCloudEntry>();
+  for (const m of models) {
+    if (m.locality !== 'cloud') continue;
+    const usdIn = m.cost?.usdPerMtokIn ?? 0;
+    const usdOut = m.cost?.usdPerMtokOut ?? 0;
+    const total = usdIn + usdOut;
+    const existing = out.get(m.capabilityClass);
+    if (existing === undefined || existing.usdPerMtokIn + existing.usdPerMtokOut > total) {
+      out.set(m.capabilityClass, { id: m.id, usdPerMtokIn: usdIn, usdPerMtokOut: usdOut });
+    }
+  }
+  return out;
+}
+
+function isoDay(at: string | Date): string {
+  const d = at instanceof Date ? at : new Date(at);
+  if (Number.isNaN(d.getTime())) return new Date(0).toISOString().slice(0, 10);
+  return d.toISOString().slice(0, 10);
+}
+
+function round(n: number): number {
+  return Math.round(n * 1_000_000) / 1_000_000;
 }
