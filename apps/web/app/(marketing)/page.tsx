@@ -14,7 +14,10 @@
  *     claim one.
  */
 
+import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
 import { DemoVideoPlaceholder } from '@/components/marketing/demo-video-placeholder';
+import { HeroCodeSnippet } from '@/components/marketing/hero-code-snippet';
+import { TrustStrip } from '@/components/marketing/trust-strip';
 import Link from 'next/link';
 
 /**
@@ -82,12 +85,41 @@ export default function HomePage() {
   return (
     <>
       <Hero />
+      <TrustStrip />
+      <Architecture />
       <Features />
       <Builders />
       <HowItWorks />
       <Comparison />
       <BottomCta />
     </>
+  );
+}
+
+function Architecture() {
+  return (
+    <section className="border-t border-slate-200 bg-white">
+      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+        <div className="mb-10 max-w-2xl">
+          <p className="text-[11px] uppercase tracking-wider text-blue-600">Architecture</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            One picture. Privacy enforced by the platform, not the prompt.
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Every request passes through the privacy-tier router. Sensitive agents are
+            <em> physically</em> incapable of reaching a cloud model — the router fails closed
+            before a token leaves your tenant boundary.
+          </p>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+          <ArchitectureDiagram />
+        </div>
+        <p className="mt-3 text-[11px] text-slate-500">
+          Cloud-vs-local is decided by the agent&rsquo;s declared capability class and privacy
+          tier. No code path names a provider.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -176,6 +208,27 @@ function Comparison() {
             </tbody>
           </table>
         </div>
+        <div className="mt-6 flex flex-wrap gap-2 text-sm">
+          <span className="text-slate-500">Side-by-side with named tools:</span>
+          <Link
+            href="/vs/crewai"
+            className="rounded-full border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700"
+          >
+            vs CrewAI
+          </Link>
+          <Link
+            href="/vs/langsmith"
+            className="rounded-full border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700"
+          >
+            vs LangSmith
+          </Link>
+          <Link
+            href="/vs/braintrust"
+            className="rounded-full border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700"
+          >
+            vs Braintrust
+          </Link>
+        </div>
         <p className="mt-3 text-[11px] text-slate-500">
           Last verified: {COMPARISON_TABLE_VERIFIED}. We re-verify these claims quarterly; if one is
           out of date,{' '}
@@ -191,59 +244,73 @@ function Comparison() {
 
 function Hero() {
   return (
-    <section className="relative mx-auto max-w-6xl overflow-hidden px-4 pt-16 pb-12 sm:px-6 sm:pt-24 sm:pb-16">
+    <section className="relative overflow-hidden">
       {/* Wave-14C — animated gradient blob behind the headline.
-          Pure CSS keyframes; no JS. The animation is `prefers-reduced-
-          motion` aware via the global stylesheet so users who opt out
-          see a static gradient (defined in globals.css under
-          `.aldo-hero-blob`). */}
+          Pure CSS keyframes; no JS. `prefers-reduced-motion` aware. */}
       <div aria-hidden className="aldo-hero-blob" />
-      <h1 className="relative max-w-3xl text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-        Run real software-engineering teams of LLM agents.
-      </h1>
-      <p className="mt-5 max-w-2xl text-lg text-slate-600">
-        Local-first. Privacy-tier-enforced. Replayable end-to-end.
-      </p>
-      <div className="mt-8 flex flex-wrap items-center gap-3">
-        <Link
-          href="/signup"
-          className="rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-        >
-          Start free trial
-        </Link>
-        <Link
-          href="/pricing"
-          className="rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
-        >
-          See pricing
-        </Link>
-      </div>
-      <p className="mt-4 text-xs text-slate-500">
-        14-day trial, no card required. Honest pricing,{' '}
-        <Link className="underline hover:text-slate-700" href="/pricing">
-          plans from $29/mo
-        </Link>
-        .
-      </p>
-      {/* Wave-14C — demo video placeholder above the fold. Modal
-          dialog opens with a YouTube embed; thumbnail is a static
-          gradient. Real recording lands at launch (TODO marker
-          in the component). */}
-      <DemoVideoPlaceholder />
-      {/* Wave-14C — design-partner CTA in place of the wave-12
-          "Trusted by" placeholder. We don't have logos yet, and we
-          will not stage logos we don't have. */}
-      <div className="mt-12 rounded-xl border border-blue-200 bg-blue-50/60 p-5 text-center sm:flex sm:items-center sm:justify-between sm:text-left">
-        <p className="text-sm text-blue-900">
-          <strong>Be one of our design partners.</strong> We&rsquo;re working with a small cohort of
-          early teams to shape the roadmap.
-        </p>
-        <Link
-          href="/design-partner"
-          className="mt-3 inline-flex rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 sm:mt-0"
-        >
-          Apply to be a design partner →
-        </Link>
+      <div className="relative mx-auto max-w-6xl px-4 pt-16 pb-12 sm:px-6 sm:pt-24 sm:pb-16">
+        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
+          {/* Left — pitch + CTAs. */}
+          <div className="lg:col-span-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+              The control plane for agent teams
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900 sm:text-[2.85rem] lg:text-[3.1rem] lg:leading-[1.05]">
+              Run real software-engineering teams of LLM agents.
+            </h1>
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-600">
+              Privacy enforced by the platform, not the prompt. Local models first-class. Every
+              run replayable. The control plane the agent stack has been missing.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                href="/signup"
+                className="rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                Start free trial
+              </Link>
+              <Link
+                href="/pricing"
+                className="rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+              >
+                See pricing
+              </Link>
+            </div>
+            <p className="mt-4 text-xs text-slate-500">
+              14-day trial, no card required. Honest pricing,{' '}
+              <Link className="underline hover:text-slate-700" href="/pricing">
+                plans from $29/mo
+              </Link>
+              .
+            </p>
+            <div className="mt-10 rounded-xl border border-blue-200 bg-blue-50/60 p-5">
+              <p className="text-sm text-blue-900">
+                <strong>Be one of our design partners.</strong> A small cohort of early teams
+                shaping the roadmap. NDA + source access available.
+              </p>
+              <Link
+                href="/design-partner"
+                className="mt-3 inline-flex rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                Apply to be a design partner →
+              </Link>
+            </div>
+          </div>
+
+          {/* Right — code snippet + 60s demo. */}
+          <div className="lg:col-span-6">
+            <HeroCodeSnippet />
+            <p className="mt-3 text-center text-[11px] text-slate-500">
+              An agent is a YAML file — versioned, eval-gated, privacy-tagged. No Python class
+              hierarchies. No vendor names.
+            </p>
+            {/* The launch demo video lives below the snippet so it isn't the first
+                thing a visitor sees — code-first reads as a platform, not a video. */}
+            <div className="mt-8">
+              <DemoVideoPlaceholder />
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
