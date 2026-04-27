@@ -35,10 +35,16 @@ kill_timeout = "10s"
   processes = ["app"]
 
   [[http_service.checks]]
-    grace_period = "10s"
+    # Wave 16 added migrations 017 + 018 (cache + rate-limit + quotas
+    # + domains) + the in-memory bootstrap that walks agency/ to seed
+    # the default tenant + several new background tickers. Cold boot
+    # now exceeds the original 10s grace period and Fly aborts the
+    # rolling deploy. 60s is conservative; trim back when boot is
+    # profiled.
+    grace_period = "60s"
     interval = "30s"
     method = "get"
-    timeout = "5s"
+    timeout = "10s"
     path = "/health"
 
 [[vm]]

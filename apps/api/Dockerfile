@@ -32,6 +32,8 @@ COPY platform/local-discovery/package.json platform/local-discovery/
 COPY platform/observability/package.json platform/observability/
 COPY platform/openapi/package.json platform/openapi/
 COPY platform/orchestrator/package.json platform/orchestrator/
+# Wave-16D — distributed rate-limiter workspace.
+COPY platform/rate-limit/package.json platform/rate-limit/
 COPY platform/registry/package.json platform/registry/
 COPY platform/sandbox/package.json platform/sandbox/
 COPY platform/secrets/package.json platform/secrets/
@@ -94,6 +96,11 @@ COPY platform/local-discovery ./platform/local-discovery
 COPY platform/engine ./platform/engine
 COPY platform/observability ./platform/observability
 COPY platform/orchestrator ./platform/orchestrator
+# Wave 16D: distributed rate-limit + per-tenant quotas + custom
+# domains. The /v1/auth/* + /v1/runs + /v1/playground/run middlewares
+# call into @aldo-ai/rate-limit on every request; the source must
+# ride along under tsx for runtime resolution.
+COPY platform/rate-limit ./platform/rate-limit
 # Wave 15: the canonical OpenAPI 3.1 spec is materialised at runtime
 # from the contract Zod schemas by @aldo-ai/openapi (used by the
 # /openapi.json + /openapi.yaml routes).
@@ -121,7 +128,7 @@ WORKDIR /repo/apps/api
 EXPOSE 8080
 
 # Pure-Node health check — no wget/curl in the image.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||8080)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 # tsx is a runtime dep of @aldo-ai/api; the binary is at
