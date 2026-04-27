@@ -339,25 +339,17 @@ ${COMPOSE_API_PORTS}
 ${COMPOSE_API_NETWORKS}
 
   aldo-web:
-    image: node:22-alpine
+    build:
+      context: ${APP_DIR}/repo
+      dockerfile: apps/web/Dockerfile
     container_name: aldo-web
     restart: unless-stopped
-    working_dir: /repo
-    # Wipe node_modules before installing — the host volume keeps them
-    # between container restarts, and a previous run that produced a
-    # prod-only node_modules stops pnpm's modules-purge prompt from
-    # auto-confirming in a non-TTY shell. Then install with
-    # --prod=false so devDeps land (NODE_ENV=production at runtime would
-    # otherwise make pnpm skip them, and the prebuild needs tsx).
-    command: ["sh", "-c", "set -e; corepack enable; corepack prepare pnpm@9.12.0 --activate; find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null || true; pnpm install --frozen-lockfile --prod=false --filter @aldo-ai/web...; pnpm --filter @aldo-ai/web build; pnpm --filter @aldo-ai/web start --port 8080 --hostname 0.0.0.0"]
     depends_on:
       aldo-api:
         condition: service_started
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE: "https://${APP_DOMAIN}"
-    volumes:
-      - ${APP_DIR}/repo:/repo
 ${COMPOSE_WEB_PORTS}
     networks:
 ${COMPOSE_WEB_NETWORKS}

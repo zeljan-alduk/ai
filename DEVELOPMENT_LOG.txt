@@ -4503,3 +4503,9 @@ Out of scope (per brief):
 2026-04-27 — Engineer (Claude) — web devDeps actually land + GitHub Actions deploy bridge
 - Web container kept failing with `tsx: not found` even with `--prod=false`. Root cause: the host volume preserved the previous failed install's prod-only node_modules, and pnpm's "modules will be removed and reinstalled" prompt defaulted to "no" in the non-TTY shell. Fix: `find -name node_modules -prune -exec rm -rf` before install.
 - Added .github/workflows/deploy-vps.yml: triggers on push to main / claude/* (paths-ignore for docs/md), or via workflow_dispatch. POSTs to the VPS webhook with the VPS_DEPLOY_TOKEN repo secret. Lets Claude deploy from outside the egress-allowlisted sandbox: I can `gh workflow run deploy-vps.yml` (or auto on push) and the runner does the curl from a non-restricted machine.
+
+2026-04-27 — Engineer (Claude) — web becomes a real Dockerfile build
+- Running pnpm install at compose-up time on a host-mounted volume kept fighting itself: the volume preserved old node_modules between container restarts, and pnpm's "modules will be reinstalled" prompt defaulted to N in non-TTY shells, so devDeps (tsx) never landed.
+- New apps/web/Dockerfile mirrors apps/api/Dockerfile (deps -> sources -> build -> runtime). pnpm install runs --prod=false --filter @aldo-ai/web... once at image build time; the runtime stage just `pnpm start`.
+- vps-bootstrap.sh now emits docker-compose.yml with `build: { context: repo, dockerfile: apps/web/Dockerfile }` for aldo-web (no more host volume + runtime install).
+- Future webhook deploys do `docker compose up -d --build` against this compose; layer cache means only changed layers rebuild.
