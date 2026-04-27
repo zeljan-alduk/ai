@@ -344,7 +344,7 @@ ${COMPOSE_API_NETWORKS}
     restart: unless-stopped
     working_dir: /repo
     # Install with --prod=false so devDeps land (NODE_ENV=production
-    # would otherwise make pnpm skip them, and the prebuild needs `tsx`).
+    # would otherwise make pnpm skip them, and the prebuild needs tsx).
     # NODE_ENV stays 'production' for the runtime so Next.js/Hono pick
     # the right code path.
     command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install --frozen-lockfile --prod=false --filter @aldo-ai/web... && pnpm --filter @aldo-ai/web build && pnpm --filter @aldo-ai/web start --port 8080 --hostname 0.0.0.0"]
