@@ -18,6 +18,7 @@
  * LLM-agnostic: this spec never asserts on a provider name.
  */
 
+import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
 const ALLOW_WRITES = process.env.E2E_ALLOW_WRITES === 'true';
@@ -111,10 +112,10 @@ test.describe('auth — signup → logout → login flow', () => {
 function randomSuffix(): string {
   // 12 hex chars + a millisecond-precision timestamp so two parallel
   // CI runs of the same spec can't collide on email or workspace name.
+  // Uses crypto.randomUUID for the random part — Math.random was
+  // flagged by CodeQL as unsafe in a security context (passwords).
   const t = Date.now().toString(16);
-  const rand = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join(
-    '',
-  );
+  const rand = randomUUID().replace(/-/g, '').slice(0, 8);
   return `${t}-${rand}`;
 }
 

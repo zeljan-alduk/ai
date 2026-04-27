@@ -21,6 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
+import DOMPurify from 'isomorphic-dompurify';
 import { Marked } from 'marked';
 import { type BundledLanguage, type Highlighter, createHighlighter } from 'shiki';
 
@@ -154,7 +155,12 @@ export async function loadDoc(page: DocPage): Promise<LoadedDoc | null> {
     },
   });
 
-  const html = await marked.parse(content);
+  const rawHtml = await marked.parse(content);
+  const resolvedHtml = typeof rawHtml === 'string' ? rawHtml : await rawHtml;
+  // Belt-and-braces: docs sources are checked-in markdown so the
+  // payload is trusted, but DOMPurify costs <1ms and silences
+  // CodeQL's stored-XSS warning on dangerouslySetInnerHTML.
+  const html = DOMPurify.sanitize(resolvedHtml, { USE_PROFILES: { html: true } });
 
   const titleFromFrontmatter = typeof data.title === 'string' ? data.title : page.title;
   const summaryFromFrontmatter = typeof data.summary === 'string' ? data.summary : page.summary;
@@ -165,7 +171,7 @@ export async function loadDoc(page: DocPage): Promise<LoadedDoc | null> {
     page,
     title: titleFromFrontmatter,
     summary: summaryFromFrontmatter,
-    html: typeof html === 'string' ? html : await html,
+    html,
     bodyText,
     headings,
     sourcePath: `apps/web/content/docs/${rel}`,

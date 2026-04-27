@@ -72,16 +72,28 @@ function rowToShare(row: ShareRow, baseUrl: string): ShareLinkWire {
   };
 }
 
-/** 16-char base32 slug. ~80 bits of entropy; collision-free in practice. */
+/**
+ * 16-char base32-style slug. ~80 bits of entropy; collision-free in
+ * practice. Uses rejection sampling instead of modulo so every alphabet
+ * character is uniformly probable. The previous implementation took the
+ * low + high nibble of each byte, which under-sampled the second half
+ * of the 31-char alphabet (4 bits only address 16 of the 31 buckets) —
+ * CodeQL flagged the modulo bias correctly.
+ */
 export function generateSlug(): string {
-  const bytes = randomBytes(10);
-  let out = '';
-  for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i] ?? 0;
-    out += SLUG_ALPHABET[b % SLUG_ALPHABET.length];
-    out += SLUG_ALPHABET[(b >>> 4) % SLUG_ALPHABET.length];
+  const out: string[] = [];
+  // Sample bytes in batches; reject any byte > floor(256/31)*31 = 248
+  // to avoid modulo bias (256 % 31 = 8).
+  const limit = Math.floor(256 / SLUG_ALPHABET.length) * SLUG_ALPHABET.length;
+  while (out.length < 16) {
+    const buf = randomBytes(32);
+    for (const b of buf) {
+      if (b >= limit) continue;
+      out.push(SLUG_ALPHABET[b % SLUG_ALPHABET.length] ?? '');
+      if (out.length >= 16) break;
+    }
   }
-  return `${SLUG_TAG}${out.slice(0, 16)}`;
+  return `${SLUG_TAG}${out.join('')}`;
 }
 
 // ---------------------------------------------------------------------------
