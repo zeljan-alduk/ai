@@ -1,0 +1,81 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: designer
+  version: 0.1.0
+  description: Owns the design system and produces the UI briefs that engineers implement.
+  owner: support-team@aldo-tech-labs
+  tags: [support, design]
+
+role:
+  team: support
+  reports_to: product-strategist
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output, vision]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: reasoning-small
+  budget:
+    usd_per_run: 0.60
+    tokens_in_max: 120000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 60000
+  decoding:
+    mode: free
+    temperature: 0.3
+
+prompt:
+  system_file: prompts/designer.system.md
+  variables:
+    design_system: project.frontend.design_system
+    accessibility_targets: org.accessibility.targets
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read, fs.write]
+    - server: repo-fs
+      allow: [fs.read]
+    - server: aldo-memory
+      allow: [memory.read, memory.write]
+  permissions:
+    network: allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, project, org]
+  write: [private, project]
+  retention:
+    private: 90d
+    project: 365d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: brief.needs_new_primitive == true
+      to: architect
+    - condition: accessibility.target_unmet == true
+      to: product-strategist
+
+inputs:
+  schema_ref: schemas/design_request.json
+
+outputs:
+  design_brief:
+    json_schema: schemas/design_brief.json
+
+eval_gate:
+  required_suites:
+    - suite: design_consistency_v1
+      min_score: 0.85
+    - suite: accessibility_compliance_v1
+      min_score: 0.92
+  must_pass_before_promote: true

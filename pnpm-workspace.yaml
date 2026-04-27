@@ -1,0 +1,5 @@
+packages:
+  - platform/*
+  - apps/*
+  - mcp-servers/*
+  - extensions/*

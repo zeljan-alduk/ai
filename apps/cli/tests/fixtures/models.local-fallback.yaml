@@ -1,0 +1,45 @@
+apiVersion: aldo/models.v1
+kind: ModelCatalog
+
+# Cloud entries plus a local model that allows the sensitive tier and
+# sits in the `local-reasoning` class — the fallback our security-
+# reviewer fixture declares. The `aldo agents check` success-path test
+# routes through this catalog and asserts the local entry is selected.
+models:
+  - id: cloud-medium-fixture
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+      - reasoning
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://example.invalid/v1
+      apiKeyEnv: GROQ_API_KEY
+
+  - id: mlx-qwen-fixture
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 32k-context
+      - tool-use
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 32000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1

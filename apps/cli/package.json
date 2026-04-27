@@ -1,0 +1,43 @@
+{
+  "name": "@aldo-ai/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ALDO AI command-line tool (aldo).",
+  "bin": {
+    "aldo": "./dist/index.js"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc",
+    "build:bin": "bun build ./src/index.ts --compile --target=bun --outfile dist/aldo"
+  },
+  "dependencies": {
+    "@aldo-ai/api-contract": "workspace:*",
+    "@aldo-ai/engine": "workspace:*",
+    "@aldo-ai/eval": "workspace:*",
+    "@aldo-ai/gateway": "workspace:*",
+    "@aldo-ai/local-discovery": "workspace:*",
+    "@aldo-ai/observability": "workspace:*",
+    "@aldo-ai/openapi": "workspace:*",
+    "@aldo-ai/registry": "workspace:*",
+    "@aldo-ai/runtime-config": "workspace:*",
+    "@aldo-ai/storage": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
+    "commander": "^12.1.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "~0.4.4",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

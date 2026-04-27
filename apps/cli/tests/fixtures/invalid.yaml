@@ -1,0 +1,12 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  # name is missing on purpose — should fail validation.
+  version: 0.1.0
+  description: Missing name.
+  owner: test-team
+
+role:
+  team: default
+  pattern: worker

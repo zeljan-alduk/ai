@@ -1,0 +1,14 @@
+ALDO AI
+Copyright 2026 ALDO TECH LABS
+
+This product is licensed under the Functional Source License, Version 1.1,
+with Apache-2.0 as the Future License (FSL-1.1-ALv2). See the LICENSE file
+for the full license text and LICENSING.md for a plain-English summary.
+
+"ALDO AI", "ALDO TECH LABS", and the ALDO AI logo are trademarks of
+ALDO TECH LABS. The license grants you no rights to use these marks except
+to truthfully identify the origin of the code. Forks must be renamed.
+
+This product includes software developed by third parties under their own
+licenses. See each dependency in package.json and pnpm-lock.yaml for
+license terms.

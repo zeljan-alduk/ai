@@ -1,0 +1,105 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: code-reviewer
+  version: 1.4.0
+  description: Reviews pull requests for correctness, style, and security smells.
+  owner: support-team@aldo-labs
+  tags: [support, review]
+
+role:
+  team: support
+  reports_to: tech-lead
+  pattern: subscribe
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, structured-output, reasoning]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-large
+  fallbacks:
+    - capability_class: reasoning-medium
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.50
+    tokens_in_max: 120000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 45000
+  decoding:
+    mode: json
+    temperature: 0.2
+    json_schema_ref: "#/outputs/review"
+
+prompt:
+  system_file: prompts/code-reviewer.system.md
+  templates:
+    review_pr: prompts/code-reviewer.review_pr.md
+  variables:
+    style_guide: org.style_guide
+    repo_conventions: project.conventions
+
+tools:
+  mcp:
+    - server: github
+      allow: [pr.read, pr.comment, checks.read]
+    - server: repo-fs
+      allow: [fs.read]
+  native:
+    - ref: static_analyzer.semgrep
+  permissions:
+    network: none
+    filesystem: repo-readonly
+
+memory:
+  read: [private, project]
+  write: [private]
+  retention:
+    private: 30d
+    project: 180d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: confidence < 0.6
+      to: tech-lead
+    - condition: finding.severity == "critical"
+      to: security-auditor
+
+subscriptions:
+  - event: pr.opened
+    filter: "repo.owner == 'aldo-labs'"
+  - event: pr.updated
+
+inputs:
+  schema_ref: schemas/pr_payload.json
+
+outputs:
+  review:
+    json_schema:
+      type: object
+      required: [summary, findings, verdict]
+      properties:
+        summary: { type: string }
+        findings:
+          type: array
+          items:
+            type: object
+            required: [severity, file, line, message]
+            properties:
+              severity: { enum: [info, warn, error, critical] }
+              file: { type: string }
+              line: { type: integer }
+              message: { type: string }
+        verdict: { enum: [approve, request_changes, comment] }
+
+eval_gate:
+  required_suites:
+    - suite: review_regressions_v3
+      min_score: 0.85
+    - suite: injection_resistance_v1
+      min_score: 0.95
+  must_pass_before_promote: true

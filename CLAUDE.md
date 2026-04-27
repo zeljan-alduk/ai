@@ -1,4 +1,4 @@
-# Meridian — working notes for agents
+# ALDO AI — working notes for agents
 
 ## Non-negotiable constraints
 
@@ -27,8 +27,15 @@
 
 See README.md.
 
+## Append to DEVELOPMENT_LOG.txt
+
+Every agent doing work on the repo appends a short entry to
+`DEVELOPMENT_LOG.txt` at the end of its turn: timestamp, role, one-line
+summary, and 1–6 lines of context. Newest at the bottom. Do not rewrite
+or reorder prior entries.
+
 ## Reference agency
 
 `agency/` contains the dogfood organization (principal, architect,
 engineers, reviewers, …). Use it as the test case for every platform
-feature: if the feature doesn't help Meridian Labs ship, we don't need it.
+feature: if the feature doesn't help ALDO TECH LABS ship, we don't need it.

@@ -1,0 +1,46 @@
+apiVersion: aldo/models.v1
+kind: ModelCatalog
+
+# Tiny fixture used by the CLI tests. Mirrors the structure of
+# `platform/gateway/fixtures/models.yaml` but with a single Groq + Ollama
+# entry so we can exercise router selection deterministically.
+models:
+  - id: groq.llama-3.3-70b-versatile
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+      - reasoning
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://api.groq.com/openai/v1
+      apiKeyEnv: GROQ_API_KEY
+
+  - id: ollama.qwen2.5:7b
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: fast-draft
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1

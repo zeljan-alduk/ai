@@ -1,0 +1,89 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: security-auditor
+  version: 0.1.0
+  description: Audits changes and systems for security defects, threat-models features, and owns the bar for critical findings.
+  owner: support-team@aldo-tech-labs
+  tags: [support, security, audit]
+
+role:
+  team: support
+  reports_to: architect
+  pattern: subscribe
+
+model_policy:
+  capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-large
+  fallbacks:
+    - capability_class: reasoning-medium
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 1.20
+    tokens_in_max: 200000
+    tokens_out_max: 10000
+  latency:
+    p95_ms: 120000
+  decoding:
+    mode: json
+    temperature: 0.1
+    json_schema_ref: "#/outputs/audit"
+
+prompt:
+  system_file: prompts/security-auditor.system.md
+  variables:
+    threat_model: project.security.threat_model
+    compliance_regime: org.compliance.regime
+
+tools:
+  mcp:
+    - server: github
+      allow: [pr.read, pr.comment, checks.read]
+    - server: repo-fs
+      allow: [fs.read]
+    - server: aldo-memory
+      allow: [memory.read, memory.write]
+  permissions:
+    network: none
+    filesystem: repo-readonly
+
+memory:
+  read:  [private, project, org]
+  write: [private, project]
+  retention:
+    private: 365d
+    project: 730d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: finding.severity == "critical"
+      to: principal
+    - condition: finding.affects_tenant_isolation == true
+      to: principal
+
+subscriptions:
+  - event: pr.opened
+    filter: "labels contains 'security' or diff.touches_security_paths"
+  - event: incident.opened
+    filter: "category == 'security'"
+
+inputs:
+  schema_ref: schemas/audit_target.json
+
+outputs:
+  audit:
+    json_schema: schemas/security_audit.json
+
+eval_gate:
+  required_suites:
+    - suite: security_finding_recall_v2
+      min_score: 0.90
+    - suite: false_positive_rate_v1
+      min_score: 0.85
+  must_pass_before_promote: true

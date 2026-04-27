@@ -1,0 +1,26 @@
+apiVersion: aldo/models.v1
+kind: ModelCatalog
+
+# Cloud-only catalog used by `/v1/agents/:name/check` integration tests.
+# No model lists `sensitive` in privacyAllowed, so any sensitive-tier
+# agent simulated against this catalog must fail to route — and the
+# response code MUST be `privacy_tier_unroutable`, never a 500.
+models:
+  - id: cloud-medium-fixture
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - structured-output
+      - reasoning
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://example.invalid/v1
+      apiKeyEnv: GROQ_API_KEY

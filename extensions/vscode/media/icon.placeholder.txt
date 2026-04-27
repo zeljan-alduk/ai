@@ -1,0 +1,5 @@
+TODO(launch): replace this file with `icon.png`, a 128x128 PNG export
+of the wave-12 ALDO logomark. The marketplace.json + package.json
+both reference `media/icon.png`. The asset has not been exported
+into the repo yet, so this placeholder serves as a build-time
+breadcrumb until the design team drops the PNG in.

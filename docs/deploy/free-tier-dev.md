@@ -1,10 +1,33 @@
 # Free-tier dev/test deployment
 
-A zero-cost smoke-test environment for Meridian during development. Every
+A zero-cost smoke-test environment for ALDO AI during development. Every
 component below has a real, non-trial free tier as of 2026-04. Capacity
 numbers are indicative — validate before relying on them for a demo.
 
+## Public-repo leverage
+
+The repo at `github.com/zeljan-alduk/ai` is public, which unlocks several
+GitHub-native free tiers that materially change the deployment plan
+below. See "Deployment note" at the bottom for each affected line item.
+
+| Unlocked by public status | Capacity |
+|---|---|
+| GitHub Actions | **Unlimited** minutes (vs. 2,000/mo cap on private) |
+| GitHub Container Registry (ghcr.io) | **Unlimited** public image pulls and pushes |
+| GitHub Pages | Free static hosting on `*.github.io` |
+| Codespaces | 180 core-hours/mo per user (vs. 60 private) |
+| CodeQL + Dependabot + secret scanning | Free on public repos |
+| Public Docker Hub pulls | No rate limit when pulling public images |
+
+Opt-in OSS programs to apply to (out-of-band, not covered here):
+Vercel OSS, Netlify OSS, Sentry for Open Source, Cloudflare Project
+Galileo, PostHog OSS, JetBrains OSS licenses. ALDO AI's license is
+FSL-1.1-ALv2 (source-available, not OSI-approved); most of these
+programs approve public source-available repos — cite Sentry as a
+precedent if asked.
+
 ## Target topology
+
 
 ```
                             ┌──────────────────────┐
@@ -38,7 +61,9 @@ numbers are indicative — validate before relying on them for a demo.
 | Blob store | **Cloudflare R2** | 10 GB, no egress fees | replay bundles, trace exports |
 | Redis / queue | **Upstash Redis** | 500 K commands/mo | optional; skip until needed |
 | Sandboxes | **E2B** (free tier) | short-session code exec | fallback: local rootless Docker |
-| CI | **GitHub Actions** | 2000 min/mo (public: unlimited) | |
+| CI | **GitHub Actions** | **Unlimited** (public repo) | runs lint + typecheck + test across all packages; see `.github/workflows/ci.yml` |
+| Container registry | **ghcr.io** | **Unlimited** public images | engine + MCP servers will publish here on tag |
+| Security scanning | **CodeQL + Dependabot** | Free | see `.github/workflows/codeql.yml` and `.github/dependabot.yml` |
 | Auth | **Clerk** | 10 K MAU dev tier | or Supabase Auth if self-host |
 | Cloud LLMs (smoke) | **Google Gemini API** free tier | generous on Flash tiers | primary smoke-test model |
 | | **Groq** free tier | fast Llama/Qwen | speed-test + cheap regression |
@@ -49,12 +74,12 @@ numbers are indicative — validate before relying on them for a demo.
 
 ## Bring-up steps (rough)
 
-1. Create Neon project `meridian-dev`; branch per feature.
+1. Create Neon project `aldo-dev`; branch per feature.
 2. Create Vercel project pointing at `apps/web/`; env vars from Neon +
    gateway URL.
-3. Create Fly.io app `meridian-engine-dev`; machine size `shared-cpu-1x`,
+3. Create Fly.io app `aldo-engine-dev`; machine size `shared-cpu-1x`,
    1 GB RAM; deploy via `fly deploy` from CI.
-4. R2 bucket `meridian-artifacts-dev`; issue scoped token.
+4. R2 bucket `aldo-artifacts-dev`; issue scoped token.
 5. Upstash Redis DB; env var `REDIS_URL`.
 6. E2B API key (optional — local Docker is the default).
 7. Provider API keys:
@@ -68,7 +93,7 @@ numbers are indicative — validate before relying on them for a demo.
 
 - Vercel auto-generates a preview URL per PR.
 - CI creates a Neon branch named after the PR number; auto-dropped on merge.
-- Fly.io deploys to `meridian-engine-dev-pr-<N>.fly.dev` via a small CD
+- Fly.io deploys to `aldo-engine-dev-pr-<N>.fly.dev` via a small CD
   workflow; auto-destroyed on merge.
 
 ## Budget guardrails

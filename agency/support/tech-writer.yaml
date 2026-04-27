@@ -1,0 +1,83 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: tech-writer
+  version: 0.1.0
+  description: Writes and maintains the public-facing docs, reference, and examples for ALDO AI.
+  owner: support-team@aldo-tech-labs
+  tags: [support, docs, writing]
+
+role:
+  team: support
+  reports_to: architect
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: public
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: reasoning-small
+  budget:
+    usd_per_run: 0.30
+    tokens_in_max: 100000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 45000
+  decoding:
+    mode: free
+    temperature: 0.3
+
+prompt:
+  system_file: prompts/tech-writer.system.md
+  variables:
+    voice_guide: org.brand.voice
+    docs_structure: project.docs.structure
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read, fs.write]
+    - server: repo-fs
+      allow: [fs.read]
+    - server: aldo-memory
+      allow: [memory.read, memory.write]
+    - server: github
+      allow: [pr.read, pr.write]
+  permissions:
+    network: allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, project, org]
+  write: [private, project]
+  retention:
+    private: 90d
+    project: 365d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: api.undocumented_change_detected == true
+      to: tech-lead
+    - condition: claim.unverifiable == true
+      to: architect
+
+inputs:
+  schema_ref: schemas/docs_brief.json
+
+outputs:
+  docs_change:
+    json_schema: schemas/docs_change.json
+
+eval_gate:
+  required_suites:
+    - suite: docs_accuracy_v2
+      min_score: 0.88
+    - suite: example_executability_v1
+      min_score: 0.95
+  must_pass_before_promote: true

@@ -1,0 +1,159 @@
+/**
+ * AgentRegistry implementation.
+ *
+ * Combines the loader, validator, and a pluggable `RegistryStorage`
+ * backend. Implements the `AgentRegistry` interface from
+ * `@aldo-ai/types`.
+ *
+ * Resolution rules for `load(ref)`:
+ *  - if `ref.version` is given, return exactly that version or throw,
+ *  - otherwise return the currently-promoted version; if none is promoted
+ *    but exactly one version exists, return it (bootstrap convenience);
+ *  - otherwise throw `NoPromotedVersionError`.
+ */
+
+import type {
+  AgentRef,
+  AgentRegistry as AgentRegistryIface,
+  AgentSpec,
+  ValidationResult,
+} from '@aldo-ai/types';
+import { loadFromFile, parseYaml } from './loader.js';
+import { assertValid } from './semver.js';
+import {
+  AgentNotFoundError,
+  InMemoryStorage,
+  NoPromotedVersionError,
+  type RegistryStorage,
+} from './storage.js';
+
+export interface RegistryOptions {
+  /** Promotion can be gated by the caller; registry stays mechanism-only. */
+  // TODO(v1): wire an EvalReport type + gate check; for now evidence is accepted blind.
+  readonly acceptEvidence?: (ref: Required<AgentRef>, evidence: unknown) => Promise<boolean>;
+  /** Injectable clock for deterministic tests. */
+  readonly now?: () => Date;
+  /**
+   * Pluggable storage backend. Defaults to in-memory; pass a
+   * `PostgresStorage` (from `./postgres.js`) for durable persistence.
+   */
+  readonly storage?: RegistryStorage;
+}
+
+export class AgentRegistry implements AgentRegistryIface {
+  private readonly storage: RegistryStorage;
+  private readonly opts: RegistryOptions;
+
+  constructor(opts: RegistryOptions = {}) {
+    this.opts = opts;
+    this.storage = opts.storage ?? new InMemoryStorage(opts.now);
+  }
+
+  /** Parse + register a YAML document. Returns the full validation result. */
+  async register(yamlText: string): Promise<ValidationResult> {
+    const res = parseYaml(yamlText);
+    if (res.ok && res.spec !== undefined) {
+      await this.storage.put(res.spec);
+    }
+    return res;
+  }
+
+  /** Convenience: read from disk and register. Throws on invalid YAML. */
+  async registerFromFile(path: string): Promise<AgentSpec> {
+    const res = await loadFromFile(path);
+    if (!res.ok) {
+      throw new RegistryLoadError(path, res.errors);
+    }
+    await this.storage.put(res.spec);
+    return res.spec;
+  }
+
+  /** Directly register an already-parsed spec (bypasses YAML). */
+  async registerSpec(spec: AgentSpec): Promise<void> {
+    await this.storage.put(spec);
+  }
+
+  // --- AgentRegistry interface ---------------------------------------------
+
+  async load(ref: AgentRef): Promise<AgentSpec> {
+    if (ref.version !== undefined) {
+      return (await this.storage.getVersion(ref.name, ref.version)).spec;
+    }
+
+    // No explicit version: prefer the promoted pointer.
+    const promoted = await this.storage.promotedVersion(ref.name);
+    if (promoted !== null) {
+      return (await this.storage.getVersion(ref.name, promoted)).spec;
+    }
+
+    // Bootstrap convenience: if only one version exists, return it.
+    const versions = await this.storage.listVersions(ref.name);
+    if (versions.length === 0) throw new AgentNotFoundError(ref.name);
+    if (versions.length === 1) {
+      const only = versions[0];
+      if (only !== undefined) return (await this.storage.getVersion(ref.name, only)).spec;
+    }
+    throw new NoPromotedVersionError(ref.name);
+  }
+
+  validate(yaml: string): ValidationResult {
+    return parseYaml(yaml);
+  }
+
+  async list(filter?: Partial<Pick<AgentSpec['identity'], 'name' | 'owner'>>): Promise<AgentRef[]> {
+    const out: AgentRef[] = [];
+    for (const name of await this.storage.listNames()) {
+      if (filter?.name !== undefined && filter.name !== name) continue;
+      for (const version of await this.storage.listVersions(name)) {
+        const spec = (await this.storage.getVersion(name, version)).spec;
+        if (filter?.owner !== undefined && filter.owner !== spec.identity.owner) continue;
+        out.push({ name, version });
+      }
+    }
+    return out;
+  }
+
+  async promote(ref: Required<AgentRef>, evidence: unknown): Promise<void> {
+    assertValid(ref.version);
+    if (this.opts.acceptEvidence !== undefined) {
+      const ok = await this.opts.acceptEvidence(ref, evidence);
+      if (!ok) throw new EvidenceRejectedError(ref);
+    }
+    await this.storage.promote(ref.name, ref.version, evidence);
+  }
+
+  // --- introspection helpers (not in the interface, but useful) ------------
+
+  async listVersions(name: string): Promise<readonly string[]> {
+    return this.storage.listVersions(name);
+  }
+
+  async promotedVersion(name: string): Promise<string | null> {
+    return this.storage.promotedVersion(name);
+  }
+}
+
+export class RegistryLoadError extends Error {
+  public readonly path: string;
+  public readonly errors: readonly { readonly path: string; readonly message: string }[];
+  constructor(
+    path: string,
+    errors: readonly { readonly path: string; readonly message: string }[],
+  ) {
+    super(
+      `failed to load agent from ${path}: ${errors.map((e) => `${e.path}: ${e.message}`).join('; ')}`,
+    );
+    this.name = 'RegistryLoadError';
+    this.path = path;
+    this.errors = errors;
+  }
+}
+
+export class EvidenceRejectedError extends Error {
+  public readonly ref: Required<AgentRef>;
+  constructor(ref: Required<AgentRef>) {
+    super(`evidence rejected for ${ref.name}@${ref.version}`);
+    this.name = 'EvidenceRejectedError';
+    this.ref = ref;
+  }
+}

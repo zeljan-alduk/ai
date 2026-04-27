@@ -1,0 +1,17 @@
+{
+  "publisher": "aldo-tech-labs",
+  "displayName": "ALDO AI",
+  "description": "Run ALDO agents, browse runs, and view traces inline. LLM-agnostic — privacy tiers enforced by the platform, not your editor.",
+  "keywords": ["ai", "agents", "llm", "ollama", "trace", "observability", "aldo"],
+  "categories": ["AI", "Other"],
+  "icon": "media/icon.png",
+  "iconNotes": "TODO(launch): replace media/icon.png with a 128x128 PNG export of the wave-12 logomark before publishing to the Marketplace.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aldo-tech-labs/aldo"
+  },
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "engines": {
+    "vscode": "^1.95.0"
+  }
+}

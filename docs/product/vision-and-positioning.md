@@ -1,10 +1,10 @@
-# Meridian: Vision & Positioning
+# ALDO AI: Vision & Positioning
 
 ## 1. Vision
 
-**One-line vision:** Meridian is the operating system for AI sub-agents — provider-agnostic, locally-first, and replayable by default.
+**One-line vision:** ALDO AI is the operating system for AI sub-agents — provider-agnostic, locally-first, and replayable by default.
 
-**Elevator pitch:** Every serious LLM team will run a fleet of specialized sub-agents against a mix of frontier APIs and local GPUs, stitched together today with bespoke glue locked to one vendor's SDK. Meridian is the missing control plane: agents are YAML, tools are MCP servers, routing is capability-based, and every run is a deterministic, replayable artifact. Swapping Claude for a local Llama becomes a config change, not a rewrite.
+**Elevator pitch:** Every serious LLM team will run a fleet of specialized sub-agents against a mix of frontier APIs and local GPUs, stitched together today with bespoke glue locked to one vendor's SDK. ALDO AI is the missing control plane: agents are YAML, tools are MCP servers, routing is capability-based, and every run is a deterministic, replayable artifact. Swapping Claude for a local Llama becomes a config change, not a rewrite.
 
 ## 2. Target users
 
@@ -52,23 +52,23 @@
                   App-specific
 ```
 
-- **Claude Code / Cursor / Windsurf / Devin:** vertical coding agents, single-vendor by design. Meridian sits under or beside them as the neutral runtime.
+- **Claude Code / Cursor / Windsurf / Devin:** vertical coding agents, single-vendor by design. ALDO AI sits under or beside them as the neutral runtime.
 - **OpenHands:** closest cousin (open, self-hostable) but scoped to coding; we are domain-agnostic.
 - **LangGraph Cloud / CrewAI Enterprise:** frameworks with managed runtimes; their center of gravity is cloud-LLM. We treat local as equal.
 - **Temporal:** durable execution, not agent-aware. We borrow heavily (see §10) and ship agent-native primitives on top.
 - **n8n / Zapier Agent:** no-code with agent nodes bolted on. Different audience; we won't compete on the visual builder.
 
-## 5. Differentiation wedge — the three things only Meridian does well
+## 5. Differentiation wedge — the three things only ALDO AI does well
 
 1. **Capability-based routing across cloud + local, identical semantics.** Agents declare requirements (`needs: {tool_use, 200k_ctx, vision}`); the gateway picks from a registry including Anthropic, OpenAI, Google, xAI, Bedrock, Ollama, vLLM, llama.cpp, MLX, TGI. Swapping Sonnet for a local Qwen is a flag. Competitors either hard-code providers (Claude Code, Devin) or treat local as a second-class adapter (LangGraph, CrewAI).
 
-2. **Bit-exact replay as a product surface, not a debug mode.** Every run is a content-addressed trace: inputs, tool calls, model responses, RNG seeds, MCP server versions. `meridian replay <run-id>` reproduces identically; `meridian diff` compares two runs. LangSmith records traces without guaranteed replay; Temporal replays workflow code but not non-deterministic LLM outputs. We do both by recording every model call as an activity.
+2. **Bit-exact replay as a product surface, not a debug mode.** Every run is a content-addressed trace: inputs, tool calls, model responses, RNG seeds, MCP server versions. `aldo replay <run-id>` reproduces identically; `aldo diff` compares two runs. LangSmith records traces without guaranteed replay; Temporal replays workflow code but not non-deterministic LLM outputs. We do both by recording every model call as an activity.
 
-3. **Agents-as-data with MCP-native tools.** Agents are YAML in git, composable via imports and overlays (Helm for agents). Tools are MCP servers discovered at runtime, not SDK-baked adapters. Kubernetes-style ecosystem flywheel: the agent you write today runs on any Meridian cluster tomorrow.
+3. **Agents-as-data with MCP-native tools.** Agents are YAML in git, composable via imports and overlays (Helm for agents). Tools are MCP servers discovered at runtime, not SDK-baked adapters. Kubernetes-style ecosystem flywheel: the agent you write today runs on any ALDO AI cluster tomorrow.
 
 ## 6. v0.1 scope (12 weeks)
 
-**Will ship:** Agent YAML spec v0 (model requirements, prompt, tools, sub-agents, hooks); provider gateway for Anthropic, OpenAI, Google, Ollama, vLLM (5 is the bar; rest as community plugins); capability registry + routing policy engine (rules + cost/latency hints); MCP client with 3 reference servers (filesystem, shell, http); run recorder + deterministic replay CLI (`meridian run/replay/diff`); sub-agent spawning with isolated context and permission scopes; hooks (pre-tool, post-tool, pre-model, on-error); slash-commands as agent entry points; Postgres-backed durable state with resume-after-crash; single-binary local dev + Helm chart for cluster mode; OTel export.
+**Will ship:** Agent YAML spec v0 (model requirements, prompt, tools, sub-agents, hooks); provider gateway for Anthropic, OpenAI, Google, Ollama, vLLM (5 is the bar; rest as community plugins); capability registry + routing policy engine (rules + cost/latency hints); MCP client with 3 reference servers (filesystem, shell, http); run recorder + deterministic replay CLI (`aldo run/replay/diff`); sub-agent spawning with isolated context and permission scopes; hooks (pre-tool, post-tool, pre-model, on-error); slash-commands as agent entry points; Postgres-backed durable state with resume-after-crash; single-binary local dev + Helm chart for cluster mode; OTel export.
 
 **Will NOT ship:** managed cloud (v0.2); GUI / visual builder; built-in vector store or RAG (use an MCP server); fine-tuning; evals-as-a-service; prompt marketplace; multi-tenant auth beyond shared secret + org ID; Windows native; a chat UI.
 
@@ -77,7 +77,7 @@
 - **Time-to-first-working-agent:** p50 ≤ 10 min from install to a running tool-calling agent.
 - **Cloud↔local swap rate:** ≥ 90% of example agents run unmodified against both a frontier API and a chosen local model (Llama 3.3 70B or Qwen 2.5 32B).
 - **Replay correctness:** ≥ 99.5% of recorded runs replay to bit-exact tool-call sequences.
-- **Cost per completed task:** ≥ 30% reduction vs. design partners' pre-Meridian implementation on their top 3 workflows.
+- **Cost per completed task:** ≥ 30% reduction vs. design partners' pre-ALDO AI implementation on their top 3 workflows.
 - **Design-partner retention:** ≥ 3 of 5 partners in production by week 12.
 - **Contributor pulse:** ≥ 5 external MCP servers or provider adapters in the registry.
 
@@ -106,4 +106,4 @@
 - **From CrewAI:** *crew* as a named collection of collaborating agents with shared goal; *task* as the unit of assigned work with an expected output schema.
 - **From Temporal:** *workflow* vs. *activity* split (our model calls and tool calls become recorded activities); *worker* as the execution unit; *replay* as a first-class verb; deterministic execution discipline; worker versioning for safe agent rollouts.
 
-Explicit naming call: Meridian's top-level nouns will be **Agent**, **Crew**, **Task**, **Tool**, **Run**, **Hook**, **Skill**, **Gateway**. Graphs are an implementation detail under Crew, not a user-facing concept in v0.1.
+Explicit naming call: ALDO AI's top-level nouns will be **Agent**, **Crew**, **Task**, **Tool**, **Run**, **Hook**, **Skill**, **Gateway**. Graphs are an implementation detail under Crew, not a user-facing concept in v0.1.

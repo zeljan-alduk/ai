@@ -1,0 +1,83 @@
+name: Deploy API to Fly.io
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'platform/api-contract/**'
+      - 'platform/registry/**'
+      - 'platform/storage/**'
+      - 'platform/types/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: fly deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ vars.DEPLOY_API_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      # Stage runtime secrets so `flyctl deploy` rolls them out atomically
+      # with the new image. `--stage` queues them without forcing a release.
+      # The @aldo-ai/secrets package refuses to boot in production without
+      # ALDO_SECRETS_MASTER_KEY (32-byte base64 NaCl secretbox key).
+      # Wave 10 added ALDO_JWT_SECRET (32-byte base64 HS256 key) — the auth
+      # module refuses to boot in production without it.
+      #
+      # Wave 11 adds the Stripe family. ALL FIVE may be empty in GH
+      # secrets initially — `flyctl secrets set --stage` accepts empty
+      # values; the @aldo-ai/billing config loader treats empty-string
+      # as unset and the API runs in placeholder mode. Once the user
+      # supplies real keys (sk_live_…, whsec_…, price_…, ...), the next
+      # deploy flips billing to live with no code change.
+      - name: Stage Fly secrets
+        run: |
+          flyctl secrets set --stage --app aldo-ai-api \
+            ALDO_SECRETS_MASTER_KEY="${{ secrets.ALDO_SECRETS_MASTER_KEY }}" \
+            ALDO_JWT_SECRET="${{ secrets.ALDO_JWT_SECRET }}" \
+            STRIPE_SECRET_KEY="${{ secrets.STRIPE_SECRET_KEY }}" \
+            STRIPE_WEBHOOK_SIGNING_SECRET="${{ secrets.STRIPE_WEBHOOK_SIGNING_SECRET }}" \
+            STRIPE_PRICE_SOLO="${{ secrets.STRIPE_PRICE_SOLO }}" \
+            STRIPE_PRICE_TEAM="${{ secrets.STRIPE_PRICE_TEAM }}" \
+            STRIPE_BILLING_PORTAL_RETURN_URL="${{ secrets.STRIPE_BILLING_PORTAL_RETURN_URL }}"
+          # Boot-time signal: log which Stripe vars are configured at
+          # deploy time WITHOUT echoing the actual values. Mirrors the
+          # `[billing] configured: yes/no` line the API prints itself.
+          echo "[deploy] stripe vars staged:" \
+            "secret_key=$([ -n \"${{ secrets.STRIPE_SECRET_KEY }}\" ] && echo set || echo unset)" \
+            "webhook_secret=$([ -n \"${{ secrets.STRIPE_WEBHOOK_SIGNING_SECRET }}\" ] && echo set || echo unset)" \
+            "price_solo=$([ -n \"${{ secrets.STRIPE_PRICE_SOLO }}\" ] && echo set || echo unset)" \
+            "price_team=$([ -n \"${{ secrets.STRIPE_PRICE_TEAM }}\" ] && echo set || echo unset)" \
+            "portal_return_url=$([ -n \"${{ secrets.STRIPE_BILLING_PORTAL_RETURN_URL }}\" ] && echo set || echo unset)"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy
+        run: |
+          # --wait-timeout 600 (default ~300s) gives the wave-16 image
+          # enough headroom for migrations 017+018 + the in-memory
+          # agency seed without flyctl giving up.
+          flyctl deploy \
+            --remote-only \
+            --config apps/api/fly.toml \
+            --dockerfile apps/api/Dockerfile \
+            --app aldo-ai-api \
+            --ignorefile apps/api/.dockerignore \
+            --wait-timeout 600 \
+            --build-arg COMMIT_SHA=${{ github.sha }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

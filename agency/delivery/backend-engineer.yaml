@@ -1,0 +1,84 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: backend-engineer
+  version: 0.1.0
+  description: Implements backend services, APIs, and persistence layers to a tech lead's spec.
+  owner: delivery-team@aldo-tech-labs
+  tags: [delivery, backend, engineering]
+
+role:
+  team: delivery
+  reports_to: tech-lead
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output, code-fim]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.75
+    tokens_in_max: 120000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 60000
+  decoding:
+    mode: free
+    temperature: 0.15
+
+prompt:
+  system_file: prompts/backend-engineer.system.md
+  variables:
+    package_conventions: project.backend.conventions
+    api_style: org.engineering.api_style
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read, fs.write]
+    - server: aldo-shell
+      allow: [shell.exec]
+    - server: repo-fs
+      allow: [fs.read, fs.write]
+    - server: aldo-memory
+      allow: [memory.read, memory.write]
+    - server: github
+      allow: [pr.read, pr.write]
+  permissions:
+    network: allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, project]
+  write: [private]
+  retention:
+    private: 90d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: spec.ambiguous == true
+      to: tech-lead
+    - condition: tests.failing_after_retries >= 3
+      to: tech-lead
+
+inputs:
+  schema_ref: schemas/work_package.json
+
+outputs:
+  change_set:
+    json_schema: schemas/change_set.json
+
+eval_gate:
+  required_suites:
+    - suite: backend_code_regressions_v2
+      min_score: 0.80
+    - suite: backend_test_coverage_v1
+      min_score: 0.75
+  must_pass_before_promote: true

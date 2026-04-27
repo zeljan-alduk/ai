@@ -1,0 +1,85 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: program-manager
+  version: 0.1.0
+  description: "Keeps multi-team initiatives moving: dependencies, dates, unblockers, status."
+  owner: direction-team@aldo-tech-labs
+  tags: [direction, program, delivery]
+
+role:
+  team: direction
+  reports_to: principal
+  pattern: supervisor
+
+model_policy:
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: reasoning-small
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.80
+    tokens_in_max: 120000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 60000
+  decoding:
+    mode: json
+    temperature: 0.1
+    json_schema_ref: "#/outputs/status"
+
+prompt:
+  system_file: prompts/program-manager.system.md
+  variables:
+    initiatives: org.initiatives.active
+    calendar: org.calendar
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read, fs.write]
+    - server: aldo-memory
+      allow: [memory.read, memory.write, memory.scan]
+    - server: aldo-agent
+      allow: [agent.list, agent.inspect]
+    - server: github
+      allow: [issue.read, issue.write, pr.read]
+  permissions:
+    network: allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org, project]
+  write: [private, project]
+  retention:
+    private: 180d
+    project: 365d
+
+spawn:
+  allowed: [historian]
+
+escalation:
+  on:
+    - condition: dependency.blocked_days > 5
+      to: principal
+    - condition: risk.severity == "high"
+      to: principal
+
+inputs:
+  schema_ref: schemas/program_brief.json
+
+outputs:
+  status:
+    json_schema: schemas/program_status.json
+
+eval_gate:
+  required_suites:
+    - suite: program_tracking_v1
+      min_score: 0.85
+    - suite: status_accuracy_v1
+      min_score: 0.90
+  must_pass_before_promote: true

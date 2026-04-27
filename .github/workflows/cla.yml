@@ -1,0 +1,42 @@
+name: CLA Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    # Skip when the PR is from the repo owner — they implicitly accept
+    # the CLA on their own work, and configuring the remote signatures
+    # repo + PAT for a one-person project is overhead. When the project
+    # accepts external contributors, drop this guard and configure the
+    # CLA_ASSISTANT_PAT secret + cla-signatures repo per the README.
+    if: |
+      github.event.pull_request.user.login != 'zeljan-alduk' &&
+      ((github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') ||
+       github.event_name == 'pull_request_target')
+    steps:
+      - name: CLA Assistant Lite
+        uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_ASSISTANT_PAT }}
+        with:
+          path-to-signatures: 'signatures/cla.json'
+          path-to-document: 'https://github.com/${{ github.repository }}/blob/main/LICENSING.md#contributor-license-agreement-cla'
+          branch: 'main'
+          allowlist: 'dependabot[bot],renovate[bot],zeljan-alduk'
+          remote-organization-name: 'zeljan-alduk'
+          remote-repository-name: 'cla-signatures'
+          custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
+          custom-allsigned-prcomment: 'All contributors have signed the CLA. Thank you!'
+          lock-pullrequest-aftermerge: false

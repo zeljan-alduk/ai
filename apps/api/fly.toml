@@ -1,0 +1,60 @@
+# fly.toml — ALDO AI control-plane API on Fly.io
+#
+# Bring-up:
+#   fly launch --copy-config --no-deploy        # registers the app once
+#   fly secrets set DATABASE_URL=postgres://...
+#   fly secrets set ANTHROPIC_API_KEY=... GROQ_API_KEY=... GEMINI_API_KEY=...
+#   fly deploy                                  # builds the Dockerfile + ships
+#
+# Free-tier sizing: shared-cpu-1x with 256MB was the wave-4 default.
+# Wave 10 added argon2 password hashing on signup which costs ~64MB
+# per hash; 256MB cold-boots OOM'd POST /v1/auth/signup with HTTP 503
+# in production. Bumped to 512MB; revisit when traffic warrants
+# right-sizing rather than guessing.
+
+app = "aldo-ai-api"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  HOST = "0.0.0.0"
+  NODE_ENV = "production"
+  CORS_ORIGINS = "https://aldo-ai.vercel.app"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Wave 16 — keep one machine warm. Auto-stop is fine but cold-boot
+  # of the wave-16 image (migrations 017+018 + cache + rate-limit +
+  # in-memory agency seed) reliably exceeds Fly's deploy health-check
+  # window, which causes the rolling deploy to abort with "request
+  # canceled" from the Fly machine API. Trade a little idle compute
+  # for deploy reliability.
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    # Wave 16 added migrations 017 + 018 (cache + rate-limit + quotas
+    # + domains) + the in-memory bootstrap that walks agency/ to seed
+    # the default tenant + several new background tickers. Cold boot
+    # now exceeds the original 10s grace period and Fly aborts the
+    # rolling deploy. 60s is conservative; trim back when boot is
+    # profiled.
+    grace_period = "60s"
+    interval = "30s"
+    method = "get"
+    timeout = "10s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

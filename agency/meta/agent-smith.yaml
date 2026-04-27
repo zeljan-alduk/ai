@@ -1,0 +1,89 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: agent-smith
+  version: 0.1.0
+  description: Authors and revises other agents' specs and prompts, given a role brief.
+  owner: meta-team@aldo-tech-labs
+  tags: [meta, authoring]
+
+role:
+  team: meta
+  reports_to: architect
+  pattern: worker
+
+model_policy:
+  # agent-smith reads and writes other agents' specs — tool allowlists,
+  # budgets, escalation paths. That content is as sensitive as source
+  # code, so the tier is `sensitive`; on-prem-only tenants must be able
+  # to author specs without reaching a cloud endpoint, so a local
+  # reasoning fallback is mandatory.
+  capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-large
+  fallbacks:
+    - capability_class: reasoning-medium
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 1.50
+    tokens_in_max: 200000
+    tokens_out_max: 12000
+  latency:
+    p95_ms: 120000
+  decoding:
+    mode: free
+    temperature: 0.3
+
+prompt:
+  system_file: prompts/agent-smith.system.md
+  variables:
+    spec_schema: org.registry.spec_schema
+    style_guide: org.agent_authoring.style_guide
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read, fs.write]
+    - server: repo-fs
+      allow: [fs.read, fs.write]
+    - server: aldo-agent
+      allow: [agent.list, agent.inspect]
+    - server: aldo-memory
+      allow: [memory.read, memory.write, memory.scan]
+  permissions:
+    network: none
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org]
+  write: [private, org]
+  retention:
+    private: 180d
+    org: 365d
+
+spawn:
+  allowed: []
+
+escalation:
+  on:
+    - condition: spec.introduces_new_tool_server == true
+      to: architect
+    - condition: eval_gate.missing == true
+      to: eval-runner
+
+inputs:
+  schema_ref: schemas/role_brief.json
+
+outputs:
+  spec_change:
+    json_schema: schemas/agent_spec_change.json
+
+eval_gate:
+  required_suites:
+    - suite: spec_schema_conformance_v2
+      min_score: 0.98
+    - suite: prompt_quality_v1
+      min_score: 0.82
+  must_pass_before_promote: true

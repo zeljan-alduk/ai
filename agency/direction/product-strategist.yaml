@@ -1,0 +1,79 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: product-strategist
+  version: 0.1.0
+  description: Turns market signals and user research into proposals for what ALDO AI should build next.
+  owner: direction-team@aldo-tech-labs
+  tags: [direction, product, strategy]
+
+role:
+  team: direction
+  reports_to: principal
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, 200k-context, reasoning, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-large
+  fallbacks:
+    - capability_class: reasoning-medium
+  budget:
+    usd_per_run: 2.00
+    tokens_in_max: 200000
+    tokens_out_max: 12000
+  latency:
+    p95_ms: 120000
+  decoding:
+    mode: free
+    temperature: 0.4
+
+prompt:
+  system_file: prompts/product-strategist.system.md
+  variables:
+    competitor_list: org.market.competitors
+    icp: org.market.ideal_customer_profile
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read, fs.write]
+    - server: aldo-memory
+      allow: [memory.read, memory.write, memory.scan]
+  permissions:
+    network: allowlist
+    filesystem: repo-readwrite
+
+memory:
+  read:  [private, org, project]
+  write: [private, project]
+  retention:
+    private: 180d
+    project: 365d
+
+spawn:
+  allowed: [ux-researcher]
+
+escalation:
+  on:
+    - condition: proposal.bet_size == "quarter-defining"
+      to: principal
+    - condition: evidence.confidence < 0.5
+      to: ux-researcher
+
+inputs:
+  schema_ref: schemas/strategy_brief.json
+
+outputs:
+  proposal:
+    json_schema: schemas/product_proposal.json
+
+eval_gate:
+  required_suites:
+    - suite: strategy_regressions_v1
+      min_score: 0.78
+    - suite: evidence_grounding_v1
+      min_score: 0.85
+  must_pass_before_promote: true

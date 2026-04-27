@@ -1,0 +1,55 @@
+version: 2
+
+updates:
+  # npm / pnpm workspace — monthly batched updates. Security advisories still
+  # open immediately regardless of schedule.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+      day: monday
+      time: '09:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 10
+    groups:
+      typescript:
+        patterns:
+          - 'typescript'
+          - '@types/*'
+          - 'tsx'
+      testing:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+      biome:
+        patterns:
+          - '@biomejs/*'
+      opentelemetry:
+        patterns:
+          - '@opentelemetry/*'
+      providers:
+        patterns:
+          - '@anthropic-ai/sdk'
+          - 'openai'
+          - '@google/generative-ai'
+    labels:
+      - dependencies
+    commit-message:
+      prefix: 'chore(deps)'
+      include: scope
+
+  # GitHub Actions — monthly batched.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      day: monday
+      time: '09:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: 'chore(ci)'
+      include: scope

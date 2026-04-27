@@ -1,0 +1,354 @@
+apiVersion: aldo/models.v1
+kind: ModelCatalog
+
+# Seed catalogue used by the router during development and tests.
+# Prices reflect public list rates as of 2026-04 — treat as illustrative;
+# real deployments override via their own catalog file.
+
+models:
+  # --- Anthropic --------------------------------------------------------
+  - id: claude-opus-4-7
+    provider: anthropic
+    providerKind: anthropic
+    locality: cloud
+    capabilityClass: reasoning-large
+    provides:
+      - 200k-context
+      - tool-use
+      - function-calling
+      - parallel-tool-calls
+      - streaming
+      - reasoning
+      - extended-thinking
+      - vision
+      - long-output
+      - structured-output
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 200000
+    latencyP95Ms: 4500
+    cost:
+      usdPerMtokIn: 15.0
+      usdPerMtokOut: 75.0
+      usdPerMtokCacheRead: 1.5
+      usdPerMtokCacheWrite: 18.75
+    providerConfig:
+      apiKeyEnv: ANTHROPIC_API_KEY
+
+  - id: claude-sonnet-4-6
+    provider: anthropic
+    providerKind: anthropic
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 200k-context
+      - tool-use
+      - function-calling
+      - parallel-tool-calls
+      - streaming
+      - reasoning
+      - extended-thinking
+      - vision
+      - structured-output
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 200000
+    latencyP95Ms: 2500
+    cost:
+      usdPerMtokIn: 3.0
+      usdPerMtokOut: 15.0
+      usdPerMtokCacheRead: 0.3
+      usdPerMtokCacheWrite: 3.75
+    providerConfig:
+      apiKeyEnv: ANTHROPIC_API_KEY
+
+  # --- OpenAI -----------------------------------------------------------
+  - id: gpt-5
+    provider: openai
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-large
+    provides:
+      - 1m-context
+      - tool-use
+      - function-calling
+      - parallel-tool-calls
+      - streaming
+      - reasoning
+      - vision
+      - json-mode
+      - structured-output
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 1000000
+    latencyP95Ms: 5000
+    cost:
+      usdPerMtokIn: 5.0
+      usdPerMtokOut: 40.0
+    providerConfig:
+      baseUrl: https://api.openai.com/v1
+      apiKeyEnv: OPENAI_API_KEY
+
+  - id: text-embedding-3-large
+    provider: openai
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: embeddings
+    provides: [embeddings]
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 8191
+    cost:
+      usdPerMtokIn: 0.13
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://api.openai.com/v1
+      apiKeyEnv: OPENAI_API_KEY
+
+  # --- Google -----------------------------------------------------------
+  - id: gemini-2.5-pro
+    provider: google
+    providerKind: google
+    locality: cloud
+    capabilityClass: reasoning-large
+    provides:
+      - 1m-context
+      - tool-use
+      - function-calling
+      - streaming
+      - reasoning
+      - vision
+      - audio-in
+      - structured-output
+    privacyAllowed: [public]
+    effectiveContextTokens: 1000000
+    latencyP95Ms: 3500
+    cost:
+      usdPerMtokIn: 1.25
+      usdPerMtokOut: 10.0
+      usdPerMtokCacheRead: 0.3125
+    providerConfig:
+      apiKeyEnv: GOOGLE_API_KEY
+
+  # --- Groq (free-tier-friendly, OpenAI-compatible) ---------------------
+  - id: groq.llama-3.3-70b-versatile
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - parallel-tool-calls
+      - streaming
+      - reasoning
+      - structured-output
+      - json-mode
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 1500
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://api.groq.com/openai/v1
+      apiKeyEnv: GROQ_API_KEY
+
+  - id: groq.llama-3.1-8b-instant
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: fast-draft
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+      - json-mode
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 800
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://api.groq.com/openai/v1
+      apiKeyEnv: GROQ_API_KEY
+
+  # --- Local (Ollama) ---------------------------------------------------
+  - id: qwen2.5-coder:32b
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - code-fim
+      - constrained-decoding
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 12000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1
+      extra:
+        note: "Ollama forwards grammar/response_format to llama.cpp"
+
+  - id: ollama.qwen2.5-coder:32b
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - code-fim
+      - constrained-decoding
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 12000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1
+
+  - id: ollama.qwen2.5:7b
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: fast-draft
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 5000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1
+
+  # --- Local (vLLM) -----------------------------------------------------
+  - id: llama-3.3-70b
+    provider: vllm
+    providerKind: openai-compat
+    locality: on-prem
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+      - constrained-decoding
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 8000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://vllm.internal:8000/v1
+      extra:
+        note: "vLLM accepts guided_json / guided_grammar fields"
+
+  # --- MLX (Apple Silicon) ----------------------------------------------
+  # Illustrative MLX entries served by `python -m mlx_lm.server`. Quant tier
+  # surfaced via providerConfig.extra.quantization so the eval harness can
+  # compare q4 / q8 / bf16 head-to-head against the same agent spec.
+  # Operators are expected to override these with the actual model ids /
+  # ports they're serving via their own catalog file.
+  - id: mlx-qwen2.5-7b-instruct-4bit
+    provider: mlx
+    providerKind: mlx
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 32k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 32768
+    latencyP95Ms: 4000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:8081
+      extra:
+        quantization: q4
+        note: "mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8081"
+
+  - id: mlx-llama-3.3-70b-instruct-4bit
+    provider: mlx
+    providerKind: mlx
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 128k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 128000
+    latencyP95Ms: 9000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:8081
+      extra:
+        quantization: q4
+        kvCacheQuantized: true
+
+  - id: mlx-mistral-small-3.1-instruct-bf16
+    provider: mlx
+    providerKind: mlx
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 32k-context
+      - tool-use
+      - function-calling
+      - streaming
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 32768
+    latencyP95Ms: 6000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:8081
+      extra:
+        quantization: bf16
+
+  # --- Local embeddings -------------------------------------------------
+  - id: nomic-embed-text
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: embeddings
+    provides: [embeddings]
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 8192
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1

@@ -1,0 +1,136 @@
+name: E2E (Playwright)
+
+# Black-box browser-driven tests against the live web + API. Cheap on
+# read-only specs (health + sidebar walk); the secrets CRUD test only
+# runs when E2E_ALLOW_WRITES=true, which we never set against prod.
+#
+# Triggers:
+#   - pull_request: only when the PR is labelled `e2e` OR the diff
+#     touches apps/web/**. The path filter alone isn't enough because
+#     Playwright config / suite changes live under apps/web-e2e/**.
+#   - workflow_dispatch: manual run, with optional URL overrides.
+on:
+  # No `paths:` filter here — we want the workflow to fire on every PR
+  # update so the job-level `if` can decide whether to actually run.
+  # That keeps the label-only path working: if a PR is opened with no
+  # web changes and later gets the `e2e` label, the `labeled` event
+  # still triggers the workflow.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      e2e_base_url:
+        description: 'Web app base URL (overrides default)'
+        required: false
+        default: 'https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app'
+      e2e_api_base_url:
+        description: 'API base URL (overrides default)'
+        required: false
+        default: 'https://aldo-ai-api.fly.dev'
+      e2e_allow_writes:
+        description: 'Allow mutation tests (true/false). Never use against prod.'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Decide whether the playwright job needs to run. Two ways to qualify:
+  #   - the PR carries the `e2e` label, or
+  #   - the PR diff touches apps/web/** (covers Wave-N web changes that
+  #     don't bother adding the label).
+  # workflow_dispatch always runs (gate set to true downstream).
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history back to the base ref for the diff check.
+          fetch-depth: 0
+
+      - id: decide
+        name: Should we run e2e?
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'e2e') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$HAS_LABEL" = "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ]; then
+            if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^apps/web/' >/dev/null; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+
+  playwright:
+    name: chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    env:
+      # Defaults point at production. workflow_dispatch can override
+      # both via inputs; the secrets CRUD path stays disabled unless
+      # the operator explicitly opts in.
+      E2E_BASE_URL: ${{ github.event.inputs.e2e_base_url || 'https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app' }}
+      E2E_API_BASE_URL: ${{ github.event.inputs.e2e_api_base_url || 'https://aldo-ai-api.fly.dev' }}
+      E2E_ALLOW_WRITES: ${{ github.event.inputs.e2e_allow_writes || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @aldo-ai/web-e2e exec playwright install --with-deps chromium
+
+      - name: Typecheck (web-e2e)
+        run: pnpm --filter @aldo-ai/web-e2e exec tsc --noEmit
+
+      - name: Run Playwright tests
+        run: pnpm --filter @aldo-ai/web-e2e exec playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web-e2e/playwright-report
+          retention-days: 14
+
+      - name: Upload test results (traces, screenshots, videos)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: apps/web-e2e/test-results
+          retention-days: 14

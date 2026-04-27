@@ -1,0 +1,45 @@
+{
+  "name": "@aldo-ai/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ALDO AI control-plane API server (Hono).",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@aldo-ai/api-contract": "workspace:*",
+    "@aldo-ai/billing": "workspace:*",
+    "@aldo-ai/cache": "workspace:*",
+    "@aldo-ai/engine": "workspace:*",
+    "@aldo-ai/eval": "workspace:*",
+    "@aldo-ai/gateway": "workspace:*",
+    "@aldo-ai/integrations": "workspace:*",
+    "@aldo-ai/local-discovery": "workspace:*",
+    "@aldo-ai/observability": "workspace:*",
+    "@aldo-ai/openapi": "workspace:*",
+    "@aldo-ai/orchestrator": "workspace:*",
+    "@aldo-ai/rate-limit": "workspace:*",
+    "@aldo-ai/registry": "workspace:*",
+    "@aldo-ai/secrets": "workspace:*",
+    "@aldo-ai/storage": "workspace:*",
+    "@aldo-ai/types": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "@node-rs/argon2": "^2.0.2",
+    "hono": "^4.6.0",
+    "jose": "^6.2.2",
+    "tsx": "^4.19.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "~0.4.4",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

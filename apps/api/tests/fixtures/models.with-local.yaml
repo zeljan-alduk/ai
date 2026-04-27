@@ -1,0 +1,41 @@
+apiVersion: aldo/models.v1
+kind: ModelCatalog
+
+# Cloud + local-reasoning catalog. The local entry allows the sensitive
+# tier; routing simulation for a sensitive agent must select it.
+models:
+  - id: cloud-medium-fixture
+    provider: groq
+    providerKind: openai-compat
+    locality: cloud
+    capabilityClass: reasoning-medium
+    provides:
+      - 128k-context
+      - tool-use
+      - structured-output
+      - reasoning
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 128000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: https://example.invalid/v1
+      apiKeyEnv: GROQ_API_KEY
+
+  - id: mlx-qwen-fixture
+    provider: ollama
+    providerKind: openai-compat
+    locality: local
+    capabilityClass: local-reasoning
+    provides:
+      - 32k-context
+      - tool-use
+      - structured-output
+    privacyAllowed: [public, internal, sensitive]
+    effectiveContextTokens: 32000
+    cost:
+      usdPerMtokIn: 0
+      usdPerMtokOut: 0
+    providerConfig:
+      baseUrl: http://localhost:11434/v1
