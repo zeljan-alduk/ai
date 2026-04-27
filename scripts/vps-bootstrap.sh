@@ -96,6 +96,7 @@ apt_install_if_missing curl
 apt_install_if_missing git
 apt_install_if_missing gnupg
 apt_install_if_missing openssl
+apt_install_if_missing python3
 
 # Docker via the official convenience script if missing.
 if ! command -v docker >/dev/null 2>&1; then
@@ -252,6 +253,14 @@ POSTGRES_PASSWORD=$(cat "$APP_DIR/secrets/postgres_password")
 JWT_SECRET=$(cat "$APP_DIR/secrets/jwt_secret")
 SECRETS_MASTER_KEY=$(cat "$APP_DIR/secrets/secrets_master_key")
 
+# URL-encode the postgres password for use in DATABASE_URL.
+# `openssl rand -base64 32` can produce '+', '/', and '=' — '/' in
+# particular terminates the URL authority component and makes pg parse
+# the host as 'aldo' instead of 'aldo-postgres'. Encode all userinfo
+# specials defensively.
+POSTGRES_PASSWORD_URL=$(printf '%s' "$POSTGRES_PASSWORD" \
+  | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(),safe=''))")
+
 # ---------------------------------------------------------------------
 # 4. docker compose stack.
 #
@@ -320,7 +329,7 @@ services:
       NODE_ENV: production
       PORT: "8080"
       HOST: "0.0.0.0"
-      DATABASE_URL: "postgresql://aldo:${POSTGRES_PASSWORD}@aldo-postgres:5432/aldo?sslmode=disable"
+      DATABASE_URL: "postgresql://aldo:${POSTGRES_PASSWORD_URL}@aldo-postgres:5432/aldo?sslmode=disable"
       ALDO_JWT_SECRET: "${JWT_SECRET}"
       ALDO_SECRETS_MASTER_KEY: "${SECRETS_MASTER_KEY}"
       CORS_ORIGINS: "https://${APP_DOMAIN}"
@@ -334,7 +343,11 @@ ${COMPOSE_API_NETWORKS}
     container_name: aldo-web
     restart: unless-stopped
     working_dir: /repo
-    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install --frozen-lockfile --filter @aldo-ai/web... && pnpm --filter @aldo-ai/web build && pnpm --filter @aldo-ai/web start --port 8080 --hostname 0.0.0.0"]
+    # Install with --prod=false so devDeps land (NODE_ENV=production
+    # would otherwise make pnpm skip them, and the prebuild needs `tsx`).
+    # NODE_ENV stays 'production' for the runtime so Next.js/Hono pick
+    # the right code path.
+    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install --frozen-lockfile --prod=false --filter @aldo-ai/web... && pnpm --filter @aldo-ai/web build && pnpm --filter @aldo-ai/web start --port 8080 --hostname 0.0.0.0"]
     depends_on:
       aldo-api:
         condition: service_started
