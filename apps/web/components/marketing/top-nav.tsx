@@ -6,7 +6,7 @@
  * Layout:
  *   - Sticky, blurred-backdrop on scroll. Transparent at top.
  *   - Left: ALDO AI logomark + wordmark.
- *   - Center: Features, Pricing, Security, Docs, GitHub.
+ *   - Center: Features, Pricing, Security, Docs.
  *   - Right: ThemeToggle, Login, Sign up.
  *   - Mobile (<sm): hamburger -> Sheet drawer with same links.
  *
@@ -33,7 +33,7 @@ import { Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-const NAV_LINKS: ReadonlyArray<{ href: string; label: string; external?: boolean }> = [
+const NAV_LINKS: ReadonlyArray<{ href: string; label: string }> = [
   { href: '/#features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/security', label: 'Security' },
@@ -77,24 +77,11 @@ export function MarketingTopNav({ initialTheme }: MarketingTopNavProps) {
           </div>
         </Link>
         <nav className="ml-4 hidden items-center gap-5 text-sm text-fg-muted md:flex">
-          {NAV_LINKS.map((link) =>
-            link.external ? (
-              <a
-                key={link.label}
-                className="inline-flex items-center gap-1 transition-colors hover:text-fg"
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Github className="h-3.5 w-3.5" aria-hidden />
-                {link.label}
-              </a>
-            ) : (
-              <Link key={link.label} className="transition-colors hover:text-fg" href={link.href}>
-                {link.label}
-              </Link>
-            ),
-          )}
+          {NAV_LINKS.map((link) => (
+            <Link key={link.label} className="transition-colors hover:text-fg" href={link.href}>
+              {link.label}
+            </Link>
+          ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle initialTheme={initialTheme} />
@@ -120,29 +107,16 @@ export function MarketingTopNav({ initialTheme }: MarketingTopNavProps) {
                 <SheetDescription>Marketing site navigation.</SheetDescription>
               </SheetHeader>
               <nav className="mt-4 flex flex-col gap-1">
-                {NAV_LINKS.map((link) =>
-                  link.external ? (
-                    <a
-                      key={link.label}
-                      className="rounded-md px-3 py-2 text-sm text-fg transition-colors hover:bg-bg-subtle"
-                      href={link.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      {link.label}
-                    </a>
-                  ) : (
-                    <Link
-                      key={link.label}
-                      href={link.href}
-                      className="rounded-md px-3 py-2 text-sm text-fg transition-colors hover:bg-bg-subtle"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      {link.label}
-                    </Link>
-                  ),
-                )}
+                {NAV_LINKS.map((link) => (
+                  <Link
+                    key={link.label}
+                    href={link.href}
+                    className="rounded-md px-3 py-2 text-sm text-fg transition-colors hover:bg-bg-subtle"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
                 <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
                   <Link
                     href="/login"
