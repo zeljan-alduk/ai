@@ -23,7 +23,9 @@ import { registerAlertOperations } from './operations/alerts.js';
 import { registerAnnotationOperations } from './operations/annotations.js';
 import { registerAuthOperations } from './operations/auth.js';
 import { registerBillingOperations } from './operations/billing.js';
+import { registerCacheOperations } from './operations/cache.js';
 import { registerDashboardOperations } from './operations/dashboards.js';
+import { registerDatasetOperations, registerEvaluatorOperations } from './operations/datasets.js';
 import { registerEvalOperations } from './operations/eval.js';
 import { registerHealthOperations } from './operations/health.js';
 import { registerIntegrationOperations } from './operations/integrations.js';
@@ -90,6 +92,9 @@ export function buildOpenApiSpec(opts: BuildSpecOptions): OpenApiDocument {
   registerPlaygroundOperations(registry);
   registerModelOperations(registry);
   registerEvalOperations(registry);
+  // Wave-16 — datasets + evaluators at top-level resource paths.
+  registerDatasetOperations(registry);
+  registerEvaluatorOperations(registry);
   registerSecretOperations(registry);
   registerBillingOperations(registry);
   registerDashboardOperations(registry);
@@ -101,6 +106,8 @@ export function buildOpenApiSpec(opts: BuildSpecOptions): OpenApiDocument {
   registerObservabilityOperations(registry);
   registerViewOperations(registry);
   registerAdminOperations(registry);
+  // Wave-16C — LLM-response cache.
+  registerCacheOperations(registry);
 
   // 3. Resolve everything.
   const components = registry.buildComponentSchemas();

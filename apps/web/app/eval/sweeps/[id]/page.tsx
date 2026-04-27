@@ -1,8 +1,10 @@
 import { CommentsThread } from '@/components/annotations/comments-thread';
 import { ErrorView } from '@/components/error-boundary';
+import type { ClusterLike } from '@/components/eval/clusters';
+import { FailureClustersPanel } from '@/components/eval/failure-clusters-panel';
 import { PageHeader } from '@/components/page-header';
 import { ShareDialog } from '@/components/shares/share-dialog';
-import { getAuthMe, listAnnotationsApi } from '@/lib/api';
+import { getAuthMe, listAnnotationsApi, listFailureClusters } from '@/lib/api';
 import { getSweep } from '@/lib/eval-client';
 import type { Annotation } from '@aldo-ai/api-contract';
 import Link from 'next/link';
@@ -30,6 +32,8 @@ export default async function SweepDetailPage({
   let initialAnnotations: readonly Annotation[] = [];
   let currentUserId = '';
   let currentUserEmail = '';
+  // Wave-16 (Engineer 16B): failure-clusters prefetch (best-effort).
+  let initialClusters: readonly ClusterLike[] = [];
   if (data !== null) {
     try {
       const [annResp, me] = await Promise.all([
@@ -42,7 +46,15 @@ export default async function SweepDetailPage({
     } catch {
       // ignore — comments are auxiliary
     }
+    try {
+      const cl = await listFailureClusters(decoded);
+      initialClusters = cl.clusters;
+    } catch {
+      // ignore — clusters are also auxiliary; the panel handles the
+      // empty state with a "Cluster failures" CTA.
+    }
   }
+  const hasFailures = data ? data.sweep.cells.some((c) => c.passed === false) : false;
 
   return (
     <>
@@ -66,6 +78,15 @@ export default async function SweepDetailPage({
       ) : data ? (
         <>
           <SweepView initialSweep={data.sweep} />
+          {hasFailures && (
+            <div className="mt-6">
+              <FailureClustersPanel
+                sweepId={decoded}
+                initial={initialClusters}
+                hasFailures={hasFailures}
+              />
+            </div>
+          )}
           {currentUserId.length > 0 && (
             <div className="mt-6">
               <CommentsThread

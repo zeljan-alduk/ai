@@ -27,7 +27,7 @@ import { ErrorView } from '@/components/error-boundary';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { getAgent, listAgents, listRuns } from '@/lib/api';
+import { boundedAll, getAgent, listAgents, listRuns } from '@/lib/api';
 import type { AgentSummary, PrivacyTier, RunStatus } from '@aldo-ai/api-contract';
 
 export const dynamic = 'force-dynamic';
@@ -84,9 +84,11 @@ export default async function AgentsPage({
   }
   if (!listed) return null;
 
-  // Resolve hasComposite per-agent in parallel; missing/erroring agents
-  // simply show as leaf. Empty registry skips the round-trip entirely.
-  const detailPromises = listed.agents.map(async (a) => {
+  // Resolve hasComposite per-agent in BATCHES of 6 to keep Vercel's
+  // serverless DNS resolver happy. Past ~30 concurrent fetches, the
+  // resolver returns "DNS cache overflow" and the page 503s.
+  // boundedAll preserves order; missing/erroring agents show as leaf.
+  const compositeResults = await boundedAll(listed.agents, 6, async (a) => {
     try {
       const detail = await getAgent(a.name);
       return { name: a.name, hasComposite: detail.agent.composite != null };
@@ -95,16 +97,12 @@ export default async function AgentsPage({
     }
   });
   const compositeMap = new Map<string, boolean>();
-  for (const r of await Promise.all(detailPromises)) {
-    compositeMap.set(r.name, r.hasComposite);
-  }
+  for (const r of compositeResults) compositeMap.set(r.name, r.hasComposite);
 
-  // Best-effort recent runs lookup — short-circuit on error so the
-  // gallery still renders.
-  const runsPromises = listed.agents.map(async (a) => {
+  // Best-effort recent runs lookup, same concurrency cap.
+  const runsResults = await boundedAll(listed.agents, 6, async (a) => {
     try {
       const runs = await listRuns({ agentName: a.name, limit: 10 });
-      // Oldest first for the sparkline.
       const statuses = runs.runs.map((r) => r.status).reverse();
       return { name: a.name, statuses };
     } catch {
@@ -112,9 +110,7 @@ export default async function AgentsPage({
     }
   });
   const runsMap = new Map<string, RunStatus[]>();
-  for (const r of await Promise.all(runsPromises)) {
-    runsMap.set(r.name, r.statuses);
-  }
+  for (const r of runsResults) runsMap.set(r.name, r.statuses);
 
   const filters: GalleryFilterState = {};
   const team = coerceTeam(sp.team);

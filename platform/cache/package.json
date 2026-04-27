@@ -1,0 +1,28 @@
+{
+  "name": "@aldo-ai/cache",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LLM-response cache layer + GatewayMiddleware for ALDO AI. Wave 16C.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@aldo-ai/api-contract": "workspace:*",
+    "@aldo-ai/storage": "workspace:*",
+    "@aldo-ai/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "~0.4.4",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

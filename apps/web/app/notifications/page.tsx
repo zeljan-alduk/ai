@@ -36,6 +36,7 @@ const KIND_LABEL: Record<NotificationKind, string> = {
   invitation_received: 'Invitations',
   budget_threshold: 'Budget alerts',
   comment_mention: 'Mentions',
+  quota_exceeded: 'Quota exceeded',
 };
 
 const KIND_TINT: Record<NotificationKind, string> = {
@@ -46,6 +47,7 @@ const KIND_TINT: Record<NotificationKind, string> = {
   invitation_received: 'bg-violet-100 text-violet-800',
   budget_threshold: 'bg-rose-100 text-rose-800',
   comment_mention: 'bg-blue-100 text-blue-800',
+  quota_exceeded: 'bg-amber-100 text-amber-800',
 };
 
 interface SearchParamsShape {

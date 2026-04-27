@@ -9,7 +9,33 @@
  * LLM-agnostic: this module never references a specific provider name.
  * Provider strings come back from the server as opaque values and are
  * displayed as-is.
+ *
+ * Concurrency: pages MUST use `boundedAll()` (exported below) instead of
+ * raw Promise.all when fanning out many SSR fetches against the API.
+ * Vercel's serverless DNS resolver caps out around ~30 concurrent lookups
+ * per cold-boot — past that, fetches return HTTP 503 with body "DNS cache
+ * overflow". Batching to 6 keeps us well under the limit.
  */
+
+/** Run async operations with bounded concurrency. Preserves order. */
+export async function boundedAll<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const idx = i++;
+      if (idx >= items.length) return;
+      // biome-ignore lint/style/noNonNullAssertion: idx < length guarantees defined
+      out[idx] = await fn(items[idx]!, idx);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 import {
   ApiError,
@@ -17,13 +43,21 @@ import {
   AuthSessionResponse,
   type BillingUsagePeriod,
   BillingUsageResponse,
+  BulkCreateDatasetExamplesResponse,
   type BulkRunActionRequest,
   BulkRunActionResponse,
   CheckAgentResponse,
   type CheckoutRequest,
   CheckoutResponse,
+  ClusterSweepResponse,
+  type CreateDatasetExampleRequest,
+  type CreateDatasetRequest,
+  type CreateEvaluatorRequest,
   type CreateSavedViewRequest,
+  Dataset,
+  DatasetExample,
   DesignPartnerApplication,
+  Evaluator,
   GetAgentResponse,
   GetRunResponse,
   GetRunTreeResponse,
@@ -31,7 +65,11 @@ import {
   ListActivityResponse,
   type ListAgentsQuery,
   ListAgentsResponse,
+  ListDatasetExamplesResponse,
+  ListDatasetsResponse,
   ListDesignPartnerApplicationsResponse,
+  ListEvaluatorsResponse,
+  ListFailureClustersResponse,
   ListModelsResponse,
   ListNotificationsResponse,
   type ListRunsQuery,
@@ -57,10 +95,15 @@ import {
   type SignupRequest,
   type SwitchTenantRequest,
   SwitchTenantResponse,
+  type TestEvaluatorRequest,
+  TestEvaluatorResponse,
+  type UpdateDatasetExampleRequest,
+  type UpdateDatasetRequest,
   type UpdateDesignPartnerApplicationRequest,
+  type UpdateEvaluatorRequest,
   type UpdateSavedViewRequest,
 } from '@aldo-ai/api-contract';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3001';
 
@@ -840,4 +883,224 @@ export async function deleteShareApi(id: string): Promise<void> {
   if (!res.ok && res.status !== 204) {
     throw new ApiClientError('http_4xx', `DELETE failed: ${res.status}`, { status: res.status });
   }
+}
+
+/* ------------------------------- Datasets ------------------------------ */
+//
+// Wave 16 (Engineer 16B). Thin wrappers around `/v1/datasets/*` and
+// `/v1/datasets/:id/examples`. Engineer 16A owns the API routes; this
+// module only renders + posts.
+
+const DatasetEnvelope = z.object({ dataset: Dataset });
+const DatasetExampleEnvelope = z.object({ example: DatasetExample });
+
+export function listDatasets(query: { tag?: string; q?: string } = {}) {
+  const q: Record<string, string | number | undefined> = {};
+  if (query.tag !== undefined) q.tag = query.tag;
+  if (query.q !== undefined) q.q = query.q;
+  return request('/v1/datasets', ListDatasetsResponse, { query: q });
+}
+
+export function getDataset(id: string) {
+  return request(`/v1/datasets/${encodeURIComponent(id)}`, DatasetEnvelope);
+}
+
+export function createDataset(req: CreateDatasetRequest) {
+  return request('/v1/datasets', DatasetEnvelope, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function updateDataset(id: string, req: UpdateDatasetRequest) {
+  return request(`/v1/datasets/${encodeURIComponent(id)}`, DatasetEnvelope, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export async function deleteDataset(id: string): Promise<void> {
+  const url = buildUrl(`/v1/datasets/${encodeURIComponent(id)}`);
+  const headers = await buildRequestHeaders(undefined);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers,
+    cache: 'no-store',
+    credentials: typeof window === 'undefined' ? 'omit' : 'include',
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new ApiClientError('http_4xx', `DELETE failed: ${res.status}`, { status: res.status });
+  }
+}
+
+export function listDatasetExamples(
+  id: string,
+  query: { split?: string; q?: string; cursor?: string; limit?: number } = {},
+) {
+  const q: Record<string, string | number | undefined> = {};
+  if (query.split !== undefined) q.split = query.split;
+  if (query.q !== undefined) q.q = query.q;
+  if (query.cursor !== undefined) q.cursor = query.cursor;
+  if (query.limit !== undefined) q.limit = query.limit;
+  return request(`/v1/datasets/${encodeURIComponent(id)}/examples`, ListDatasetExamplesResponse, {
+    query: q,
+  });
+}
+
+export function createDatasetExample(id: string, req: CreateDatasetExampleRequest) {
+  return request(`/v1/datasets/${encodeURIComponent(id)}/examples`, DatasetExampleEnvelope, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function updateDatasetExample(
+  datasetId: string,
+  exampleId: string,
+  req: UpdateDatasetExampleRequest,
+) {
+  return request(
+    `/v1/datasets/${encodeURIComponent(datasetId)}/examples/${encodeURIComponent(exampleId)}`,
+    DatasetExampleEnvelope,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(req),
+    },
+  );
+}
+
+/**
+ * `POST /v1/datasets/:id/import` — multipart upload of a CSV or JSONL
+ * file. We accept a `File` from the browser file input; the API
+ * detects the format from the filename. Returns the bulk-import
+ * summary (inserted / skipped / per-row errors).
+ */
+export async function importDatasetExamples(id: string, file: File) {
+  const url = buildUrl(`/v1/datasets/${encodeURIComponent(id)}/import`);
+  const headers = await buildRequestHeaders(undefined);
+  // Don't set Content-Type — let the browser pick the boundary.
+  (headers as Record<string, string | undefined>)['content-type'] = undefined;
+  const form = new FormData();
+  form.append('file', file);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: form,
+      cache: 'no-store',
+      credentials: typeof window === 'undefined' ? 'omit' : 'include',
+    });
+  } catch (err) {
+    throw new ApiClientError('network', `Network error contacting API at ${url}`, { cause: err });
+  }
+  const text = await res.text();
+  let json: unknown;
+  if (text.length > 0) {
+    try {
+      json = JSON.parse(text);
+    } catch (err) {
+      throw new ApiClientError('parse', `Invalid JSON from ${url}`, {
+        status: res.status,
+        cause: err,
+      });
+    }
+  }
+  if (!res.ok) {
+    const parsedErr = ApiError.safeParse(json);
+    if (parsedErr.success) {
+      throw new ApiClientError(
+        res.status >= 500 ? 'http_5xx' : 'http_4xx',
+        parsedErr.data.error.message,
+        {
+          status: res.status,
+          code: parsedErr.data.error.code,
+          details: parsedErr.data.error.details,
+        },
+      );
+    }
+    throw new ApiClientError(
+      res.status >= 500 ? 'http_5xx' : 'http_4xx',
+      `HTTP ${res.status} from ${url}`,
+      { status: res.status, details: json },
+    );
+  }
+  const parsed = BulkCreateDatasetExamplesResponse.safeParse(json);
+  if (!parsed.success) {
+    throw new ApiClientError('envelope', `Bad import response from ${url}`, {
+      status: res.status,
+      details: parsed.error.issues,
+    });
+  }
+  return parsed.data;
+}
+
+/* ----------------------------- Evaluators ------------------------------ */
+
+const EvaluatorEnvelope = z.object({ evaluator: Evaluator });
+
+export function listEvaluators() {
+  return request('/v1/evaluators', ListEvaluatorsResponse);
+}
+
+export function createEvaluator(req: CreateEvaluatorRequest) {
+  return request('/v1/evaluators', EvaluatorEnvelope, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function updateEvaluator(id: string, req: UpdateEvaluatorRequest) {
+  return request(`/v1/evaluators/${encodeURIComponent(id)}`, EvaluatorEnvelope, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export async function deleteEvaluator(id: string): Promise<void> {
+  const url = buildUrl(`/v1/evaluators/${encodeURIComponent(id)}`);
+  const headers = await buildRequestHeaders(undefined);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers,
+    cache: 'no-store',
+    credentials: typeof window === 'undefined' ? 'omit' : 'include',
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new ApiClientError('http_4xx', `DELETE failed: ${res.status}`, { status: res.status });
+  }
+}
+
+export function testEvaluator(req: TestEvaluatorRequest) {
+  // The endpoint accepts both a saved evaluator (req.evaluatorId) or
+  // an inline kind+config. The "test before save" panel uses inline.
+  const path = req.evaluatorId
+    ? `/v1/evaluators/${encodeURIComponent(req.evaluatorId)}/test`
+    : '/v1/evaluators/test';
+  return request(path, TestEvaluatorResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+/* -------------------------- Failure clusters --------------------------- */
+
+export function listFailureClusters(sweepId: string) {
+  return request(
+    `/v1/eval/sweeps/${encodeURIComponent(sweepId)}/clusters`,
+    ListFailureClustersResponse,
+  );
+}
+
+export function clusterSweepFailures(sweepId: string) {
+  return request(`/v1/eval/sweeps/${encodeURIComponent(sweepId)}/cluster`, ClusterSweepResponse, {
+    method: 'POST',
+  });
 }

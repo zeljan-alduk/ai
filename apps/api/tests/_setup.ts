@@ -73,6 +73,14 @@ export async function setupTestEnv(envOverrides: Env = {}): Promise<TestEnv> {
     // suite (which relies on env-var presence == available) keeps its
     // semantics. Individual tests that exercise the probe set this to
     // `live` via `envOverrides`.
+    //
+    // Wave-16 — disable distributed rate-limiting + monthly quota
+    // enforcement by default in the test harness. The dedicated
+    // rate-limit + quota tests OPT IN by overriding these. Without
+    // this hatch every existing test would have to handle 429s and
+    // 402s the same way the production app does.
+    ALDO_RATE_LIMIT_DISABLED: '1',
+    ALDO_QUOTA_DISABLED: '1',
     ...envOverrides,
   };
   const registry = new AgentRegistry({ storage: new PostgresStorage({ client: db }) });

@@ -22,6 +22,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY platform/api-contract/package.json platform/api-contract/
 COPY platform/billing/package.json platform/billing/
+COPY platform/cache/package.json platform/cache/
 COPY platform/engine/package.json platform/engine/
 COPY platform/eval/package.json platform/eval/
 COPY platform/gateway/package.json platform/gateway/
@@ -77,6 +78,11 @@ COPY platform/integrations ./platform/integrations
 # STRIPE_* env vars are unset; the source needs to ride along with the
 # image either way (same lesson family as wave-6.5 / wave-7 / wave-10).
 COPY platform/billing ./platform/billing
+# Wave 16C: LLM-response cache. The /v1/cache/* routes + the
+# CacheMiddleware wired into the gateway construction need the
+# package source at runtime under tsx (same lesson family as
+# wave-6.5 / wave-7 / wave-10).
+COPY platform/cache ./platform/cache
 # Wave 8: /v1/models calls @aldo-ai/local-discovery on each request to
 # probe well-known local-LLM ports and merge results into the response.
 COPY platform/local-discovery ./platform/local-discovery

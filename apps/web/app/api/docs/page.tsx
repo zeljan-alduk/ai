@@ -26,9 +26,10 @@
 import type { Metadata } from 'next';
 
 const SWAGGER_UI_VERSION = '5.17.14';
-const SWAGGER_UI_CSS = `https://unpkg.com/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui.css`;
-const SWAGGER_UI_JS = `https://unpkg.com/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-bundle.js`;
-const SWAGGER_UI_PRESET_JS = `https://unpkg.com/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-standalone-preset.js`;
+// jsDelivr (proper CORS) instead of unpkg (CORS-blocked when crossorigin=anonymous).
+const SWAGGER_UI_CSS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui.css`;
+const SWAGGER_UI_JS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-bundle.js`;
+const SWAGGER_UI_PRESET_JS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-standalone-preset.js`;
 const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
 
 export const metadata: Metadata = {
@@ -124,8 +125,8 @@ export default function ApiDocsPage() {
           <code>curl {url}</code>.
         </p>
       </div>
-      <script src={SWAGGER_UI_JS} crossOrigin="anonymous" async />
-      <script src={SWAGGER_UI_PRESET_JS} crossOrigin="anonymous" async />
+      <script src={SWAGGER_UI_JS} async />
+      <script src={SWAGGER_UI_PRESET_JS} async />
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static boot script with JSON-encoded URL only */}
       <script dangerouslySetInnerHTML={{ __html: bootScript(url) }} />
     </div>

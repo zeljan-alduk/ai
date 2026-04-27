@@ -27,6 +27,15 @@ import {
   loadBillingConfig,
   loadMailerFromEnv,
 } from '@aldo-ai/billing';
+import {
+  CacheMetrics,
+  CacheMiddleware,
+  type CacheStore,
+  MissCounter,
+  PostgresCacheStore,
+  PostgresTenantCachePolicyStore,
+  type TenantCachePolicyStore,
+} from '@aldo-ai/cache';
 import { IntegrationDispatcher, PostgresIntegrationStore } from '@aldo-ai/integrations';
 import {
   AgentRegistry,
@@ -44,6 +53,7 @@ import {
   createInProcessEngineDebugger,
 } from './routes/debugger.js';
 import type { EvalDeps } from './routes/eval.js';
+import type { JudgeGateway } from './routes/evaluators.js';
 
 /**
  * Canonical "default" tenant id. Migration 006 seeds a row in `tenants`
@@ -159,6 +169,33 @@ export interface Deps {
    * tenant the moment they sign up).
    */
   readonly subscriptionStore: SubscriptionStore;
+  /**
+   * Wave-16C — LLM-response cache. The store + policy store back the
+   * `/v1/cache/*` routes (stats, purge, policy). The middleware is
+   * wired into the gateway construction (in src/routes/runs.ts and
+   * src/routes/playground.ts when those routes build their gateway
+   * chain) so every model call benefits without engine changes. The
+   * miss counter is process-local; the metrics aggregator combines it
+   * with the persisted hit dimension.
+   *
+   * Defaults: cache enabled, 24h TTL, sensitive-tier SKIPS by default
+   * (deliberate safety choice — see platform/cache/src/policy.ts).
+   */
+  readonly cache: {
+    readonly store: CacheStore;
+    readonly policyStore: TenantCachePolicyStore;
+    readonly middleware: CacheMiddleware;
+    readonly misses: MissCounter;
+    readonly metrics: CacheMetrics;
+  };
+  /**
+   * Wave-16 — judge-gateway seam used by the `llm_judge` evaluator
+   * runner. Optional: when omitted, the `/v1/evaluators/:id/test`
+   * route returns 422 `judge_gateway_unavailable` for `llm_judge`
+   * kinds. Tests inject a deterministic stub; production wires the
+   * platform `ModelGateway`.
+   */
+  readonly judge?: JudgeGateway;
   /** Release the underlying SQL client. */
   close(): Promise<void>;
 }
@@ -202,6 +239,22 @@ export interface CreateDepsOptions {
   readonly billing?: BillingConfig;
   /** Inject a `SubscriptionStore` (tests use the in-memory variant). */
   readonly subscriptionStore?: SubscriptionStore;
+  /**
+   * Wave-16C — override the cache store + policy store (tests inject
+   * the in-memory variants so they don't need a SQL round trip). When
+   * unset, production wires `PostgresCacheStore` +
+   * `PostgresTenantCachePolicyStore` against the same SqlClient.
+   */
+  readonly cache?: {
+    readonly store: CacheStore;
+    readonly policyStore: TenantCachePolicyStore;
+  };
+  /**
+   * Wave-16 — judge-gateway override. Tests inject a deterministic
+   * stub so the llm_judge code path runs without a real provider
+   * call. Production leaves this unset and gets `undefined`.
+   */
+  readonly judge?: JudgeGateway;
 }
 
 export async function createDeps(
@@ -271,6 +324,29 @@ export async function createDeps(
   });
   setIntegrationsDispatcher(db, integrationsDispatcher);
 
+  // Wave-16C — LLM-response cache. The store + policy store are
+  // wired here so every gateway construction site (runs route,
+  // playground route, eval runner) shares the same persistence
+  // layer + miss counter. Tests inject in-memory variants via
+  // `opts.cache`. Default policy: enabled + 24h TTL +
+  // sensitive-tier SKIPS the cache (deliberate safety — see
+  // platform/cache/src/policy.ts).
+  const cacheStore = opts.cache?.store ?? new PostgresCacheStore({ client: db });
+  const cachePolicyStore =
+    opts.cache?.policyStore ?? new PostgresTenantCachePolicyStore({ client: db });
+  const cacheMisses = new MissCounter();
+  const cacheMiddleware = new CacheMiddleware({
+    store: cacheStore,
+    misses: cacheMisses,
+    policy: (tid) => cachePolicyStore.get(tid),
+    // Until the gateway construction is centralised, the modelId
+    // resolver pulls from the engine's CallContext. We fall back to
+    // the agent-name + version stamp so the key carries an opaque
+    // model identifier even before the router has resolved one.
+    modelId: (ctx) => `${ctx.agentName}@${ctx.agentVersion}`,
+  });
+  const cacheMetrics = new CacheMetrics({ store: cacheStore, misses: cacheMisses });
+
   const deps: Deps = {
     db,
     registry,
@@ -283,8 +359,16 @@ export async function createDeps(
     mailer,
     billing,
     subscriptionStore,
+    cache: {
+      store: cacheStore,
+      policyStore: cachePolicyStore,
+      middleware: cacheMiddleware,
+      misses: cacheMisses,
+      metrics: cacheMetrics,
+    },
     ...(opts.engineDebugger !== undefined ? { engineDebugger: opts.engineDebugger } : {}),
     ...(opts.evalDeps !== undefined ? { evalDeps: opts.evalDeps } : {}),
+    ...(opts.judge !== undefined ? { judge: opts.judge } : {}),
     async close() {
       // If the caller supplied the db, they own its lifecycle.
       if (opts.db === undefined) await db.close();

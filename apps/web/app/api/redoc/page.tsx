@@ -108,7 +108,7 @@ export default function RedocPage() {
           <code>curl {url}</code>.
         </p>
       </div>
-      <script src={REDOC_JS} async crossOrigin="anonymous" />
+      <script src={REDOC_JS} async />
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static literal boot script */}
       <script dangerouslySetInnerHTML={{ __html: bootScript }} />
     </div>

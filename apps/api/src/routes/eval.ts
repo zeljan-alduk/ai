@@ -28,6 +28,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
+  ClusterSweepResponse,
   CreateSuiteRequest,
   CreateSuiteResponse,
   ListSuitesResponse,
@@ -39,9 +40,10 @@ import {
   Sweep,
 } from '@aldo-ai/api-contract';
 import type { EvalSuite, SweepStatus } from '@aldo-ai/api-contract';
-import { parseSuiteYaml } from '@aldo-ai/eval';
+import { type ClusterableCell, clusterFailures, parseSuiteYaml } from '@aldo-ai/eval';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { replaceFailureClusters } from '../datasets/clusters-store.js';
 import type { Deps } from '../deps.js';
 import {
   PostgresSweepStore,
@@ -275,6 +277,57 @@ export function evalRoutes(deps: Deps, opts: EvalRouteOptions = {}): Hono {
       throw notFound(`sweep not found: ${parsed.data.id}`);
     }
     const body = Sweep.parse(sweep);
+    return c.json(body);
+  });
+
+  // ----- failure clustering --------------------------------------------
+  //
+  // Wave-16: group a completed sweep's failed cells into similarity
+  // buckets using the @aldo-ai/eval bag-of-words clusterer. Persists the
+  // result via `replaceFailureClusters` (idempotent by sweep_id) and
+  // echoes the drafts back to the caller.
+  app.post('/v1/eval/sweeps/:id/cluster', async (c) => {
+    const parsed = SweepIdParam.safeParse({ id: c.req.param('id') });
+    if (!parsed.success) {
+      throw validationError('invalid sweep id', parsed.error.issues);
+    }
+    const sweep = await evalDeps.store.getSweep(parsed.data.id);
+    if (sweep === null) {
+      throw notFound(`sweep not found: ${parsed.data.id}`);
+    }
+    if (sweep.status !== 'completed' && sweep.status !== 'failed') {
+      throw new HttpError(
+        409,
+        'sweep_not_complete',
+        `cannot cluster sweep in status="${sweep.status}"; complete the sweep first`,
+      );
+    }
+    const failures: ClusterableCell[] = sweep.cells
+      .filter((cell) => !cell.passed)
+      .map((cell) => ({
+        caseId: cell.caseId,
+        model: cell.model,
+        output: cell.output,
+      }));
+    const drafts = clusterFailures(failures);
+    const stored = await replaceFailureClusters(deps.db, {
+      sweepId: parsed.data.id,
+      clusters: drafts,
+    });
+    const nowIso = evalDeps.now().toISOString();
+    const body = ClusterSweepResponse.parse({
+      failedCount: failures.length,
+      clusters: stored.map((row) => ({
+        id: row.id,
+        sweepId: row.sweepId,
+        label: row.label,
+        count: row.count,
+        examplesSample: row.examplesSample,
+        topTerms: [...row.topTerms],
+        sampleRunIds: row.examplesSample.map((s) => s.caseId),
+        createdAt: row.createdAt.length > 0 ? row.createdAt : nowIso,
+      })),
+    });
     return c.json(body);
   });
 

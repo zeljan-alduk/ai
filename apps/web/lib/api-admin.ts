@@ -9,6 +9,11 @@
 import type {
   ApiKey,
   AuditLogEntry,
+  CachePolicyResponse,
+  CachePurgeRequest,
+  CachePurgeResponse,
+  CacheStatsPeriod,
+  CacheStatsResponse,
   CreateApiKeyRequest,
   CreateIntegrationRequest,
   CreateInvitationRequest,
@@ -23,6 +28,7 @@ import type {
   ListMembersResponse,
   Role,
   TestFireResponse,
+  UpdateCachePolicyRequest,
   UpdateIntegrationRequest,
   UpdateMemberRequest,
 } from '@aldo-ai/api-contract';
@@ -243,6 +249,34 @@ export function deleteIntegration(id: string): Promise<void> {
 export function testFireIntegration(id: string): Promise<TestFireResponse> {
   return jsonFetch<TestFireResponse>(`/v1/integrations/${encodeURIComponent(id)}/test`, {
     method: 'POST',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cache (wave 16C)
+// ---------------------------------------------------------------------------
+
+export function getCacheStats(period: CacheStatsPeriod = '24h'): Promise<CacheStatsResponse> {
+  return jsonFetch<CacheStatsResponse>('/v1/cache/stats', { query: { period } });
+}
+
+export function getCachePolicy(): Promise<CachePolicyResponse> {
+  return jsonFetch<CachePolicyResponse>('/v1/cache/policy');
+}
+
+export function updateCachePolicy(req: UpdateCachePolicyRequest): Promise<CachePolicyResponse> {
+  return jsonFetch<CachePolicyResponse>('/v1/cache/policy', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function purgeCache(req: CachePurgeRequest = {}): Promise<CachePurgeResponse> {
+  return jsonFetch<CachePurgeResponse>('/v1/cache/purge', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
   });
 }
 

@@ -48,6 +48,7 @@ export {
   runSweep,
   aggregate,
   weightedPassRatio,
+  type DatasetResolver,
   type RuntimeFactory,
   type RuntimePerModel,
   type SweepOptions,

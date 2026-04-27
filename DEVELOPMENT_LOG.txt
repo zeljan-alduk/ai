@@ -3895,3 +3895,470 @@ would leak real data (we use placeholders like <run-id>,
 <email>); a full JSON-Schema validator (we ship a fast
 structural one — the load-bearing checks are in
 spec.test.ts).
+
+
+────────────────────────────────────────────────────────────
+2026-04-27  Engineer 16B — wave 16 datasets UI + CLI
+────────────────────────────────────────────────────────────
+
+Built the WEB + CLI surfaces against Engineer 16A's
+`/v1/datasets` and `/v1/evaluators` API routes (the Zod
+schemas in @aldo-ai/api-contract/datasets.ts were the only
+contract). Engineer 16A owns the API handlers + the eval
+engine's dataset-backed runner integration; this engineer
+did not touch either.
+
+Web surfaces shipped (apps/web/app/datasets/* and
+apps/web/app/evaluators/*):
+
+  - /datasets — server-rendered gallery of cards.
+    URL-state filters (q, tag, sort) preserve deep links;
+    the client island debounces the search input by 200ms
+    so typing doesn't replace history on every keystroke.
+    Empty state has an illustrated SVG + "Create your
+    first dataset" CTA.
+
+  - /datasets/new — single-screen wizard with progressive
+    disclosure: name+description+tags → source picker
+    (CSV upload / JSONL upload / paste JSON / start empty)
+    → preview (for paste). Submits via createDataset(),
+    then either importDatasetExamples() (multipart) for
+    file sources or per-row createDatasetExample() for
+    paste, then redirects to /datasets/[id].
+
+  - /datasets/[id] — server shell + client island.
+    Paginated examples table with horizontal-scroll wrap
+    on mobile (wave-15E pattern). Free-text search,
+    train/eval/holdout split filter, and created/split/
+    label sort. Inline-edit Sheet (right-side drawer)
+    posts UpdateDatasetExampleRequest. "Run sweep" CTA
+    links to /eval/sweeps/new?dataset=<id> (Engineer 16A
+    wires the other end).
+
+  - /evaluators — list table + "New evaluator" Dialog.
+    The dialog has a kind picker (exact_match / contains /
+    regex / json_schema / llm_judge); per-kind config form;
+    capability-class selector for llm_judge (opaque
+    capability strings, not provider/model names — see
+    LLM-agnostic note below); inline "Test it before
+    saving" panel that calls /v1/evaluators/test.
+    Saved-evaluator rows expose a Test button that hits
+    /v1/evaluators/:id/test and renders the same panel.
+
+  - Failure-clusters tab on /eval/sweeps/[id]: a new
+    section below the matrix that activates when at least
+    one cell.passed === false. Initial clusters fetched
+    server-side via listFailureClusters(); when none
+    exist a "Cluster failures" CTA POSTs to
+    /v1/eval/sweeps/:id/cluster. Each cluster card shows
+    label, count, top-tf-idf-term chips, and up to 5
+    sample run-id drilldowns linked to /runs/:id with a
+    "+N more" tail.
+
+Sidebar — added Datasets between Eval and Models per the
+brief; Evaluators rendered as a sub-link directly under
+the Eval row (always visible, highlights when active).
+
+CLI commands shipped (apps/cli/src/commands/{datasets,
+evaluators}.ts, wired into apps/cli/src/cli.ts):
+
+  - aldo datasets {ls, new, import, show, destroy}
+  - aldo evaluators {ls, new, test}
+
+`datasets new` accepts --description and --tags
+(comma-separated, normalised to lowercase + dedup'd).
+`datasets import <id> <file>` auto-detects the format
+from .csv / .jsonl / .ndjson / .json and POSTs multipart
+to /v1/datasets/:id/import; format can be overridden via
+--format. The CLI exit code is 0 only when the API
+returns zero per-row errors. `evaluators new --kind
+<kind> --config <json>` (or --config-file <path>) ships
+inline kind+config; evaluators test supports both saved
+(--id) and inline (--kind+--config) modes and exits 0/1
+on the API-reported pass/fail. Every command supports
+--api-base + --json (machine-readable envelope); errors
+go through the standard ApiError envelope path so
+operators see `code: message` not raw HTTP.
+
+Tests:
+
+  Web — 45 new tests, all green:
+    - components/datasets/dataset-filters.test.ts (24
+      tests): applyDatasetFilters search + tag + sort,
+      uniqueTags, applyExampleFilters split + search +
+      sort, parseTagsField (lowercase + dedup + 32-char
+      cap), validateDraft (every source kind), and
+      parsePasteContent round-trip.
+    - components/evaluators/evaluator-form.test.ts (14
+      tests): emptyDraft + KIND_LABELS coverage,
+      validateDraft per kind (happy + failure paths
+      including malformed regex / non-object schema /
+      llm_judge missing-placeholder), draftToConfig
+      marshalling for all 5 kinds, and the
+      draftToCreateRequest envelope.
+    - components/eval/clusters.test.ts (7 tests):
+      sortClusters tie-break, truncateSamples,
+      trimTopTerms, totalClusteredFailures.
+
+  CLI — 22 new tests, all green:
+    - tests/datasets.test.ts (12 tests): ls (happy +
+      empty + json + ApiError envelope), new (POST shape
+      with normalised tags, empty-name rejection),
+      import (multipart success + per-row errors → exit
+      1, missing file), show, destroy (204 success +
+      404 envelope).
+    - tests/evaluators.test.ts (10 tests): ls (happy +
+      json), new (kind validation, --config inline,
+      --config-file from disk, malformed JSON
+      rejection), test (saved /v1/evaluators/:id/test
+      vs inline /v1/evaluators/test, --id+--kind
+      mutex, --output required, exit 0/1 on
+      passed=true/false).
+
+LLM-agnostic — `grep -rE
+"(openai|anthropic|gemini|claude|gpt-|mistral|llama-|
+deepseek)" apps/web/{app,components}/{datasets,
+evaluators} apps/web/components/eval/{clusters,
+failure-clusters-panel}.* apps/cli/src/commands/{datasets,
+evaluators}.ts apps/cli/tests/{datasets,evaluators}.test.ts`
+returns zero hits. The llm_judge form's `model_class`
+field is an opaque capability-class string (the four
+options shown — `reasoning-light`, `reasoning-medium`,
+`reasoning-heavy`, `cheap-fast` — are platform-level
+classes, not provider names). The gateway picks the
+actual model at run time. All wire payloads stay
+provider-opaque.
+
+Mobile — wave-15E patterns followed:
+  - Tables wrap in `overflow-x-auto` so narrow viewports
+    horizontally scroll instead of layout-collapsing.
+  - The dataset detail Sheet (edit drawer) inherits the
+    full-width-on-mobile cap from `<SheetContent>` (caps
+    at 420px from `sm:` and up).
+  - The new-evaluator Dialog uses `max-w-2xl`, content
+    is mobile-stacked then sm:grid-cols-2/3.
+  - All chip rows wrap; all touch targets meet `min-h-touch`.
+
+Quality bar:
+  - `pnpm --filter @aldo-ai/cli typecheck` — clean.
+  - `pnpm --filter @aldo-ai/cli test` — 92/92 green
+    (+22 over baseline of 70).
+  - `pnpm --filter @aldo-ai/web test` — 272/272 green
+    (+45 over baseline of 227).
+  - `pnpm --filter @aldo-ai/web build` — succeeds;
+    `/datasets`, `/datasets/[id]`, `/datasets/new`,
+    `/evaluators` routes all built.
+  - `pnpm --filter @aldo-ai/web typecheck` — every file
+    I authored is clean. The remaining repo-level errors
+    (`app/notifications/page.tsx`, `app/settings/cache/*`,
+    `components/notifications/notification-bell.tsx`,
+    `app/settings/layout.tsx`, etc.) are all left over
+    from Engineer 16D's parallel cache + quotas
+    workstream (untracked + WIP), NOT mine — if they're
+    stashed before typecheck only my files run, and
+    typecheck is clean.
+  - biome check on every file I authored: 0 errors,
+    12 warnings (all `noLabelWithoutControl` for our
+    `<label>{...<Input forwardRef />...}</label>`
+    pattern, which Biome can't see through; same warning
+    pattern is tolerated repo-wide).
+
+Out of scope (per brief, owned by 16A): the API routes
+themselves (`apps/api/src/routes/{datasets,evaluators}.ts`
++ tests are 16A's), the eval engine's dataset-backed
+runner integration (16A), and the failure-clustering
+algorithm (16A's `cluster` POST endpoint backs our UI).
+Wave-15B's Markdown API ref is also a separate
+workstream.
+
+
+--------------------------------------------------------------------
+2026-04-27 — Engineer 16C — wave 16 LLM cache
+--------------------------------------------------------------------
+
+`@aldo-ai/cache` shipped at platform/cache/. Helicone-style
+LLM-response cache layer that intercepts at the gateway, not the
+engine: identical request -> replay prior response -> save the
+provider call + cost.
+
+Tables (migration 017_llm_response_cache.sql):
+  - llm_response_cache (tenant_id, key) PK; JSONB response + usage;
+    NUMERIC(10,6) cost_saved_usd; hit_count INT; created_at +
+    last_hit_at + expires_at TIMESTAMPTZ. Indexes on
+    (tenant_id, expires_at) and (model). FK to tenants.
+  - tenant_cache_policy (tenant_id PK FK -> tenants); enabled
+    BOOL DEFAULT TRUE; ttl_seconds INT DEFAULT 86400;
+    cache_sensitive BOOL DEFAULT FALSE; updated_at TIMESTAMPTZ.
+
+Cache-key inputs (SHA-256 over canonical-JSON, stable-stringified):
+  - model id (opaque string),
+  - privacy_tier  <- CRITICAL: a `sensitive` request can NEVER read
+                     a `public` row of the same prompt; the key
+                     namespaces them apart. Tier-leak guard,
+                     CLAUDE.md non-negotiable #3.
+  - messages array (preserves order; system prompt is just a
+    role='system' message, hashed identically),
+  - tools schema array,
+  - temperature, top_p (extension), max_tokens,
+  - response_format, stop sequences, seed.
+
+Excluded from key (deliberately): runId / traceId / message id /
+abort signal — they vary per call but don't change the response.
+
+GatewayMiddleware integration:
+  - `CacheMiddleware` implements GatewayMiddleware (mirrored locally
+    so the cache package doesn't take a hard dep on @aldo-ai/gateway).
+    `before` computes the key + stamps it on a per-CallContext
+    WeakMap. `after` captures every Delta; on the `end` frame it
+    persists the assembled response + usage to the cache (best-effort,
+    fire-and-forget).
+  - `wrapGatewayWithCache(gw, opts)` wraps a ModelGateway so the
+    READ side fires too: hits short-circuit and replay the captured
+    deltas WITHOUT calling the inner gateway; misses delegate (and
+    let the after-hook persist on the way out). This is the surface
+    that actually saves API call cost — the middleware alone only
+    fills the cache; the wrapper reads from it.
+  - Streaming replay choice (documented in middleware.ts header):
+    cached responses replay as a single full-text Delta + every
+    captured tool_call + a synthetic `end` frame. Provider chunk
+    boundaries are NOT reconstructed — they're a function of network
+    behaviour, not model output. Same trade Helicone makes.
+
+Privacy:
+  - Default policy: enabled + 24h TTL + sensitive-tier SKIPS the
+    cache. Documented in policy.ts header as a deliberate safety
+    choice; opt-in (`cacheSensitive=true`) is wired but the wave-17
+    UI surface for owner-only audited toggle is the follow-up.
+
+apps/api wiring:
+  - apps/api/src/deps.ts builds PostgresCacheStore +
+    PostgresTenantCachePolicyStore + MissCounter + CacheMiddleware
+    + CacheMetrics and stamps them on `Deps.cache`. Tests inject
+    in-memory variants via `opts.cache`. Default TTL 24h, default
+    enabled=true, sensitive skipped.
+  - apps/api/src/routes/cache.ts mounts /v1/cache/{stats,purge,
+    policy}. Stats accept ?period=24h|7d|30d. Purge is owner only;
+    policy patch is admin/owner. RBAC + tenant-isolation enforced
+    end-to-end (every store call carries the auth tenant id).
+  - Wired into app.ts after evaluators; Dockerfile updated to COPY
+    platform/cache.
+
+api-contract: new src/cache.ts with CacheStatsPeriod / Response,
+CachePurgeRequest / Response, CachePolicy /
+UpdateCachePolicyRequest. Re-exported from index.ts.
+
+OpenAPI: platform/openapi/src/operations/cache.ts registers the
+`Cache` tag + 4 operations. Spec test (>=50 ops, every op tagged +
+described) stays green at 87 / 87 across 12 files.
+
+apps/web/app/settings/cache/page.tsx — server component:
+  - KPI row (hit rate, saved $, hits, misses),
+  - per-model breakdown table,
+  - policy form (toggle + TTL slider 1h…30d + sensitive opt-in),
+  - "Purge cache" button with two-step confirmation.
+  - Added /settings/cache to the settings sub-nav.
+
+Tests:
+  - platform/cache/tests: 52 across 4 files (key.test.ts: 17 —
+    determinism + sensitivity to model / privacy_tier / system
+    prompt / user prompt / message order / tools / temperature /
+    max_tokens / seed / top_p / stop; store.test.ts: 22 — same
+    11-test suite run twice (in-memory + pglite-backed Postgres);
+    middleware.test.ts: 6 — persistence / sensitive-skip /
+    policy-disabled + miss-vs-hit short-circuit + savings
+    accumulation + sensitive cross-tier defence; policy.test.ts:
+    9 — defaults / shouldUseCache matrix / clamp / metrics
+    snapshot / tenant-scoped metrics).
+  - apps/api/tests/cache.test.ts: 7 — stats default-shape +
+    stats-after-hits + owner-only purge + 403 for member purge +
+    admin policy update with TTL clamp + 403 for viewer policy +
+    cross-tenant isolation.
+  - platform/storage/tests/migrate.test.ts extended with a
+    migration-017 round-trip (cache row + hit_count + saved_usd +
+    policy upsert).
+
+Quality bar:
+  - pnpm --filter @aldo-ai/cache test          52 / 52 green.
+  - pnpm --filter @aldo-ai/cache typecheck     clean.
+  - pnpm --filter @aldo-ai/api test cache.test 7 / 7 green.
+  - pnpm --filter @aldo-ai/api typecheck       clean.
+  - pnpm --filter @aldo-ai/storage test        2 / 2 green
+    (017 round-trip).
+  - pnpm --filter @aldo-ai/storage typecheck   clean.
+  - pnpm --filter @aldo-ai/openapi test        87 / 87 green
+    (cache ops registered).
+  - pnpm --filter @aldo-ai/openapi typecheck   clean.
+  - pnpm --filter @aldo-ai/api-contract typecheck   clean.
+  - biome check on every file I authored — clean.
+
+LLM-agnostic — `model` is an opaque string at the key, store, and
+wire layers. `grep -rE "(openai|anthropic|gemini|claude|gpt-|
+mistral|llama-|deepseek)" platform/cache apps/api/src/routes/
+cache.ts apps/web/app/settings/cache platform/api-contract/src/
+cache.ts platform/openapi/src/operations/cache.ts` returns zero
+hits.
+
+Out of scope (per brief) — sensitive-tier opt-in UI surface +
+audit log on toggle (wave 17); a real rate-limiter for the
+cost-savings totals (we report cumulative; tail-bound is a
+follow-up); engine-side gateway construction was not centralised
+in this wave so the CacheMiddleware sits ready in `Deps.cache`
+for the next engineer to thread through createGateway in the
+runs / playground / eval routes.
+
+Pre-existing failures observed during the wave-16 run that are NOT
+introduced by this engineer: 5 auth/tenancy 500s in apps/api after
+the parallel wave-16 rate-limit/quotas/domains migration (018)
+landed; 4 web typecheck errors in
+notifications/page.tsx + notification-bell.tsx for the
+`quota_exceeded` NotificationKind that the parallel engineer
+added to the contract but didn't backfill into the web copy
+maps. Flagged for the wave-16 reviewer.
+
+
+2026-04-27 09:40 UTC — Engineer 16A — wave 16 datasets API routes
+
+Microscoped wave-16A brief: ship JUST the API routes + evaluator
+routes + clustering route + suite/runner dataset wiring. UI is
+16B's job (not touched); CLI is a follow-up (not touched). Three
+prior agents timed out trying to take the whole surface in one
+brief; this attempt landed within budget by sticking to the
+narrow scope.
+
+Routes shipped (apps/api/src/routes):
+
+- datasets.ts — full CRUD on `/v1/datasets` + per-dataset
+  example CRUD on `/v1/datasets/:id/examples` + bulk import on
+  `/v1/datasets/:id/examples/bulk` (JSON OR text/csv, 10MB cap,
+  SHA-1 dedup of canonicalised (input, expected) — the dedup
+  logic itself lives in apps/api/src/datasets/store.ts which a
+  parallel engineer landed in wave-14B). Tenant-scoped reads;
+  member-or-above writes (RBAC via requireRole). The CSV parser
+  is a tiny in-house RFC-4180-ish thing (~50 lines) rather than
+  a new dep — sufficient for Excel/Sheets exports and avoids
+  pulling csv-parse for one route. CSV header recognises
+  `input` (required) + `expected` / `label` / `split` columns.
+
+- evaluators.ts — full CRUD on `/v1/evaluators` plus
+  `POST /v1/evaluators/:id/test`. The test endpoint dispatches
+  built-in kinds (exact_match / contains / regex / json_schema)
+  through @aldo-ai/eval's `runStoredEvaluator`; for `llm_judge`
+  it goes through `evaluateLlmJudge` which routes the judge
+  call via the wired ModelGateway (LLM-agnostic per CLAUDE.md
+  non-negotiable #1 — the route never names a provider). When
+  no judge gateway is wired (production starts without one
+  until the next wave), the route returns 422
+  `judge_gateway_unavailable` instead of 500. Author-only
+  edits/deletes (parity with views.ts disclosure stance: a
+  shared evaluator visible to a non-author 404s on PATCH /
+  DELETE rather than 403s).
+
+- eval.ts — added `POST /v1/eval/sweeps/:id/cluster`. Reads
+  the failed cells off the persisted sweep, runs them through
+  the on-disk @aldo-ai/eval `clusterFailures` library
+  (bag-of-words tf-idf), persists via `replaceFailureClusters`
+  from the wave-14B clusters store (idempotent by sweep_id —
+  re-running clustering replaces, doesn't append), and echoes
+  the drafts back. 409 `sweep_not_complete` for sweeps still
+  in queued/running.
+
+Suite/runner ↔ dataset wiring (platform/eval):
+
+- The wave-14B api-contract already allows `dataset:
+  <id-or-name>` on EvalSuite and the suite-loader already
+  enforces "at least one of cases / dataset". The runner
+  needed the seam — added `DatasetResolver` type +
+  `datasetResolver` field on SweepOptions. `runSweep`
+  resolves once at sweep start: inline cases win; a
+  dataset-only suite without a resolver wired throws clearly.
+
+Wire-contract additions (@aldo-ai/api-contract):
+
+- `TestEvaluatorResponse` grew an optional `reason` field so
+  the route can surface the dispatch reason (unknown id,
+  llm_judge invocation failure) without overloading `detail`.
+
+OpenAPI ops (@aldo-ai/openapi):
+
+- New `operations/datasets.ts` — registers
+  `registerDatasetOperations` + `registerEvaluatorOperations`
+  against the actual mounted paths (`/v1/datasets/*` +
+  `/v1/evaluators/*`). The bulk-import op declares both
+  application/json and text/csv content types + a 413 error
+  envelope. `spec.ts` registers both new functions. The old
+  `/v1/eval/datasets/*` + `/v1/eval/evaluators/*` paths in
+  `operations/eval.ts` are left in place — the parallel
+  engineer's existing eval-ops tests still assert them, and
+  having both shapes in the spec is harmless.
+
+- New `tests/datasets-ops.test.ts` — 6 tests asserting the
+  CRUD ops + the bulk dual-content-type contract.
+
+Mounting + deps (apps/api):
+
+- `app.ts` — mounts `datasetsRoutes` + `evaluatorsRoutes`.
+  The evaluator route receives the optional `judge` gateway
+  from `Deps.judge` so production wiring can land via env
+  later without a route change. (A parallel engineer's
+  rate-limit + domain-rewrite middleware landed in app.ts
+  during this wave; left alone — out of scope.)
+- `deps.ts` — added optional `judge?: JudgeGateway` field +
+  `CreateDepsOptions.judge` for tests.
+
+Tests added:
+
+- apps/api: 22 new tests (target: +20)
+  - datasets.test.ts: 14 (CRUD x 7, examples CRUD x 4, bulk
+    JSON+CSV x 2, tenant isolation, RBAC viewer-rejection)
+  - evaluators.test.ts: 6 (CRUD x 4, contains test, llm_judge
+    test through stub gateway with privacy assertion)
+  - eval-clustering.test.ts: 2 (happy path + 404)
+
+- @aldo-ai/eval: 5 new tests in dataset-runner.test.ts
+  (target: +4) — suite loader accepts dataset-only,
+  suite loader rejects empty-of-both, runner resolves via
+  resolver, runner throws when missing resolver, inline cases
+  override the dataset binding.
+
+- @aldo-ai/openapi: 6 new tests in datasets-ops.test.ts (CRUD
+  ops, examples ops, bulk dual content type, 413 envelope,
+  evaluator CRUD + test endpoint).
+
+LLM-agnostic — the only model touch is in the llm_judge test
+path, which goes through the ModelGateway abstraction. Tests
+inject a deterministic stub that records the call's privacy
+tier (asserted = `internal`); the route never branches on a
+provider name.
+
+Quality bar:
+
+- `pnpm --filter @aldo-ai/api-contract typecheck` — clean.
+- `pnpm --filter @aldo-ai/eval typecheck` — clean.
+- `pnpm --filter @aldo-ai/openapi typecheck` — clean.
+- `pnpm --filter @aldo-ai/api typecheck` — my files clean
+  (datasets.ts / evaluators.ts / eval.ts / deps.ts / app.ts).
+  Pre-existing errors live in routes/domains.ts +
+  routes/quotas.ts + quotas.ts + cache/key.ts (parallel
+  engineer's wave-16D + cache work, not introduced here).
+- `pnpm --filter @aldo-ai/api test` — 322/323 passing.
+  The single failure is `tests/rate-limit.test.ts >
+  returns 429 ... after draining /v1/auth/login bucket`,
+  in code I did not author — the rate-limit middleware
+  stack a parallel engineer added returns 500 instead of 429
+  on bucket exhaustion. All 22 of my added tests + every
+  pre-existing test that was passing before my changes still
+  pass.
+- `pnpm --filter @aldo-ai/eval test` — 49/49 green
+  (+5 from dataset-runner.test.ts).
+- `pnpm --filter @aldo-ai/openapi test` — 87/87 green
+  (+6 from datasets-ops.test.ts).
+- `pnpm exec biome check` on all 15 files I authored or
+  modified — 0 errors, 0 warnings.
+
+Out of scope (per brief):
+
+- Web UI — that's 16B's wave (not touched).
+- CLI — `aldo datasets` / `aldo evaluators` is a follow-up.
+- Storage migration is wave-14B's; reused as-is.
+- The pre-existing api-typecheck and rate-limit-test failures
+  belong to the parallel wave-16C/D engineer.

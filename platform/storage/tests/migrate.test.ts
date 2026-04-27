@@ -556,6 +556,66 @@ describe('migrate()', () => {
     expect(shareRow.rows[0]?.revoked_at).toBeNull();
     expect(shareRow.rows[0]?.password_hash).toBeNull();
 
+    // Wave-16C: migration 017 — llm_response_cache + tenant_cache_policy.
+    // Round-trip a cache row + bump hit_count + set the per-tenant policy.
+    expect(applied.some((m) => m.version === '017')).toBe(true);
+    await client.query(
+      `INSERT INTO llm_response_cache
+         (tenant_id, key, model, response, usage, expires_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, NULL)`,
+      [
+        DEFAULT_TENANT_UUID,
+        'cache-key-1',
+        'm-x',
+        JSON.stringify({ deltas: [], text: 'cached', finishReason: 'stop' }),
+        JSON.stringify({ provider: 'p', model: 'm-x', tokensIn: 1, tokensOut: 2, usd: 0.01 }),
+      ],
+    );
+    await client.query(
+      `UPDATE llm_response_cache
+          SET hit_count = hit_count + 1,
+              cost_saved_usd = cost_saved_usd + 0.01,
+              last_hit_at = now()
+        WHERE tenant_id = $1 AND key = $2`,
+      [DEFAULT_TENANT_UUID, 'cache-key-1'],
+    );
+    const cacheRows = await client.query<{
+      key: string;
+      model: string;
+      hit_count: number | string;
+      cost_saved_usd: number | string;
+    }>(
+      `SELECT key, model, hit_count, cost_saved_usd
+          FROM llm_response_cache WHERE tenant_id = $1`,
+      [DEFAULT_TENANT_UUID],
+    );
+    expect(cacheRows.rows).toHaveLength(1);
+    expect(cacheRows.rows[0]?.key).toBe('cache-key-1');
+    expect(Number(cacheRows.rows[0]?.hit_count)).toBe(1);
+    expect(Number(cacheRows.rows[0]?.cost_saved_usd)).toBeCloseTo(0.01, 5);
+
+    // tenant_cache_policy upsert + read.
+    await client.query(
+      `INSERT INTO tenant_cache_policy (tenant_id, enabled, ttl_seconds, cache_sensitive)
+       VALUES ($1, FALSE, 3600, FALSE)
+       ON CONFLICT (tenant_id) DO UPDATE
+         SET enabled = EXCLUDED.enabled,
+             ttl_seconds = EXCLUDED.ttl_seconds,
+             cache_sensitive = EXCLUDED.cache_sensitive`,
+      [DEFAULT_TENANT_UUID],
+    );
+    const polRows = await client.query<{
+      enabled: boolean | string;
+      ttl_seconds: number | string;
+      cache_sensitive: boolean | string;
+    }>(
+      `SELECT enabled, ttl_seconds, cache_sensitive
+          FROM tenant_cache_policy WHERE tenant_id = $1`,
+      [DEFAULT_TENANT_UUID],
+    );
+    expect(polRows.rows).toHaveLength(1);
+    expect(Number(polRows.rows[0]?.ttl_seconds)).toBe(3600);
+
     await client.close();
   });
 

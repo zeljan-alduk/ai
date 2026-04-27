@@ -53,6 +53,9 @@ importers:
       '@aldo-ai/orchestrator':
         specifier: workspace:*
         version: link:../../platform/orchestrator
+      '@aldo-ai/rate-limit':
+        specifier: workspace:*
+        version: link:../../platform/rate-limit
       '@aldo-ai/registry':
         specifier: workspace:*
         version: link:../../platform/registry
@@ -396,6 +399,31 @@ importers:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@22.19.17)(jsdom@28.1.0)
 
+  platform/cache:
+    dependencies:
+      '@aldo-ai/api-contract':
+        specifier: workspace:*
+        version: link:../api-contract
+      '@aldo-ai/storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@aldo-ai/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ~0.4.4
+        version: 0.4.4
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)(jsdom@28.1.0)
+
   platform/engine:
     dependencies:
       '@aldo-ai/sandbox':
@@ -605,6 +633,28 @@ importers:
         specifier: workspace:*
         version: link:../types
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(@types/node@22.19.17)(jsdom@28.1.0)
+
+  platform/rate-limit:
+    dependencies:
+      '@aldo-ai/storage':
+        specifier: workspace:*
+        version: link:../storage
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.15
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ~0.4.4
+        version: 0.4.4
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17

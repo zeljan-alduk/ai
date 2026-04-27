@@ -47,6 +47,14 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     match: (p) => p === '/billing' || p.startsWith('/billing/'),
   },
   { href: '/eval', label: 'Eval', match: (p) => p === '/eval' || p.startsWith('/eval/') },
+  // Wave-16 — Datasets between Eval and Models per the brief. (The
+  // Eval section also gets an "Evaluators" sub-link rendered below
+  // when the user is on /eval, /evaluators, or /datasets.)
+  {
+    href: '/datasets',
+    label: 'Datasets',
+    match: (p) => p === '/datasets' || p.startsWith('/datasets/'),
+  },
   {
     href: '/settings',
     label: 'Settings',
@@ -153,19 +161,26 @@ function SidebarBody({
       <nav aria-label="Primary" className="flex flex-col gap-0.5 p-2">
         {NAV.map((item) => {
           const active = item.match(pathname);
+          const evalSubLinkAfter = item.href === '/eval';
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'flex min-h-touch items-center rounded px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
-                active ? 'bg-fg text-fg-inverse' : 'text-fg-muted hover:bg-bg-subtle hover:text-fg',
-              )}
-            >
-              {item.label}
-            </Link>
+            <div key={item.href}>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex min-h-touch items-center rounded px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+                  active
+                    ? 'bg-fg text-fg-inverse'
+                    : 'text-fg-muted hover:bg-bg-subtle hover:text-fg',
+                )}
+              >
+                {item.label}
+              </Link>
+              {evalSubLinkAfter ? (
+                <EvalSubLinks pathname={pathname} onNavigate={onNavigate} />
+              ) : null}
+            </div>
           );
         })}
         {runId ? (
@@ -214,6 +229,35 @@ function SidebarBody({
       <div className="mt-auto border-t border-border p-3">
         {user ? <UserMenu user={user} /> : <SignedOutFooter onNavigate={onNavigate} />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Wave-16 — sub-link rendered under the Eval row. Always visible so
+ * users can discover Evaluators from anywhere; highlights when active.
+ */
+function EvalSubLinks({
+  pathname,
+  onNavigate,
+}: {
+  pathname: string;
+  onNavigate: () => void;
+}) {
+  const active = pathname === '/evaluators' || pathname.startsWith('/evaluators/');
+  return (
+    <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+      <Link
+        href="/evaluators"
+        onClick={onNavigate}
+        aria-current={active ? 'page' : undefined}
+        className={cn(
+          'flex min-h-touch items-center rounded px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          active ? 'bg-fg text-fg-inverse' : 'text-fg-muted hover:bg-bg-subtle',
+        )}
+      >
+        Evaluators
+      </Link>
     </div>
   );
 }

@@ -22,6 +22,7 @@ const SETTINGS_NAV = [
   { href: '/settings/members', label: 'Members' },
   { href: '/settings/roles', label: 'Roles' },
   { href: '/settings/integrations', label: 'Integrations' },
+  { href: '/settings/cache', label: 'Cache' },
   { href: '/settings/alerts', label: 'Alerts' },
   { href: '/settings/audit', label: 'Audit log' },
 ] as const;

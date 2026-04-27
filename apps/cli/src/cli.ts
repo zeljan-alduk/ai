@@ -10,10 +10,18 @@ import { runAgentNew } from './commands/agent-new.js';
 import { runAgentPromote } from './commands/agent-promote.js';
 import { runAgentValidate } from './commands/agent-validate.js';
 import { runAgentsCheck } from './commands/agents-check.js';
+import {
+  runDatasetsDestroy,
+  runDatasetsImport,
+  runDatasetsLs,
+  runDatasetsNew,
+  runDatasetsShow,
+} from './commands/datasets.js';
 import { runDev } from './commands/dev.js';
 import { runEvalRun } from './commands/eval-run.js';
 import { runEvalSuiteCreate } from './commands/eval-suite-create.js';
 import { runEvalSweep } from './commands/eval-sweep.js';
+import { runEvaluatorsLs, runEvaluatorsNew, runEvaluatorsTest } from './commands/evaluators.js';
 import { runInit } from './commands/init.js';
 import { runMcpLs } from './commands/mcp-ls.js';
 import { runModelsDiscover } from './commands/models-discover.js';
@@ -429,6 +437,218 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     .action((file: string, o: { json?: boolean }) => {
       action = () => runOpenApiValidate(file, { json: o.json === true }, io);
     });
+
+  // --- datasets -------------------------------------------------------------
+  // Wave-16: thin wrappers around `/v1/datasets`. The CLI never writes
+  // Postgres directly; every CRUD goes through the API so audit + RBAC
+  // stay centralised.
+  const datasets = program
+    .command('datasets')
+    .description('manage tenant-scoped datasets via the API');
+
+  datasets
+    .command('ls')
+    .description('list datasets (id, name, examples, tags)')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action((o: { apiBase?: string; json?: boolean }) => {
+      action = () =>
+        runDatasetsLs(
+          {
+            ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
+  datasets
+    .command('new <name>')
+    .description('create an empty dataset (extend with `import` or the web UI)')
+    .option('--description <text>', 'short description')
+    .option('--tags <list>', 'comma-separated tag list')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action(
+      (
+        name: string,
+        o: {
+          description?: string;
+          tags?: string;
+          apiBase?: string;
+          json?: boolean;
+        },
+      ) => {
+        action = () =>
+          runDatasetsNew(
+            name,
+            {
+              ...(o.description !== undefined ? { description: o.description } : {}),
+              ...(o.tags !== undefined ? { tags: o.tags } : {}),
+              ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
+
+  datasets
+    .command('import <id> <file>')
+    .description('bulk-upload examples (CSV / JSONL / JSON) into <id>')
+    .option('--format <fmt>', 'override format detection (csv|jsonl|json)')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action(
+      (id: string, file: string, o: { format?: string; apiBase?: string; json?: boolean }) => {
+        action = () =>
+          runDatasetsImport(
+            id,
+            file,
+            {
+              ...(o.format !== undefined ? { format: o.format as 'csv' | 'jsonl' | 'json' } : {}),
+              ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
+
+  datasets
+    .command('show <id>')
+    .description('print a single dataset (name, examples, tags)')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action((id: string, o: { apiBase?: string; json?: boolean }) => {
+      action = () =>
+        runDatasetsShow(
+          id,
+          {
+            ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
+  datasets
+    .command('destroy <id>')
+    .description('delete a dataset (irreversible)')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action((id: string, o: { apiBase?: string; json?: boolean }) => {
+      action = () =>
+        runDatasetsDestroy(
+          id,
+          {
+            ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
+  // --- evaluators -----------------------------------------------------------
+  // Wave-16: thin wrappers around `/v1/evaluators`.
+  const evaluators = program
+    .command('evaluators')
+    .description('manage tenant-scoped evaluators via the API');
+
+  evaluators
+    .command('ls')
+    .description('list evaluators (id, kind, name, scope)')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action((o: { apiBase?: string; json?: boolean }) => {
+      action = () =>
+        runEvaluatorsLs(
+          {
+            ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+            json: o.json === true,
+          },
+          io,
+        );
+    });
+
+  evaluators
+    .command('new <name>')
+    .description('create an evaluator')
+    .requiredOption('--kind <kind>', 'one of exact_match|contains|regex|json_schema|llm_judge')
+    .option('--config <json>', 'inline JSON config (e.g. \'{"value":"ok"}\')')
+    .option('--config-file <path>', 'read config JSON from a file')
+    .option('--shared', 'share with the whole tenant', false)
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action(
+      (
+        name: string,
+        o: {
+          kind?: string;
+          config?: string;
+          configFile?: string;
+          shared?: boolean;
+          apiBase?: string;
+          json?: boolean;
+        },
+      ) => {
+        action = () =>
+          runEvaluatorsNew(
+            name,
+            {
+              kind: o.kind ?? '',
+              ...(o.config !== undefined ? { config: o.config } : {}),
+              ...(o.configFile !== undefined ? { configFile: o.configFile } : {}),
+              shared: o.shared === true,
+              ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
+
+  evaluators
+    .command('test')
+    .description('run an evaluator against a sample (saved or inline)')
+    .option('--id <evaluator-id>', 'the saved evaluator to invoke')
+    .option('--kind <kind>', 'inline kind (mutually exclusive with --id)')
+    .option('--config <json>', 'inline JSON config')
+    .option('--config-file <path>', 'read config JSON from a file')
+    .requiredOption('--output <text>', 'sample output to score')
+    .option('--expected <text>', 'sample expected value')
+    .option('--input <text>', 'sample input value')
+    .option('--api-base <url>', 'override API_BASE (default http://localhost:3001)')
+    .option('--json', 'emit JSON output', false)
+    .action(
+      (o: {
+        id?: string;
+        kind?: string;
+        config?: string;
+        configFile?: string;
+        output?: string;
+        expected?: string;
+        input?: string;
+        apiBase?: string;
+        json?: boolean;
+      }) => {
+        action = () =>
+          runEvaluatorsTest(
+            {
+              ...(o.id !== undefined ? { id: o.id } : {}),
+              ...(o.kind !== undefined ? { kind: o.kind } : {}),
+              ...(o.config !== undefined ? { config: o.config } : {}),
+              ...(o.configFile !== undefined ? { configFile: o.configFile } : {}),
+              output: o.output ?? '',
+              ...(o.expected !== undefined ? { expected: o.expected } : {}),
+              ...(o.input !== undefined ? { input: o.input } : {}),
+              ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
 
   // --- dev ------------------------------------------------------------------
   program

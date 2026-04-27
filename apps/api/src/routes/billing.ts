@@ -52,6 +52,11 @@ import { Hono } from 'hono';
 import { getAuth } from '../auth/middleware.js';
 import type { Deps } from '../deps.js';
 import { HttpError, validationError } from '../middleware/error.js';
+// Wave-16: keep `tenant_quotas.plan` in sync when Stripe pushes a
+// subscription change. The setQuotaPlan call is idempotent and runs
+// on EVERY webhook event so a partial sequence (only `customer.
+// subscription.updated` fires) still converges the quota row.
+import { setQuotaPlan } from '../quotas.js';
 
 // `ApiError` is the typed envelope every non-2xx returns. Reference it
 // here so a future drift in the wire shape lights up at the call site.
@@ -196,6 +201,23 @@ export function billingRoutes(deps: Deps): Hono {
       throw err;
     }
     const result = await handleEvent(event, deps.subscriptionStore);
+    // Wave-16 — propagate the subscription's plan into tenant_quotas
+    // so quota caps follow Stripe state. Best-effort: a quota-plan
+    // failure does NOT 500 the webhook (Stripe would retry it
+    // forever). The next subscription event will re-converge.
+    try {
+      const planTenant = extractTenantFromEvent(event);
+      if (planTenant !== null) {
+        const sub = await deps.subscriptionStore.getByTenantId(planTenant);
+        if (sub !== null) {
+          await setQuotaPlan(deps.db, planTenant, sub.plan);
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `[billing] failed to sync tenant_quotas plan after webhook: ${(err as Error).message}`,
+      );
+    }
     return c.json({ received: true, handled: result.handled, reason: result.reason });
   });
 
@@ -272,6 +294,26 @@ function syntheticTrialWire(): WireSubscription {
 }
 
 /** Build the typed `not_configured` HttpError (HTTP 503). */
+/**
+ * Wave-16 — best-effort tenant extraction from a Stripe webhook
+ * event. The customer.subscription.* family carries `metadata.tenant_id`
+ * (we set this at checkout-session creation time). Returns null when
+ * the event shape is not recognised; the caller treats null as "skip
+ * the quota-plan sync, the next event will pick it up".
+ */
+function extractTenantFromEvent(event: StripeWebhookEvent): string | null {
+  const obj = event.data.object as Record<string, unknown> | null;
+  if (obj === null || typeof obj !== 'object') return null;
+  const cri = obj.client_reference_id;
+  if (typeof cri === 'string' && cri.length > 0) return cri;
+  const meta = obj.metadata as Record<string, unknown> | undefined;
+  if (meta !== undefined && typeof meta === 'object') {
+    const tid = meta.tenant_id;
+    if (typeof tid === 'string' && tid.length > 0) return tid;
+  }
+  return null;
+}
+
 function notConfigured(endpoint: string): HttpError {
   return new HttpError(
     503,

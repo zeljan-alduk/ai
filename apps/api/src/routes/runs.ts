@@ -47,6 +47,9 @@ import {
 import type { Deps } from '../deps.js';
 import { HttpError, notFound, validationError } from '../middleware/error.js';
 import { emitActivity } from '../notifications.js';
+// Wave-16 — per-tenant monthly run quota. enforceMonthlyQuota throws
+// HTTP 402 `quota_exceeded` if the tenant is over their plan cap.
+import { enforceMonthlyQuota } from '../quotas.js';
 import { loadModelCatalog } from './models.js';
 
 const RunIdParam = z.object({ id: z.string().min(1) });
@@ -89,6 +92,13 @@ export function runsRoutes(deps: Deps): Hono {
     // A spec with the same name in another tenant returns null here so
     // we surface 404 — never `cross_tenant_access`.
     const tenantId = getAuth(c).tenantId;
+    // Wave-16 — monthly run quota gate. Throws HTTP 402
+    // `quota_exceeded` if the tenant is over their plan cap. The
+    // increment + cap check are atomic (single SQL UPDATE) so two
+    // parallel run-creates can never both succeed beyond the cap.
+    // Runs BEFORE the agent lookup so a quota-blocked tenant doesn't
+    // pay the registry roundtrip on every denied request.
+    await enforceMonthlyQuota(deps, tenantId, 'run', 1);
     const detail = await deps.agentStore.get(tenantId, parsed.data.agentName);
     if (detail === null) {
       throw notFound(`agent not found: ${parsed.data.agentName}`);

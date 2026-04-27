@@ -52,6 +52,17 @@ export interface RuntimePerModel {
 /** Factory: given an opaque `provider.model` string, return a runtime bundle. */
 export type RuntimeFactory = (model: string) => RuntimePerModel | Promise<RuntimePerModel>;
 
+/**
+ * Wave-16 — resolver for `dataset:` suite bindings. The route layer
+ * (the only place that knows how to read /v1/datasets/:id/examples)
+ * supplies this; the runner calls it at sweep start when a suite has
+ * `dataset` set and `cases` is empty. Returns the resolved cases in
+ * `EvalCase` shape — the resolver is responsible for translating
+ * dataset-example fields into the runner's expected expectation shape
+ * (typically `{ kind: 'evaluator', evaluatorId }` or another inline kind).
+ */
+export type DatasetResolver = (datasetIdOrName: string) => Promise<readonly EvalCase[]>;
+
 export interface SweepOptions {
   readonly suite: EvalSuite;
   readonly models: readonly string[];
@@ -68,6 +79,13 @@ export interface SweepOptions {
    */
   readonly now?: () => Date;
   readonly newId?: () => string;
+  /**
+   * Wave-16 — resolver for `dataset:` suite bindings. Required only when
+   * the suite has `dataset` set and no inline cases. The runner calls
+   * this once at sweep start and treats the result as additional cases
+   * (appended to `suite.cases`).
+   */
+  readonly datasetResolver?: DatasetResolver;
 }
 
 export interface SweepResult {
@@ -97,15 +115,20 @@ export async function runSweep(opts: SweepOptions): Promise<SweepResult> {
   };
   await store.create(initial);
 
+  // Wave-16 — resolve dataset-bound suites at sweep start. Inline
+  // cases always win; the dataset is appended only when there are no
+  // inline ones (mirrors the suite-loader's at-least-one-of check).
+  const cases = await resolveCases(opts);
+
   let cells: SweepCellResult[] = [];
   try {
     if (concurrency === 'serial') {
       for (const model of opts.models) {
-        const col = await runColumn(model, opts);
+        const col = await runColumn(model, opts, cases);
         cells = cells.concat(col);
       }
     } else {
-      const columns = await Promise.all(opts.models.map((m) => runColumn(m, opts)));
+      const columns = await Promise.all(opts.models.map((m) => runColumn(m, opts, cases)));
       cells = columns.flat();
     }
   } catch (e) {
@@ -132,13 +155,35 @@ export async function runSweep(opts: SweepOptions): Promise<SweepResult> {
 }
 
 /** Execute every case for a single model column. */
-async function runColumn(model: string, opts: SweepOptions): Promise<SweepCellResult[]> {
+async function runColumn(
+  model: string,
+  opts: SweepOptions,
+  cases: readonly EvalCase[],
+): Promise<SweepCellResult[]> {
   const out: SweepCellResult[] = [];
   const bundle = await opts.factory(model);
-  for (const c of opts.suite.cases) {
+  for (const c of cases) {
     out.push(await runCell(c, model, opts.suite, bundle));
   }
   return out;
+}
+
+/**
+ * Resolve the set of cases for the sweep. When the suite is
+ * dataset-bound (no inline cases + a `dataset` field), the resolver
+ * supplied by the route layer fetches them from /v1/datasets/:id/examples.
+ */
+async function resolveCases(opts: SweepOptions): Promise<readonly EvalCase[]> {
+  if (opts.suite.cases.length > 0) return opts.suite.cases;
+  if (opts.suite.dataset === undefined || opts.suite.dataset.length === 0) {
+    return opts.suite.cases;
+  }
+  if (opts.datasetResolver === undefined) {
+    throw new Error(
+      `suite "${opts.suite.name}" binds dataset "${opts.suite.dataset}" but no datasetResolver was wired`,
+    );
+  }
+  return opts.datasetResolver(opts.suite.dataset);
 }
 
 /** Execute one (case, model) cell. */

@@ -35,6 +35,9 @@ export const NotificationKind = z.enum([
   'budget_threshold',
   // Wave-14 (Engineer 14D): @-mention in an annotation.
   'comment_mention',
+  // Wave-16 (Engineer 16D): a tenant exceeded their monthly run /
+  // cost quota. The bell row links to /settings/quotas.
+  'quota_exceeded',
 ]);
 export type NotificationKind = z.infer<typeof NotificationKind>;
 

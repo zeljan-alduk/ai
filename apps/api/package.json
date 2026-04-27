@@ -22,6 +22,7 @@
     "@aldo-ai/observability": "workspace:*",
     "@aldo-ai/openapi": "workspace:*",
     "@aldo-ai/orchestrator": "workspace:*",
+    "@aldo-ai/rate-limit": "workspace:*",
     "@aldo-ai/registry": "workspace:*",
     "@aldo-ai/secrets": "workspace:*",
     "@aldo-ai/storage": "workspace:*",

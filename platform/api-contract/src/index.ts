@@ -29,3 +29,7 @@ export * from './dashboards.js';
 export * from './datasets.js';
 export * from './annotations.js';
 export * from './integrations.js';
+export * from './cache.js';
+// Wave-16 — per-tenant quotas + custom domains.
+export * from './quotas.js';
+export * from './domains.js';
