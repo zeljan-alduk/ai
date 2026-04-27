@@ -25,6 +25,9 @@ const SETTINGS_NAV = [
   { href: '/settings/cache', label: 'Cache' },
   { href: '/settings/alerts', label: 'Alerts' },
   { href: '/settings/audit', label: 'Audit log' },
+  // Wave-16D — quotas + custom domains.
+  { href: '/settings/quotas', label: 'Quotas' },
+  { href: '/settings/domains', label: 'Domains' },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {

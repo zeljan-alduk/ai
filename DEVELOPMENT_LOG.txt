@@ -4362,3 +4362,112 @@ Out of scope (per brief):
 - Storage migration is wave-14B's; reused as-is.
 - The pre-existing api-typecheck and rate-limit-test failures
   belong to the parallel wave-16C/D engineer.
+
+---
+
+2026-04-27 09:52 UTC — Engineer 16D — wave 16 rate-limit + quotas + domains
+
+Shipped the distributed rate-limiter, per-tenant monthly quotas, and
+custom-domain CRUD for wave-16D.
+
+Migration 018_rate_limits_quotas_domains.sql adds three tables:
+rate_buckets (tenant_id + scope token-bucket state, no FK to tenants
+because the auth-route brute-force scopes key on IP), tenant_quotas
+(plan + monthly run/cost cap + used + reset_at), and tenant_domains
+(hostname + verification_token + ssl_status, one row per tenant for
+MVP, hostname UNIQUE).
+
+Per-plan defaults:
+- trial:      60 req/min,    100 runs/mo,    $5/mo
+- solo:       600 req/min,   5,000 runs/mo,  $50/mo
+- team:       6,000 req/min, 50,000 runs/mo, $500/mo
+- enterprise: unlimited / unlimited / unlimited
+
+`@aldo-ai/rate-limit` workspace at platform/rate-limit/ exports
+`consume()` (pure token-bucket math), `tryConsume(db,...)` (atomic
+single-statement upsert with a CTE that locks the row via SELECT FOR
+UPDATE so concurrent calls serialise and capacity is never
+over-granted), `rateLimit({...})` Hono middleware (stamps
+X-RateLimit-Capacity + X-RateLimit-Remaining headers, returns 429 +
+Retry-After + ApiError envelope on exceed), and the per-plan policy
+lookup. 44 tests across 5 files (token-bucket math × 14, postgres
+store × 8, concurrent fairness × 3, middleware × 6, policy × 13).
+
+Wired into apps/api/src/app.ts in three layers: per-route IP-keyed
+caps on /v1/auth/{signup,login}, per-tenant global cap from the
+plan, and stricter per-route caps on POST /v1/runs +
+/v1/playground/run. Test escape hatch ALDO_RATE_LIMIT_DISABLED=1 set
+in the test harness so the existing 280+ tests keep passing.
+
+apps/api/src/quotas.ts wires enforceMonthlyQuota into POST /v1/runs
+(throws HTTP 402 quota_exceeded with a wave-13C bell notification
+side-effect on cap exceed); the same helper is exported for the
+gateway-billed cost path. setQuotaPlan is called from the wave-11
+Stripe webhook handler so a plan upgrade flows through to the quota
+caps automatically. ALDO_QUOTA_DISABLED=1 is the test escape hatch.
+
+Custom domain flow (apps/api/src/routes/domains.ts):
+1. POST /v1/domains {hostname} → seeds row + returns
+   {txtRecordName: '_aldo-verification.<hostname>', txtRecordValue:
+   '<token>'}.
+2. User publishes the TXT record at their DNS provider.
+3. POST /v1/domains/:hostname/verify → resolveTxt with a 10s
+   AbortController cap; on match flips verified_at; otherwise
+   returns 200 with `verified: false` + `reason` so the wizard can
+   render the failure inline (avoids the OpenAPI 4xx-must-be-
+   ApiError invariant).
+4. DELETE /v1/domains/:hostname removes the row.
+SSL is provisioned automatically by Fly / Vercel once verification
+succeeds; the ssl_status column is informational only.
+
+apps/api/src/middleware/domain-rewrite.ts looks up the Host header
+in tenant_domains and stamps c.set('domainTenantId',...) for verified
+rows; auth middleware still requires a JWT/API key.
+
+apps/web — added /settings/quotas (read-only progress bars vs cap)
+and /settings/domains (wizard: enter hostname → display TXT record →
+Verify → on success show CNAME instructions). Both wired into
+SETTINGS_NAV in the layout.
+
+Wire-format schemas — added platform/api-contract/src/quotas.ts
+(QuotaSnapshot, GetMyQuotaResponse) and domains.ts (TenantDomain,
+CreateDomain{Request,Response}, ListDomainsResponse,
+VerifyDomainResponse, DeleteDomainResponse) + new NotificationKind
+'quota_exceeded' for the bell alert.
+
+OpenAPI ops — registered Quotas + Domains tags + 5 new operations.
+Spec test (87/87) green; the 422 path on /verify was reshaped to a
+200 envelope with verified=false to satisfy the "every 4xx must use
+ApiError" invariant.
+
+Dockerfile — added COPY platform/rate-limit/{package.json,*} so the
+runtime image picks up the new workspace under tsx.
+
+Quality bar:
+- pnpm --filter @aldo-ai/rate-limit test — 44/44 green.
+- pnpm --filter @aldo-ai/storage test — 2/2 green (018 round-trip
+  added: rate_buckets PK + UPSERT path, tenant_quotas defaults,
+  tenant_domains UNIQUE collision).
+- pnpm --filter @aldo-ai/api test — 323/323 green (+13 over the
+  parallel-engineer baseline of 310: 4 rate-limit, 4 quotas, 5
+  domains).
+- pnpm --filter @aldo-ai/api-contract typecheck clean.
+- pnpm --filter @aldo-ai/openapi test — 87/87 green (+5 over the
+  baseline: 1 quotas op, 4 domains ops).
+- pnpm --filter @aldo-ai/web typecheck clean.
+- pnpm -r typecheck across all workspaces clean.
+- biome check on every file I authored — clean.
+
+LLM-agnostic — grep -rE
+"(openai|anthropic|gemini|claude|gpt-|mistral|llama-|deepseek)"
+across the new files returns zero hits. The rate limiter sits in
+front of the gateway so a sensitive-tier tenant cannot leak
+through a 429 envelope; the quota helpers carry no provider
+strings; domain CRUD is purely DNS / hostname plumbing.
+
+Out of scope (per brief):
+- SSL provisioning automation (Fly / Vercel handle once verified).
+- Multi-domain per tenant (MVP is single).
+- HTTP-challenge / DNS-01 verification (TXT only).
+- A migration 017 — the parallel wave-16C engineer owns it; my
+  brief explicitly numbers mine 018.

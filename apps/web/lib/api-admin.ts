@@ -281,6 +281,59 @@ export function purgeCache(req: CachePurgeRequest = {}): Promise<CachePurgeRespo
 }
 
 // ---------------------------------------------------------------------------
+// Wave-16D — quotas + custom domains.
+// ---------------------------------------------------------------------------
+
+export function getMyQuota(): Promise<{
+  quota: {
+    plan: string;
+    monthlyRunsMax: number | null;
+    monthlyRunsUsed: number;
+    monthlyCostUsdMax: number | null;
+    monthlyCostUsdUsed: number;
+    resetAt: string;
+  };
+}> {
+  return jsonFetch('/v1/quotas/me');
+}
+
+export interface DomainEntry {
+  hostname: string;
+  verifiedAt: string | null;
+  verificationToken: string;
+  txtRecordName: string;
+  txtRecordValue: string;
+  sslStatus: 'pending' | 'issued' | 'failed';
+  createdAt: string;
+}
+
+export function listDomains(): Promise<{ domains: DomainEntry[] }> {
+  return jsonFetch('/v1/domains');
+}
+
+export function createDomain(hostname: string): Promise<{ domain: DomainEntry }> {
+  return jsonFetch('/v1/domains', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ hostname }),
+  });
+}
+
+export function verifyDomain(
+  hostname: string,
+): Promise<{ verified: boolean; verifiedAt: string | null; reason?: string }> {
+  return jsonFetch(`/v1/domains/${encodeURIComponent(hostname)}/verify`, {
+    method: 'POST',
+  });
+}
+
+export function deleteDomain(hostname: string): Promise<void> {
+  return jsonFetch(`/v1/domains/${encodeURIComponent(hostname)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Re-export the wire types so consumers don't need a second import.
 // ---------------------------------------------------------------------------
 export type { ApiKey, AuditLogEntry, Invitation, IntegrationContract, Role };

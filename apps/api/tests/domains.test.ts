@@ -53,7 +53,7 @@ describe('wave-16 domains route', () => {
     expect(body.domains?.[0]?.hostname).toBe('agents.acme-corp.com');
   });
 
-  it('POST /v1/domains/:hostname/verify returns 422 on TXT mismatch', async () => {
+  it('verifyTxtRecord helper returns ok:false on TXT mismatch', async () => {
     // Stub a DNS resolver that returns the wrong record.
     const fakeResolve = async () => [['some-other-token']];
     const result = await verifyTxtRecord('agents.acme-corp.com', 'expected-token', {

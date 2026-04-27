@@ -136,12 +136,17 @@ export function domainsRoutes(deps: Deps): Hono {
     }
     const verifyResult = await verifyTxtRecord(hostname, row.verificationToken);
     if (!verifyResult.ok) {
+      // Return 200 with `verified: false` + `reason` so clients can
+      // render the failure inline. We avoid 4xx here because the
+      // OpenAPI invariant requires every 4xx to carry the ApiError
+      // envelope, and a "TXT record didn't match yet" is a
+      // user-actionable state, not a request-shape error.
       const body = VerifyDomainResponse.parse({
         verified: false,
         verifiedAt: null,
         reason: verifyResult.reason,
       });
-      return c.json(body, 422);
+      return c.json(body, 200);
     }
     const verifiedAt = new Date().toISOString();
     await deps.db.query(
