@@ -1,0 +1,99 @@
+# Deploy ALDO AI to the VPS (ai.aldo.tech).
+#
+# Triggers a redeploy on the host by POSTing to its token-gated
+# webhook (see scripts/vps-deploy-webhook.py). The webhook does
+# `git fetch + reset + docker compose up -d --build` on the chosen
+# branch.
+#
+# Manual dispatch:
+#   gh workflow run deploy-vps.yml -f branch=claude/ai-agent-orchestrator-hAmzy
+#
+# Required repository secret:
+#   VPS_DEPLOY_TOKEN  — the bearer token printed by vps-bootstrap.sh
+#                       (lives at /opt/aldo-ai/secrets/deploy_token).
+#
+# Egress: the runner only needs to reach https://ai.aldo.tech/_admin.
+# The token is sent over TLS; never echoed.
+
+name: deploy-vps
+
+on:
+  push:
+    branches:
+      - claude/ai-agent-orchestrator-hAmzy
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'CLAUDE.md'
+      - 'DEVELOPMENT_LOG.txt'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy (must match webhook allowlist: main or claude/*)'
+        required: true
+        default: claude/ai-agent-orchestrator-hAmzy
+        type: string
+
+concurrency:
+  # Don't pile up deploys; cancel in-flight when a newer one lands.
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Trigger VPS redeploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve branch
+        id: branch
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "name=${{ inputs.branch }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Confirm webhook is reachable
+        run: |
+          curl -sS --fail --max-time 30 https://ai.aldo.tech/_admin/health \
+            | tee /tmp/health.json
+          echo
+
+      - name: POST /deploy
+        env:
+          DEPLOY_TOKEN: ${{ secrets.VPS_DEPLOY_TOKEN }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          if [[ -z "${DEPLOY_TOKEN}" ]]; then
+            echo "::error::VPS_DEPLOY_TOKEN secret is not set on this repo"
+            exit 1
+          fi
+
+          # Webhook returns 200 on success, 5xx on failure. --fail-with-body
+          # gives us a non-zero exit and the body in stderr if the deploy
+          # script reports a failure.
+          curl -sS --fail-with-body --max-time 600 \
+            -X POST https://ai.aldo.tech/_admin/deploy \
+            -H "Authorization: Bearer ${DEPLOY_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\":\"${BRANCH}\"}" \
+            -o /tmp/deploy.json
+          cat /tmp/deploy.json
+          echo
+
+      - name: Public health check
+        run: |
+          # Give the API a few seconds; the webhook only returns after
+          # the deploy script's own /health wait, so this should already
+          # be green, but a public probe verifies the edge proxy too.
+          for i in 1 2 3 4 5 6; do
+            if curl -sSf --max-time 10 https://ai.aldo.tech/health > /tmp/pub.json; then
+              cat /tmp/pub.json; echo
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::https://ai.aldo.tech/health did not become healthy"
+          exit 1

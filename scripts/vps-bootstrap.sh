@@ -343,11 +343,13 @@ ${COMPOSE_API_NETWORKS}
     container_name: aldo-web
     restart: unless-stopped
     working_dir: /repo
-    # Install with --prod=false so devDeps land (NODE_ENV=production
-    # would otherwise make pnpm skip them, and the prebuild needs tsx).
-    # NODE_ENV stays 'production' for the runtime so Next.js/Hono pick
-    # the right code path.
-    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install --frozen-lockfile --prod=false --filter @aldo-ai/web... && pnpm --filter @aldo-ai/web build && pnpm --filter @aldo-ai/web start --port 8080 --hostname 0.0.0.0"]
+    # Wipe node_modules before installing — the host volume keeps them
+    # between container restarts, and a previous run that produced a
+    # prod-only node_modules stops pnpm's modules-purge prompt from
+    # auto-confirming in a non-TTY shell. Then install with
+    # --prod=false so devDeps land (NODE_ENV=production at runtime would
+    # otherwise make pnpm skip them, and the prebuild needs tsx).
+    command: ["sh", "-c", "set -e; corepack enable; corepack prepare pnpm@9.12.0 --activate; find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null || true; pnpm install --frozen-lockfile --prod=false --filter @aldo-ai/web...; pnpm --filter @aldo-ai/web build; pnpm --filter @aldo-ai/web start --port 8080 --hostname 0.0.0.0"]
     depends_on:
       aldo-api:
         condition: service_started

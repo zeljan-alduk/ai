@@ -4499,3 +4499,7 @@ Out of scope (per brief):
 - API was crash-looping with `getaddrinfo EAI_AGAIN aldo` because the openssl-rand-base64 postgres password contained '/', which terminates the URL authority component. Bootstrap now URL-encodes POSTGRES_PASSWORD via python3 before substituting it into DATABASE_URL.
 - Web was crash-looping with `sh: tsx: not found` because compose set NODE_ENV=production before `pnpm install`, which makes pnpm skip devDependencies. Install now passes `--prod=false`; runtime NODE_ENV stays production.
 - Bootstrap declares python3 as an apt dep (was implicit before).
+
+2026-04-27 — Engineer (Claude) — web devDeps actually land + GitHub Actions deploy bridge
+- Web container kept failing with `tsx: not found` even with `--prod=false`. Root cause: the host volume preserved the previous failed install's prod-only node_modules, and pnpm's "modules will be removed and reinstalled" prompt defaulted to "no" in the non-TTY shell. Fix: `find -name node_modules -prune -exec rm -rf` before install.
+- Added .github/workflows/deploy-vps.yml: triggers on push to main / claude/* (paths-ignore for docs/md), or via workflow_dispatch. POSTs to the VPS webhook with the VPS_DEPLOY_TOKEN repo secret. Lets Claude deploy from outside the egress-allowlisted sandbox: I can `gh workflow run deploy-vps.yml` (or auto on push) and the runner does the curl from a non-restricted machine.
