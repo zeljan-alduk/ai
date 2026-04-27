@@ -43,6 +43,9 @@ function isChromelessPath(pathname: string | null): boolean {
   // The app sidebar is suppressed so the docs surface fills the
   // viewport and feels like a real spec viewer.
   if (pathname === '/api/docs' || pathname === '/api/redoc') return true;
+  // Customer-facing pitch deck mounts as a fullscreen presentation;
+  // no sidebar, no marketing nav.
+  if (pathname === '/deck' || pathname.startsWith('/deck/')) return true;
   return false;
 }
 
