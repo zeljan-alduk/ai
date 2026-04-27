@@ -97,7 +97,10 @@ export default async function DocsCatchAll({ params }: DocsPageProps) {
         />
         <footer className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
           <Link
-            href={`${GITHUB_BLOB_BASE}/${loaded.sourcePath}`}
+            href={`${GITHUB_BLOB_BASE}/${loaded.sourcePath
+              .split('/')
+              .map((seg) => encodeURIComponent(seg))
+              .join('/')}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
