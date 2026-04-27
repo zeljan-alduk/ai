@@ -12,7 +12,7 @@
  *   - per-tenant bucket isolates between two tenants
  */
 
-import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type TestEnv, setupTestEnv } from './_setup.js';
 
 describe('wave-16 rate-limit middleware', () => {

@@ -31,7 +31,13 @@ kill_timeout = "10s"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  # Wave 16 — keep one machine warm. Auto-stop is fine but cold-boot
+  # of the wave-16 image (migrations 017+018 + cache + rate-limit +
+  # in-memory agency seed) reliably exceeds Fly's deploy health-check
+  # window, which causes the rolling deploy to abort with "request
+  # canceled" from the Fly machine API. Trade a little idle compute
+  # for deploy reliability.
+  min_machines_running = 1
   processes = ["app"]
 
   [[http_service.checks]]

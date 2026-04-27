@@ -68,12 +68,16 @@ jobs:
 
       - name: Deploy
         run: |
+          # --wait-timeout 600 (default ~300s) gives the wave-16 image
+          # enough headroom for migrations 017+018 + the in-memory
+          # agency seed without flyctl giving up.
           flyctl deploy \
             --remote-only \
             --config apps/api/fly.toml \
             --dockerfile apps/api/Dockerfile \
             --app aldo-ai-api \
             --ignorefile apps/api/.dockerignore \
+            --wait-timeout 600 \
             --build-arg COMMIT_SHA=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
