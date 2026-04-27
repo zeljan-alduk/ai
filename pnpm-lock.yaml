@@ -29,6 +29,9 @@ importers:
       '@aldo-ai/billing':
         specifier: workspace:*
         version: link:../../platform/billing
+      '@aldo-ai/cache':
+        specifier: workspace:*
+        version: link:../../platform/cache
       '@aldo-ai/engine':
         specifier: workspace:*
         version: link:../../platform/engine
