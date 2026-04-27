@@ -159,6 +159,14 @@ gen_or_keep "$APP_DIR/secrets/postgres_password"
 gen_or_keep "$APP_DIR/secrets/jwt_secret"
 gen_or_keep "$APP_DIR/secrets/secrets_master_key"
 
+# Deploy-webhook bearer token. Hex (no base64 padding) so it pastes
+# cleanly into Authorization headers.
+if [[ ! -s "$APP_DIR/secrets/deploy_token" ]]; then
+  openssl rand -hex 32 > "$APP_DIR/secrets/deploy_token"
+  chmod 600 "$APP_DIR/secrets/deploy_token"
+  log "    generated $APP_DIR/secrets/deploy_token"
+fi
+
 POSTGRES_PASSWORD=$(cat "$APP_DIR/secrets/postgres_password")
 JWT_SECRET=$(cat "$APP_DIR/secrets/jwt_secret")
 SECRETS_MASTER_KEY=$(cat "$APP_DIR/secrets/secrets_master_key")
@@ -278,6 +286,18 @@ server {
   location = /openapi.yaml { proxy_pass http://aldo_api/openapi.yaml; proxy_set_header Host \$host; }
   location = /health { proxy_pass http://aldo_api/health; proxy_set_header Host \$host; }
 
+  # Deploy webhook (token-gated; serves the python service running on
+  # 127.0.0.1:9999 as a systemd unit).
+  location /_admin/ {
+    proxy_pass http://127.0.0.1:9999/;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_read_timeout 600s;
+    client_max_body_size 1m;
+  }
+
   # /v1/* legacy alias for clients that still use the bare path.
   location /v1/ {
     proxy_pass http://aldo_api;
@@ -316,6 +336,45 @@ else
 fi
 
 # ---------------------------------------------------------------------
+# 6b. Deploy webhook — systemd-managed python service that fronts
+#     scripts/vps-deploy.sh behind a bearer token. nginx already routes
+#     /_admin/* to 127.0.0.1:9999.
+# ---------------------------------------------------------------------
+WEBHOOK_SRC="$APP_DIR/repo/scripts/vps-deploy-webhook.py"
+WEBHOOK_DST="$APP_DIR/webhook/vps-deploy-webhook.py"
+WEBHOOK_UNIT="/etc/systemd/system/aldo-deploy-webhook.service"
+
+mkdir -p "$APP_DIR/webhook" "$APP_DIR/logs"
+cp "$WEBHOOK_SRC" "$WEBHOOK_DST"
+chmod +x "$APP_DIR/repo/scripts/vps-deploy.sh"
+
+cat > "$WEBHOOK_UNIT" <<UNIT
+[Unit]
+Description=ALDO AI deploy webhook
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${APP_DIR}
+Environment=APP_DIR=${APP_DIR}
+Environment=API_INTERNAL_PORT=${API_INTERNAL_PORT}
+ExecStart=/usr/bin/python3 ${WEBHOOK_DST}
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:${APP_DIR}/logs/webhook.log
+StandardError=append:${APP_DIR}/logs/webhook.log
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now aldo-deploy-webhook.service
+systemctl restart aldo-deploy-webhook.service
+
+# ---------------------------------------------------------------------
 # 7. Let's Encrypt — only if we don't already have a cert for this host.
 # ---------------------------------------------------------------------
 if [[ ! -d "/etc/letsencrypt/live/${APP_DOMAIN}" ]]; then
@@ -351,6 +410,8 @@ log "==> public smoke (https://${APP_DOMAIN}/health)"
 curl -sS --max-time 15 "https://${APP_DOMAIN}/health" || true
 echo
 
+DEPLOY_TOKEN=$(cat "$APP_DIR/secrets/deploy_token")
+
 log ""
 log "✓ done."
 log ""
@@ -358,6 +419,17 @@ log "  Live:    https://${APP_DOMAIN}"
 log "  Spec:    https://${APP_DOMAIN}/openapi.json"
 log "  Stack:   docker compose -f ${APP_DIR}/docker-compose.yml ps"
 log "  Logs:    docker compose -f ${APP_DIR}/docker-compose.yml logs -f"
+log "  Webhook: journalctl -u aldo-deploy-webhook -f"
+log ""
+log "  Deploy token (paste this to Claude in chat — keep it secret):"
+log ""
+echo "    $DEPLOY_TOKEN"
+log ""
+log "  Smoke the webhook:"
+log "    curl -sS https://${APP_DOMAIN}/_admin/health"
+log "    curl -sS -X POST -H 'Authorization: Bearer <token>' \\"
+log "      -H 'Content-Type: application/json' -d '{\"branch\":\"claude/ai-agent-orchestrator-hAmzy\"}' \\"
+log "      https://${APP_DOMAIN}/_admin/deploy"
 log ""
 log "  Existing vhosts on this host (untouched):"
 ls /etc/nginx/sites-enabled/ | grep -v "^ai\.aldo\.tech\$" | sed 's/^/    /'

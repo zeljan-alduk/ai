@@ -4481,3 +4481,9 @@ Out of scope (per brief):
 2026-04-27 — Engineer (Claude) — bootstrap can git-clone now
 - vps-bootstrap.sh now defaults to `git clone https://github.com/zeljan-alduk/ai.git` (REPO_URL/REPO_BRANCH overrideable). Tarball at /tmp/aldo-ai.tar.gz remains a fallback. Drop a deploy key at /opt/aldo-ai/secrets/github_deploy_key for private-repo access.
 - Removes the scp step from the happy path; user just scps the bootstrap script and runs it.
+
+2026-04-27 — Engineer (Claude) — deploy webhook (Claude takes deploys over)
+- scripts/vps-deploy.sh: pull-and-redeploy script (git fetch + reset + docker compose up + health wait).
+- scripts/vps-deploy-webhook.py: stdlib HTTP service on 127.0.0.1:9999. Bearer-token auth from /opt/aldo-ai/secrets/deploy_token. POST /deploy {branch} runs the deploy script, GET /status returns last result, GET /health is unauthed liveness.
+- vps-bootstrap.sh installs both as a systemd unit (aldo-deploy-webhook.service), generates the deploy token, and adds nginx /_admin/* -> 127.0.0.1:9999 (HTTPS-only via the same Let's Encrypt cert). Prints the token at the end of the run for the operator to paste back.
+- After bootstrap, Claude can deploy via: curl -X POST -H "Authorization: Bearer <token>" https://ai.aldo.tech/_admin/deploy. No SSH required.
