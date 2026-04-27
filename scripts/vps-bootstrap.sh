@@ -18,16 +18,22 @@
 #   6. Refuse to overwrite anything it didn't create. Idempotent on
 #      rerun.
 #
-# Usage on the VPS (after scp):
-#     sudo bash /tmp/vps-bootstrap.sh
+# Two ways to feed it the source:
 #
-# Or end-to-end from your laptop:
-#     git archive HEAD -o /tmp/aldo-ai.tar.gz
-#     scp /tmp/aldo-ai.tar.gz scripts/vps-bootstrap.sh ubuntu@135.125.161.96:/tmp/
+#   (a) git clone (default). REPO_URL + REPO_BRANCH below. Works for a
+#       public repo out of the box. For a private repo, drop a deploy
+#       key at /opt/aldo-ai/secrets/github_deploy_key (chmod 600) before
+#       running and the script will use it via GIT_SSH_COMMAND.
+#
+#   (b) tarball. If /tmp/aldo-ai.tar.gz exists, the script uses it
+#       instead of cloning. Useful for air-gapped / offline runs:
+#           git archive HEAD -o /tmp/aldo-ai.tar.gz
+#           scp /tmp/aldo-ai.tar.gz scripts/vps-bootstrap.sh ubuntu@host:/tmp/
+#           ssh ubuntu@host 'sudo bash /tmp/vps-bootstrap.sh'
+#
+# Simplest end-to-end (public repo):
+#     scp scripts/vps-bootstrap.sh ubuntu@135.125.161.96:/tmp/
 #     ssh ubuntu@135.125.161.96 'sudo bash /tmp/vps-bootstrap.sh'
-#
-# The script expects /tmp/aldo-ai.tar.gz to exist with the repo
-# contents (git archive HEAD). If absent, it'll error out cleanly.
 
 set -euo pipefail
 
@@ -37,6 +43,8 @@ set -euo pipefail
 APP_DOMAIN="${APP_DOMAIN:-ai.aldo.tech}"
 APP_DIR="${APP_DIR:-/opt/aldo-ai}"
 SOURCE_TARBALL="${SOURCE_TARBALL:-/tmp/aldo-ai.tar.gz}"
+REPO_URL="${REPO_URL:-https://github.com/zeljan-alduk/ai.git}"
+REPO_BRANCH="${REPO_BRANCH:-claude/ai-agent-orchestrator-hAmzy}"
 LE_EMAIL="${LE_EMAIL:-info@aldo.tech}"
 
 # Internal-only ports — only nginx talks to these. Picked to avoid
@@ -68,12 +76,14 @@ apt_install_if_missing() {
 # ---------------------------------------------------------------------
 require_root
 
-[[ -f "$SOURCE_TARBALL" ]] || err "$SOURCE_TARBALL missing — run \`git archive HEAD -o $SOURCE_TARBALL\` on your laptop and scp it to this host first."
-
 log "host: $(hostname) — $(uname -srm)"
 log "domain: $APP_DOMAIN"
 log "app dir: $APP_DIR"
-log "source: $SOURCE_TARBALL"
+if [[ -f "$SOURCE_TARBALL" ]]; then
+  log "source: tarball at $SOURCE_TARBALL"
+else
+  log "source: git clone $REPO_URL ($REPO_BRANCH)"
+fi
 
 # ---------------------------------------------------------------------
 # 1. System packages.
@@ -83,6 +93,7 @@ apt-get update -qq
 
 apt_install_if_missing ca-certificates
 apt_install_if_missing curl
+apt_install_if_missing git
 apt_install_if_missing gnupg
 apt_install_if_missing nginx
 apt_install_if_missing certbot
@@ -106,8 +117,28 @@ fi
 # ---------------------------------------------------------------------
 mkdir -p "$APP_DIR/repo" "$APP_DIR/data" "$APP_DIR/env" "$APP_DIR/secrets"
 
-log "==> extracting source into $APP_DIR/repo"
-tar -xzf "$SOURCE_TARBALL" -C "$APP_DIR/repo"
+if [[ -f "$SOURCE_TARBALL" ]]; then
+  log "==> extracting source into $APP_DIR/repo (from tarball)"
+  rm -rf "$APP_DIR/repo"
+  mkdir -p "$APP_DIR/repo"
+  tar -xzf "$SOURCE_TARBALL" -C "$APP_DIR/repo"
+else
+  # git clone / pull. If a deploy key is provisioned, use it.
+  GIT_ENV=()
+  if [[ -f "$APP_DIR/secrets/github_deploy_key" ]]; then
+    chmod 600 "$APP_DIR/secrets/github_deploy_key"
+    GIT_ENV+=(GIT_SSH_COMMAND="ssh -i $APP_DIR/secrets/github_deploy_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes")
+  fi
+  if [[ -d "$APP_DIR/repo/.git" ]]; then
+    log "==> updating $APP_DIR/repo (git fetch + checkout $REPO_BRANCH)"
+    env "${GIT_ENV[@]}" git -C "$APP_DIR/repo" fetch --depth 1 origin "$REPO_BRANCH"
+    git -C "$APP_DIR/repo" checkout -B "$REPO_BRANCH" FETCH_HEAD
+  else
+    log "==> cloning $REPO_URL@$REPO_BRANCH into $APP_DIR/repo"
+    rm -rf "$APP_DIR/repo"
+    env "${GIT_ENV[@]}" git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR/repo"
+  fi
+fi
 
 # ---------------------------------------------------------------------
 # 3. Generate / preserve secrets.

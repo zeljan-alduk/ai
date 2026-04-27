@@ -4477,3 +4477,7 @@ Out of scope (per brief):
 - Removed every GitHub link from the marketing surface, docs surface, and api docs (repo is going private). Tests updated to assert no github.com URLs render.
 - Replaced FSL-1.1-ALv2 with proprietary "ALDO AI Proprietary Software License"; rewrote /docs/license to match.
 - Added scripts/vps-bootstrap.sh: self-contained installer that lays out /opt/aldo-ai, brings up postgres+api+web via docker compose on internal ports, and configures nginx + Lets Encrypt for ai.aldo.tech without touching pre-existing vhosts (slovenia-transit.aldo.tech preserved by a managed-by marker check).
+
+2026-04-27 — Engineer (Claude) — bootstrap can git-clone now
+- vps-bootstrap.sh now defaults to `git clone https://github.com/zeljan-alduk/ai.git` (REPO_URL/REPO_BRANCH overrideable). Tarball at /tmp/aldo-ai.tar.gz remains a fallback. Drop a deploy key at /opt/aldo-ai/secrets/github_deploy_key for private-repo access.
+- Removes the scp step from the happy path; user just scps the bootstrap script and runs it.
