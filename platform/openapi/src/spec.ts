@@ -26,6 +26,7 @@ import { registerBillingOperations } from './operations/billing.js';
 import { registerCacheOperations } from './operations/cache.js';
 import { registerDashboardOperations } from './operations/dashboards.js';
 import { registerDatasetOperations, registerEvaluatorOperations } from './operations/datasets.js';
+import { registerDomainOperations } from './operations/domains.js';
 import { registerEvalOperations } from './operations/eval.js';
 import { registerHealthOperations } from './operations/health.js';
 import { registerIntegrationOperations } from './operations/integrations.js';
@@ -33,6 +34,8 @@ import { registerModelOperations } from './operations/models.js';
 import { registerNotificationOperations } from './operations/notifications.js';
 import { registerObservabilityOperations } from './operations/observability.js';
 import { registerPlaygroundOperations } from './operations/playground.js';
+// Wave-16D — quotas + custom domains.
+import { registerQuotaOperations } from './operations/quotas.js';
 import { registerRunOperations } from './operations/runs.js';
 import { registerSecretOperations } from './operations/secrets.js';
 import { registerShareOperations } from './operations/shares.js';
@@ -108,6 +111,9 @@ export function buildOpenApiSpec(opts: BuildSpecOptions): OpenApiDocument {
   registerAdminOperations(registry);
   // Wave-16C — LLM-response cache.
   registerCacheOperations(registry);
+  // Wave-16D — per-tenant quotas + custom domains.
+  registerQuotaOperations(registry);
+  registerDomainOperations(registry);
 
   // 3. Resolve everything.
   const components = registry.buildComponentSchemas();

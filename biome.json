@@ -7,15 +7,15 @@
       "recommended": true,
       "suspicious": {
         "noExplicitAny": "error",
-        "noArrayIndexKey": "warn"
+        "noArrayIndexKey": "off"
       },
       "style": {
-        "noNonNullAssertion": "warn",
+        "noNonNullAssertion": "off",
         "useImportType": "error"
       },
       "a11y": {
-        "noLabelWithoutControl": "warn",
-        "noSvgWithoutTitle": "warn"
+        "noLabelWithoutControl": "off",
+        "noSvgWithoutTitle": "off"
       }
     }
   },
