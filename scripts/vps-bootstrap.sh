@@ -100,6 +100,10 @@ apt_install_if_missing certbot
 apt_install_if_missing python3-certbot-nginx
 apt_install_if_missing openssl
 
+# nginx sometimes ships disabled (especially with noninteractive apt).
+# Make sure it's enabled + running before we try to reload it later.
+systemctl enable --now nginx
+
 # Docker via the official convenience script if missing.
 if ! command -v docker >/dev/null 2>&1; then
   log "installing docker via get.docker.com"
@@ -303,7 +307,13 @@ ln -sf "$NGINX_SITE" "$NGINX_LINK"
 
 log "==> nginx -t"
 nginx -t
-systemctl reload nginx
+# Reload if running, else start. Survives a fresh-install where nginx
+# isn't active yet.
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+else
+  systemctl start nginx
+fi
 
 # ---------------------------------------------------------------------
 # 7. Let's Encrypt — only if we don't already have a cert for this host.
