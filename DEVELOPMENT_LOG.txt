@@ -4515,3 +4515,8 @@ Out of scope (per brief):
 - vps-bootstrap.sh now delegates compose generation to it.
 - vps-deploy.sh now calls it on every deploy AFTER git fetch, so compose-shape changes (e.g., the just-introduced web Dockerfile build) ship via the webhook without needing a bootstrap rerun.
 - deploy-vps.yml smoke section now checks API /health, homepage (200/30x), and /_admin/health — fails loudly if any is broken instead of green-on-API-only.
+
+2026-04-27 — Engineer (Claude) — VPS go-live ✓
+- ai.aldo.tech serving from the VPS via the existing transit-nginx edge proxy (untouched slovenia-transit). API healthy, web serving, deploy webhook reachable.
+- End-to-end auto-deploy live: push to claude/ai-agent-orchestrator-hAmzy or main -> deploy-vps GitHub Actions workflow -> POST /_admin/deploy with VPS_DEPLOY_TOKEN -> vps-deploy.sh -> git fetch + emit compose + docker compose up -d --build -> public smoke (api /health + homepage + /_admin/health). Operator no longer in the loop.
+- Remaining: decommission Fly (apps/api/fly.toml + .github/workflows/deploy-api.yml) and Vercel after a cool-off window.
