@@ -83,17 +83,47 @@ jobs:
           cat /tmp/deploy.json
           echo
 
-      - name: Public health check
+      - name: Public smoke (API health + homepage + webhook)
         run: |
-          # Give the API a few seconds; the webhook only returns after
-          # the deploy script's own /health wait, so this should already
-          # be green, but a public probe verifies the edge proxy too.
+          set -e
+          fail=0
+
+          # API: webhook only returns after its own /health wait, but a
+          # public probe verifies the edge proxy too.
           for i in 1 2 3 4 5 6; do
-            if curl -sSf --max-time 10 https://ai.aldo.tech/health > /tmp/pub.json; then
-              cat /tmp/pub.json; echo
-              exit 0
-            fi
+            code=$(curl -s -o /tmp/pub.json -w '%{http_code}' --max-time 10 https://ai.aldo.tech/health || echo 000)
+            if [[ "$code" == "200" ]]; then break; fi
             sleep 5
           done
-          echo "::error::https://ai.aldo.tech/health did not become healthy"
-          exit 1
+          if [[ "$code" != "200" ]]; then
+            echo "::error::API /health returned $code"
+            cat /tmp/pub.json || true
+            fail=1
+          else
+            echo "✓ /health -> 200"
+          fi
+
+          # Web: homepage should return 200 or 307 (redirect to /signup
+          # or similar). Anything 5xx means web is broken.
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/home.html -w '%{http_code}' --max-time 15 https://ai.aldo.tech/ || echo 000)
+            case "$code" in
+              200|301|302|307|308) break;;
+            esac
+            sleep 5
+          done
+          case "$code" in
+            200|301|302|307|308) echo "✓ / -> $code";;
+            *) echo "::error::homepage returned $code"; fail=1;;
+          esac
+
+          # Webhook liveness (unauthenticated /health endpoint).
+          code=$(curl -s -o /tmp/admin.json -w '%{http_code}' --max-time 10 https://ai.aldo.tech/_admin/health || echo 000)
+          if [[ "$code" == "200" ]]; then
+            echo "✓ /_admin/health -> 200 ($(cat /tmp/admin.json))"
+          else
+            echo "::error::/_admin/health returned $code"
+            fail=1
+          fi
+
+          exit $fail

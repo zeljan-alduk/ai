@@ -4509,3 +4509,9 @@ Out of scope (per brief):
 - New apps/web/Dockerfile mirrors apps/api/Dockerfile (deps -> sources -> build -> runtime). pnpm install runs --prod=false --filter @aldo-ai/web... once at image build time; the runtime stage just `pnpm start`.
 - vps-bootstrap.sh now emits docker-compose.yml with `build: { context: repo, dockerfile: apps/web/Dockerfile }` for aldo-web (no more host volume + runtime install).
 - Future webhook deploys do `docker compose up -d --build` against this compose; layer cache means only changed layers rebuild.
+
+2026-04-27 — Engineer (Claude) — compose-emit shared by bootstrap+deploy
+- New scripts/vps-emit-compose.sh: standalone, idempotent template renderer for /opt/aldo-ai/docker-compose.yml. Reads secrets, detects edge proxy network, URL-encodes DB password.
+- vps-bootstrap.sh now delegates compose generation to it.
+- vps-deploy.sh now calls it on every deploy AFTER git fetch, so compose-shape changes (e.g., the just-introduced web Dockerfile build) ship via the webhook without needing a bootstrap rerun.
+- deploy-vps.yml smoke section now checks API /health, homepage (200/30x), and /_admin/health — fails loudly if any is broken instead of green-on-API-only.

@@ -45,6 +45,14 @@ git -C "$APP_DIR/repo" clean -fd
 SHA=$(git -C "$APP_DIR/repo" rev-parse --short HEAD)
 log "    HEAD now $SHA"
 
+# Re-emit docker-compose.yml from the pulled source so compose-shape
+# changes (e.g. switching aldo-web from runtime install to a Dockerfile
+# build) ship via this webhook deploy without needing a full bootstrap
+# rerun. The emit script is idempotent.
+log "==> regenerating docker-compose.yml"
+chmod +x "$APP_DIR/repo/scripts/vps-emit-compose.sh"
+APP_DIR="$APP_DIR" bash "$APP_DIR/repo/scripts/vps-emit-compose.sh"
+
 log "==> docker compose up -d --build"
 cd "$APP_DIR"
 docker compose up -d --build

@@ -253,111 +253,18 @@ POSTGRES_PASSWORD=$(cat "$APP_DIR/secrets/postgres_password")
 JWT_SECRET=$(cat "$APP_DIR/secrets/jwt_secret")
 SECRETS_MASTER_KEY=$(cat "$APP_DIR/secrets/secrets_master_key")
 
-# URL-encode the postgres password for use in DATABASE_URL.
-# `openssl rand -base64 32` can produce '+', '/', and '=' — '/' in
-# particular terminates the URL authority component and makes pg parse
-# the host as 'aldo' instead of 'aldo-postgres'. Encode all userinfo
-# specials defensively.
-POSTGRES_PASSWORD_URL=$(printf '%s' "$POSTGRES_PASSWORD" \
-  | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(),safe=''))")
-
 # ---------------------------------------------------------------------
-# 4. docker compose stack.
-#
-# When an external edge proxy is present, attach aldo-api and aldo-web
-# to that proxy's docker network so it can reach them by container name
-# (e.g. "proxy_pass http://aldo-web:8080"). aldo-postgres stays on the
-# private aldo-internal net only.
+# 4. docker compose stack — delegate to scripts/vps-emit-compose.sh so
+# the same template is used by both the bootstrap and webhook deploys.
 # ---------------------------------------------------------------------
-COMPOSE_API_NETWORKS="      - aldo-internal"
-COMPOSE_WEB_NETWORKS="      - aldo-internal"
-COMPOSE_EXTERNAL_NETWORK_BLOCK=""
-COMPOSE_API_PORTS="    ports:
-      - \"127.0.0.1:${API_INTERNAL_PORT}:8080\""
-COMPOSE_WEB_PORTS="    ports:
-      - \"127.0.0.1:${WEB_INTERNAL_PORT}:8080\""
-
-if [[ "$EDGE_STRATEGY" == "external" ]]; then
-  COMPOSE_API_NETWORKS="      - aldo-internal
-      - aldo-edge"
-  COMPOSE_WEB_NETWORKS="      - aldo-internal
-      - aldo-edge"
-  # No host port mapping needed when reached via the shared docker net.
-  # Keep one for /health smoke-tests from the host.
-  COMPOSE_API_PORTS="    ports:
-      - \"127.0.0.1:${API_INTERNAL_PORT}:8080\""
-  COMPOSE_WEB_PORTS="    ports:
-      - \"127.0.0.1:${WEB_INTERNAL_PORT}:8080\""
-  COMPOSE_EXTERNAL_NETWORK_BLOCK="
-  aldo-edge:
-    name: ${EDGE_PROXY_NETWORK}
-    external: true"
-fi
-
-cat > "$APP_DIR/docker-compose.yml" <<COMPOSE
-services:
-  aldo-postgres:
-    image: postgres:16-alpine
-    container_name: aldo-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: aldo
-      POSTGRES_USER: aldo
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-    volumes:
-      - ${APP_DIR}/data/postgres:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:${POSTGRES_INTERNAL_PORT}:5432"
-    networks:
-      - aldo-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aldo -d aldo"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  aldo-api:
-    build:
-      context: ${APP_DIR}/repo
-      dockerfile: apps/api/Dockerfile
-    container_name: aldo-api
-    restart: unless-stopped
-    depends_on:
-      aldo-postgres:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: "8080"
-      HOST: "0.0.0.0"
-      DATABASE_URL: "postgresql://aldo:${POSTGRES_PASSWORD_URL}@aldo-postgres:5432/aldo?sslmode=disable"
-      ALDO_JWT_SECRET: "${JWT_SECRET}"
-      ALDO_SECRETS_MASTER_KEY: "${SECRETS_MASTER_KEY}"
-      CORS_ORIGINS: "https://${APP_DOMAIN}"
-      ALDO_LOCAL_DISCOVERY: "none"
-${COMPOSE_API_PORTS}
-    networks:
-${COMPOSE_API_NETWORKS}
-
-  aldo-web:
-    build:
-      context: ${APP_DIR}/repo
-      dockerfile: apps/web/Dockerfile
-    container_name: aldo-web
-    restart: unless-stopped
-    depends_on:
-      aldo-api:
-        condition: service_started
-    environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_API_BASE: "https://${APP_DOMAIN}"
-${COMPOSE_WEB_PORTS}
-    networks:
-${COMPOSE_WEB_NETWORKS}
-
-networks:
-  aldo-internal:
-    driver: bridge${COMPOSE_EXTERNAL_NETWORK_BLOCK}
-COMPOSE
+chmod +x "$APP_DIR/repo/scripts/vps-emit-compose.sh"
+APP_DIR="$APP_DIR" \
+APP_DOMAIN="$APP_DOMAIN" \
+API_INTERNAL_PORT="$API_INTERNAL_PORT" \
+WEB_INTERNAL_PORT="$WEB_INTERNAL_PORT" \
+POSTGRES_INTERNAL_PORT="$POSTGRES_INTERNAL_PORT" \
+EDGE_STRATEGY="$EDGE_STRATEGY" \
+  bash "$APP_DIR/repo/scripts/vps-emit-compose.sh"
 
 # ---------------------------------------------------------------------
 # 5. Bring up the stack.
