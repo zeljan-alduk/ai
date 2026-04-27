@@ -26,12 +26,8 @@ import { DocsFeedback } from '@/components/docs/feedback';
 import { DocsToc } from '@/components/docs/toc';
 import { listAllDocPages, listGeneratedApiPages, loadDoc } from '@/lib/docs/loader';
 import { type DocPage, type GeneratedApiPage, STATIC_DOC_PAGES } from '@/lib/docs/registry';
-import { ExternalLink } from 'lucide-react';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-
-const GITHUB_BLOB_BASE = 'https://github.com/zeljan-alduk/ai/blob/main';
 
 interface DocsPageProps {
   readonly params: Promise<{ slug: string[] }>;
@@ -96,18 +92,8 @@ export default async function DocsCatchAll({ params }: DocsPageProps) {
           dangerouslySetInnerHTML={{ __html: loaded.html }}
         />
         <footer className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
-          <Link
-            href={`${GITHUB_BLOB_BASE}/${loaded.sourcePath
-              .split('/')
-              .map((seg) => encodeURIComponent(seg))
-              .join('/')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
-          >
-            Edit on GitHub
-            <ExternalLink aria-hidden="true" className="h-3 w-3" />
-          </Link>
+          {/* "Edit on GitHub" link removed — repository is private. */}
+          <span className="text-xs text-fg-muted">Source: {loaded.sourcePath}</span>
           <DocsFeedback path={`/docs/${slugStr}`} />
         </footer>
       </article>

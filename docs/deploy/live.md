@@ -9,11 +9,11 @@ GitHub Actions).
 
 | Surface | URL |
 |---|---|
-| **Web (Vercel)** | <https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app> |
-| Web alias | <https://aldo-ai-web-git-claude-ai-age-c0b147-zeljanalduk-3047s-projects.vercel.app> |
-| **API (Fly.io)** | <https://aldo-ai-api.fly.dev> |
-| API health | <https://aldo-ai-api.fly.dev/health> |
-| API models | <https://aldo-ai-api.fly.dev/v1/models> |
+| **Web (Vercel)** | <https://ai.aldo.tech> |
+| Web alias | <https://ai.aldo.tech> |
+| **API (Fly.io)** | <https://ai.aldo.tech> |
+| API health | <https://ai.aldo.tech/health> |
+| API models | <https://ai.aldo.tech/v1/models> |
 | Postgres (Neon) | `ep-tiny-sea-aei2ge4e-pooler.c-2.us-east-2.aws.neon.tech` (private) |
 | Image registry | `registry.fly.io/aldo-ai-api:deployment-...` |
 
@@ -38,7 +38,7 @@ stable production URL, change the project's production branch to
        (Next.js + pnpm)          (remote-only)
             │                     │
             ▼                     ▼
-       aldo-ai-7pogem9sm        aldo-ai-api.fly.dev
+       aldo-ai-7pogem9sm        ai.aldo.tech
        .vercel.app               (Hono + tsx)
             │                     │
             └────────────fetch────┘
@@ -54,7 +54,7 @@ stable production URL, change the project's production branch to
    branch → preview deploy at `aldo-ai-<hash>-zeljanalduk-3047s-projects.vercel.app`.
    `rootDirectory=apps/web`, `framework=nextjs`, all install/build/output
    commands cleared (Vercel auto-detects pnpm + Next.js).
-   `NEXT_PUBLIC_API_BASE=https://aldo-ai-api.fly.dev` set for production,
+   `NEXT_PUBLIC_API_BASE=https://ai.aldo.tech` set for production,
    preview, and development targets. Deployment SSO protection
    disabled so URLs are publicly reachable.
 2. **Fly.io**: GitHub Actions workflow `.github/workflows/deploy-api.yml`,
@@ -116,7 +116,7 @@ The four real bugs we fixed this session:
    --app aldo-ai-api GROQ_API_KEY=... GEMINI_API_KEY=...` flips the
    `available` flag on those models in `/v1/models`.
 4. **Tighten the API's CORS** to match the actual Vercel preview URL
-   pattern (currently allows `https://aldo-ai.vercel.app` +
+   pattern (currently allows `https://ai.aldo.tech` +
    `http://localhost:3000`).
 
 ## What's NOT yet wired

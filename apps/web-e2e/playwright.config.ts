@@ -3,9 +3,9 @@
  *
  * Black-box e2e against deployed infra:
  *   - `E2E_BASE_URL`     — required, the web app URL (e.g. the live Vercel
- *                          alias https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app).
+ *                          alias https://ai.aldo.tech).
  *   - `E2E_API_BASE_URL` — required for tests that hit the API directly
- *                          (e.g. https://aldo-ai-api.fly.dev). Falls back
+ *                          (e.g. https://ai.aldo.tech). Falls back
  *                          to E2E_BASE_URL only if not set, but the health
  *                          spec will fail fast if it's wrong.
  *   - `E2E_ALLOW_WRITES` — `"true"` to enable mutation tests (POST/DELETE
@@ -23,7 +23,7 @@ import { type PlaywrightTestConfig, defineConfig, devices } from '@playwright/te
 const baseURL = process.env.E2E_BASE_URL;
 if (!baseURL) {
   throw new Error(
-    'E2E_BASE_URL is required (e.g. https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app). ' +
+    'E2E_BASE_URL is required (e.g. https://ai.aldo.tech). ' +
       'Set it in your shell or via the workflow input.',
   );
 }

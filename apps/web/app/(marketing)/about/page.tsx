@@ -3,15 +3,14 @@
  *
  * One page. Honest framing of why ALDO AI exists, who builds it, and
  * how it differs from "build your own LangChain stack". No fake
- * origin story; no implied funding. Links to the GitHub repo, the
- * `agency/` template concept, and the FSL license rationale.
+ * origin story; no implied funding. References the `agency/` template
+ * concept and the proprietary licensing model.
  */
 
 import Link from 'next/link';
 
-const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
-const AGENCY_FOLDER_URL = `${GITHUB_URL}/tree/main/agency`;
-const FSL_URL = 'https://fsl.software';
+// GitHub link intentionally absent — repository is private.
+const AGENCY_DOC_URL = '/docs/concepts/agency';
 
 export default function AboutPage() {
   return (
@@ -72,9 +71,9 @@ export default function AboutPage() {
         <h2 className="mt-10 text-xl font-semibold text-slate-900">The reference agency</h2>
         <p>
           Every new tenant is seeded with the same{' '}
-          <a href={AGENCY_FOLDER_URL} target="_blank" rel="noreferrer">
+          <Link href={AGENCY_DOC_URL}>
             <code>agency/</code>
-          </a>{' '}
+          </Link>{' '}
           folder we use internally — principal, architect, engineers, reviewers. It is the unit test
           for every platform feature: if a feature does not help that agency ship, we do not ship
           it.
@@ -82,24 +81,18 @@ export default function AboutPage() {
 
         <h2 className="mt-10 text-xl font-semibold text-slate-900">License</h2>
         <p>
-          ALDO AI is source-available under{' '}
-          <a href={FSL_URL} target="_blank" rel="noreferrer">
-            FSL-1.1-ALv2
-          </a>
-          . You can read, fork, run, and modify the code today. After two years each released
-          version converts to Apache-2.0. The non-compete window is the only thing standing between
-          us and a cloned hosted offering — we think that is a fair trade for shipping the source.
+          ALDO AI is proprietary. Access is granted to paying customers and design partners under
+          our standard terms of service. The hosted product, the SDKs, and the integration
+          surfaces are all available through the trial — see{' '}
+          <Link href="/pricing">Pricing</Link>.
         </p>
 
         <h2 className="mt-10 text-xl font-semibold text-slate-900">Get involved</h2>
         <p>
-          The codebase is{' '}
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-            on GitHub
-          </a>
-          . If you want a deeper look before you commit, the{' '}
-          <Link href="/design-partner">design-partner program</Link> is the front door — a small
-          group of teams getting hands-on access while we shake out the rough edges.
+          The fastest way to talk to us is the{' '}
+          <Link href="/design-partner">design-partner program</Link> — a small group of teams
+          getting hands-on access while we shake out the rough edges. Or just{' '}
+          <a href="mailto:info@aldo.tech">drop us a line</a>.
         </p>
       </div>
     </article>

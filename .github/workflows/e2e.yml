@@ -22,11 +22,11 @@ on:
       e2e_base_url:
         description: 'Web app base URL (overrides default)'
         required: false
-        default: 'https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app'
+        default: 'https://ai.aldo.tech'
       e2e_api_base_url:
         description: 'API base URL (overrides default)'
         required: false
-        default: 'https://aldo-ai-api.fly.dev'
+        default: 'https://ai.aldo.tech'
       e2e_allow_writes:
         description: 'Allow mutation tests (true/false). Never use against prod.'
         required: false
@@ -91,8 +91,8 @@ jobs:
       # Defaults point at production. workflow_dispatch can override
       # both via inputs; the secrets CRUD path stays disabled unless
       # the operator explicitly opts in.
-      E2E_BASE_URL: ${{ github.event.inputs.e2e_base_url || 'https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app' }}
-      E2E_API_BASE_URL: ${{ github.event.inputs.e2e_api_base_url || 'https://aldo-ai-api.fly.dev' }}
+      E2E_BASE_URL: ${{ github.event.inputs.e2e_base_url || 'https://ai.aldo.tech' }}
+      E2E_API_BASE_URL: ${{ github.event.inputs.e2e_api_base_url || 'https://ai.aldo.tech' }}
       E2E_ALLOW_WRITES: ${{ github.event.inputs.e2e_allow_writes || 'false' }}
     steps:
       - uses: actions/checkout@v4

@@ -21,8 +21,8 @@ import { DomainActions } from './domain-actions';
 
 export const dynamic = 'force-dynamic';
 
-const FLY_API_HOST = 'aldo-ai-api.fly.dev';
-const VERCEL_WEB_HOST = 'aldo-ai-web.vercel.app';
+const FLY_API_HOST = 'ai.aldo.tech';
+const VERCEL_WEB_HOST = 'ai.aldo.tech';
 
 export default async function DomainsPage() {
   let listed: Awaited<ReturnType<typeof listDomains>> | null = null;

@@ -1,6 +1,6 @@
 # aldo-ai — Python SDK
 
-The official Python SDK for the [ALDO AI](https://aldo-ai-api.fly.dev)
+The official Python SDK for the [ALDO AI](https://ai.aldo.tech)
 platform. LLM-agnostic by construction: the SDK never references a
 provider name. You declare a capability class + privacy tier; the
 platform's gateway picks a model.
@@ -24,7 +24,7 @@ pip install aldo-ai
 from aldo_ai import AldoClient
 
 # Sign up (creates a tenant + user + bearer token)
-client = AldoClient(api_base="https://aldo-ai-api.fly.dev")
+client = AldoClient(api_base="https://ai.aldo.tech")
 session = client.auth.signup(
     email="you@example.com",
     password="hunter2hunter2",
@@ -34,7 +34,7 @@ print("token:", session.token, "tenant:", session.tenant.slug)
 
 # Or, if you already have a token:
 client = AldoClient(
-    api_base="https://aldo-ai-api.fly.dev",
+    api_base="https://ai.aldo.tech",
     token="your-bearer-token",
 )
 

@@ -29,18 +29,15 @@ import {
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
 import type { Theme } from '@/lib/theme';
-import { Github, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-
-const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
 
 const NAV_LINKS: ReadonlyArray<{ href: string; label: string; external?: boolean }> = [
   { href: '/#features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/security', label: 'Security' },
   { href: '/docs', label: 'Docs' },
-  { href: GITHUB_URL, label: 'GitHub', external: true },
 ];
 
 export interface MarketingTopNavProps {

@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 
-const URL = 'https://aldo-ai-web-git-claude-ai-age-c0b147-zeljanalduk-3047s-projects.vercel.app';
-const API = 'https://aldo-ai-api.fly.dev';
+const URL = 'https://ai.aldo.tech';
+const API = 'https://ai.aldo.tech';
 const EMAIL = process.env.EMAIL ?? 'admin@aldo.tech';
 const PASS = process.env.PASS;
 

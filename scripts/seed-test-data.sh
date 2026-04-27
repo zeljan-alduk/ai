@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Seed the live API with test data so the web UI has something to show.
 # Usage:
-#   API=https://aldo-ai-api.fly.dev EMAIL=admin@aldo.tech PASS='...' bash scripts/seed-test-data.sh
+#   API=https://ai.aldo.tech EMAIL=admin@aldo.tech PASS='...' bash scripts/seed-test-data.sh
 set -euo pipefail
-API="${API:-https://aldo-ai-api.fly.dev}"
+API="${API:-https://ai.aldo.tech}"
 EMAIL="${EMAIL:?EMAIL required}"
 PASS="${PASS:?PASS required}"
 

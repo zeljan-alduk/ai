@@ -11,8 +11,6 @@
  * warrants.
  */
 
-const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
-const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`;
 const SECURITY_EMAIL = 'info@aldo.tech';
 
 interface Section {
@@ -145,26 +143,12 @@ export default function SecurityPage() {
           before public disclosure; we will credit you in the release notes.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          The full source is on{' '}
-          <a
-            className="underline hover:text-slate-900"
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub
-          </a>{' '}
-          — license at{' '}
-          <a
-            className="underline hover:text-slate-900"
-            href={LICENSE_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            FSL-1.1-ALv2
+          ALDO AI is a proprietary hosted product; reserve the email address above for
+          security-impacting reports. For non-sensitive questions, reach us at{' '}
+          <a className="underline hover:text-slate-900" href="mailto:info@aldo.tech">
+            info@aldo.tech
           </a>
-          . Please file public, non-sensitive bugs as GitHub issues; reserve the email address for
-          security-impacting reports.
+          .
         </p>
       </section>
     </article>

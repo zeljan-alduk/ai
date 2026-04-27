@@ -18,7 +18,7 @@ from aldo_ai.errors import AldoAPIError
 
 
 def main() -> int:
-    api_base = os.environ.get("ALDO_API_BASE", "https://aldo-ai-api.fly.dev")
+    api_base = os.environ.get("ALDO_API_BASE", "https://ai.aldo.tech")
     token = os.environ.get("ALDO_TOKEN")
     suite = os.environ.get("SUITE", "demo")
     dataset_id = os.environ.get("DATASET_ID")

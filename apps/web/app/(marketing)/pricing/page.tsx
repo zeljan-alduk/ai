@@ -93,7 +93,7 @@ const FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: 'Can I self-host?',
-    a: 'Self-host is part of Enterprise. Source-available under FSL-1.1-ALv2 means you can already inspect, fork, and run the code; Enterprise adds a commercial agreement, dedicated support, and the bits that the FSL non-compete restricts.',
+    a: 'Self-host is part of Enterprise. We ship a packaged build to your infrastructure with a commercial agreement, dedicated support, and an SLA — talk to us via the design-partner program for hands-on access today.',
   },
 ];
 

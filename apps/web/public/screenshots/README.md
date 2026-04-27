@@ -13,7 +13,7 @@ variants) with:
 
 ```bash
 E2E_BASE_URL=https://preview-xyz.vercel.app \
-E2E_API_BASE_URL=https://aldo-ai-api.fly.dev \
+E2E_API_BASE_URL=https://ai.aldo.tech \
 ALDO_SCREENSHOT_PASSWORD=… \
   pnpm --filter @aldo-ai/web exec tsx scripts/capture-screenshots.ts
 ```

@@ -10,7 +10,7 @@ Quickstart::
     from aldo_ai import AldoClient
 
     client = AldoClient(
-        api_base="https://aldo-ai-api.fly.dev",
+        api_base="https://ai.aldo.tech",
         token="your-bearer-token",
     )
     for run in client.runs.list_all():

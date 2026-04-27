@@ -6,7 +6,7 @@ running URL on free tiers. Should take ~30 minutes.
 You'll end up with:
 
 - **Web** at `https://<your-project>.vercel.app` (Vercel free tier)
-- **API** at `https://aldo-ai-api.fly.dev` (Fly.io free tier)
+- **API** at `https://ai.aldo.tech` (Fly.io free tier)
 - **Postgres** on Neon (free tier, with branches per PR)
 - **Trace + replay artifacts** on Cloudflare R2 (free tier, no egress fees)
 
@@ -48,7 +48,7 @@ fly launch --copy-config --no-deploy
 
 fly secrets set \
   DATABASE_URL="postgres://..." \
-  CORS_ORIGINS="https://aldo-ai.vercel.app,https://aldo-ai-pr-*.vercel.app"
+  CORS_ORIGINS="https://ai.aldo.tech,https://aldo-ai-pr-*.vercel.app"
 
 # Optional provider keys:
 fly secrets set \
@@ -60,7 +60,7 @@ fly secrets set \
 fly deploy
 ```
 
-Visit `https://aldo-ai-api.fly.dev/health` — should return
+Visit `https://ai.aldo.tech/health` — should return
 `{"ok":true,"version":"0.0.0"}`.
 
 ### Wire the Fly.io GitHub Action (optional but recommended)
@@ -80,7 +80,7 @@ So future deploys happen on every push to `main`:
 2. **Framework preset**: Next.js (auto-detected).
 3. **Root directory**: `apps/web`.
 4. **Environment variables**:
-   - `NEXT_PUBLIC_API_BASE` → `https://aldo-ai-api.fly.dev`
+   - `NEXT_PUBLIC_API_BASE` → `https://ai.aldo.tech`
 5. Click **Deploy**.
 
 Vercel auto-deploys on every push to `main` and creates a preview URL
@@ -89,11 +89,11 @@ integration is enough.
 
 ### Update the API CORS allowlist
 
-Once Vercel gives you a project URL (like `https://aldo-ai.vercel.app`),
+Once Vercel gives you a project URL (like `https://ai.aldo.tech`),
 make sure your `CORS_ORIGINS` Fly secret includes it:
 
 ```bash
-fly secrets set CORS_ORIGINS="https://aldo-ai.vercel.app,https://aldo-ai-pr-*.vercel.app"
+fly secrets set CORS_ORIGINS="https://ai.aldo.tech,https://aldo-ai-pr-*.vercel.app"
 ```
 
 (The PR preview URLs use predictable patterns like
@@ -104,14 +104,14 @@ or set `CORS_ORIGINS=*` for development only.)
 ## 4. Verify end-to-end
 
 ```bash
-curl -s https://aldo-ai-api.fly.dev/health
+curl -s https://ai.aldo.tech/health
 # {"ok":true,"version":"0.0.0"}
 
-curl -s https://aldo-ai-api.fly.dev/v1/models | head -c 200
+curl -s https://ai.aldo.tech/v1/models | head -c 200
 # {"models":[{"id":"claude-opus-4-7",...}]}
 ```
 
-Open `https://aldo-ai.vercel.app` in your browser. You should see the
+Open `https://ai.aldo.tech` in your browser. You should see the
 Runs page (empty list with `No runs yet`). Click **Models** in the
 sidebar — you should see the model registry populated from the
 gateway fixtures, with `available` flipping to `true` for any

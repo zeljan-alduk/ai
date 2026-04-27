@@ -8,7 +8,6 @@
 
 import Link from 'next/link';
 
-const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
 const CONTACT_EMAIL = 'info@aldo.tech';
 
 export function MarketingFooter() {
@@ -35,15 +34,7 @@ export function MarketingFooter() {
           <Link className="transition-colors hover:text-slate-900" href="/design-partner">
             Design partner
           </Link>
-          <span className="text-slate-400">License: FSL-1.1-ALv2</span>
-          <a
-            className="transition-colors hover:text-slate-900"
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub
-          </a>
+          <span className="text-slate-400">© ALDO TECH LABS</span>
           <a className="transition-colors hover:text-slate-900" href={`mailto:${CONTACT_EMAIL}`}>
             Contact
           </a>

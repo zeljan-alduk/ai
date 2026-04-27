@@ -5,7 +5,7 @@
  * canary that tells us whether anything else has a chance of working.
  *
  * Required env:
- *   - `E2E_API_BASE_URL` — the API origin, e.g. https://aldo-ai-api.fly.dev.
+ *   - `E2E_API_BASE_URL` — the API origin, e.g. https://ai.aldo.tech.
  *     If missing, falls back to `E2E_BASE_URL` (which usually points at
  *     the web app and will fail loudly — that's the intent).
  *

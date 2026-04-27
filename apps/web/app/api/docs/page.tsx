@@ -30,7 +30,6 @@ const SWAGGER_UI_VERSION = '5.17.14';
 const SWAGGER_UI_CSS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui.css`;
 const SWAGGER_UI_JS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-bundle.js`;
 const SWAGGER_UI_PRESET_JS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-standalone-preset.js`;
-const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
 
 export const metadata: Metadata = {
   title: 'ALDO AI API — Swagger UI',
@@ -121,7 +120,7 @@ export default function ApiDocsPage() {
         <h2>Spec unavailable</h2>
         <p>
           The Swagger UI bundle could not be loaded, or the API spec at <code>{url}</code> is not
-          reachable. Source on <a href={GITHUB_URL}>GitHub</a>, or fetch directly with{' '}
+          reachable. Fetch directly with{' '}
           <code>curl {url}</code>.
         </p>
       </div>

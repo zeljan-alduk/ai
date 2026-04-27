@@ -24,7 +24,7 @@ kill_timeout = "10s"
   PORT = "8080"
   HOST = "0.0.0.0"
   NODE_ENV = "production"
-  CORS_ORIGINS = "https://aldo-ai.vercel.app"
+  CORS_ORIGINS = "https://ai.aldo.tech"
 
 [http_service]
   internal_port = 8080

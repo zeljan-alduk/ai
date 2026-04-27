@@ -17,15 +17,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { ExternalLink } from 'lucide-react';
-import Link from 'next/link';
 
 import { CodeTabs } from '@/components/docs/code-tabs';
 import { DocsFeedback } from '@/components/docs/feedback';
 import { renderCodeServer } from '@/lib/docs/highlight-server';
 import type { GeneratedApiPage } from '@/lib/docs/registry';
-
-const GITHUB_BLOB_BASE = 'https://github.com/zeljan-alduk/ai/blob/main';
 
 interface EndpointSpec {
   readonly slug: string;
@@ -170,15 +166,8 @@ export async function ApiEndpointPage({ page }: ApiEndpointPageProps) {
         ) : null}
 
         <footer className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
-          <Link
-            href={`${GITHUB_BLOB_BASE}/platform/api-contract/src/${spec.contractFile}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
-          >
-            View contract source
-            <ExternalLink aria-hidden="true" className="h-3 w-3" />
-          </Link>
+          {/* "View contract source" link removed — repository is private. */}
+          <span className="text-xs text-fg-muted">Contract: {spec.contractFile}</span>
           <DocsFeedback path={`/docs/${page.slug}`} />
         </footer>
       </article>

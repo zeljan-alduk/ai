@@ -206,7 +206,7 @@ export function buildOpenApiSpec(opts: BuildSpecOptions): OpenApiDocument {
     },
     servers: [
       {
-        url: opts.productionUrl ?? 'https://aldo-ai-api.fly.dev',
+        url: opts.productionUrl ?? 'https://ai.aldo.tech',
         description: 'Production',
       },
       {

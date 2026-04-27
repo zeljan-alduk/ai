@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     import httpx
 
 
-DEFAULT_API_BASE = os.environ.get("ALDO_API_BASE", "https://aldo-ai-api.fly.dev")
+DEFAULT_API_BASE = os.environ.get("ALDO_API_BASE", "https://ai.aldo.tech")
 
 
 class AldoClient:
@@ -54,7 +54,7 @@ class AldoClient:
 
     Example::
 
-        client = AldoClient(api_base="https://aldo-ai-api.fly.dev",
+        client = AldoClient(api_base="https://ai.aldo.tech",
                              token="bearer-token")
         for run in client.runs.list_all():
             print(run.id, run.agent_name, run.last_model)

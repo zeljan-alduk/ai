@@ -15,7 +15,7 @@ from aldo_ai import AldoClient, AldoAPIError
 
 
 def main() -> int:
-    api_base = os.environ.get("ALDO_API_BASE", "https://aldo-ai-api.fly.dev")
+    api_base = os.environ.get("ALDO_API_BASE", "https://ai.aldo.tech")
     token = os.environ.get("ALDO_TOKEN")
 
     if not token:

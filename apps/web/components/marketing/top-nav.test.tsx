@@ -36,11 +36,10 @@ describe('MarketingTopNav', () => {
     expect(html).toContain('href="/signup"');
   });
 
-  it('opens the GitHub link in a new tab with rel=noreferrer', () => {
+  it('renders only first-party nav links (no external/GitHub link)', () => {
     const html = render();
-    expect(html).toContain('href="https://github.com/zeljan-alduk/ai"');
-    expect(html).toContain('target="_blank"');
-    expect(html).toContain('rel="noreferrer"');
+    expect(html).not.toContain('github.com');
+    expect(html).not.toContain('rel="noreferrer"');
   });
 
   it('renders as a <header> with the sticky-top class hooks', () => {

@@ -26,7 +26,6 @@ import type { Metadata } from 'next';
 
 const REDOC_VERSION = '2.5.0';
 const REDOC_JS = `https://cdn.jsdelivr.net/npm/redoc@${REDOC_VERSION}/bundles/redoc.standalone.js`;
-const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
 
 export const metadata: Metadata = {
   title: 'ALDO AI API — Redoc',
@@ -104,7 +103,7 @@ export default function RedocPage() {
         <h2>Spec unavailable</h2>
         <p>
           The Redoc bundle could not be loaded, or the API spec at <code>{url}</code> is not
-          reachable. Source on <a href={GITHUB_URL}>GitHub</a>, or fetch directly with{' '}
+          reachable. Fetch directly with{' '}
           <code>curl {url}</code>.
         </p>
       </div>

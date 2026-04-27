@@ -58,7 +58,7 @@
       "properties": {
         "aldoAi.apiBaseUrl": {
           "type": "string",
-          "default": "https://aldo-ai-api.fly.dev",
+          "default": "https://ai.aldo.tech",
           "description": "Base URL for the ALDO AI API."
         },
         "aldoAi.tenantSlug": {
@@ -68,7 +68,7 @@
         },
         "aldoAi.webBaseUrl": {
           "type": "string",
-          "default": "https://aldo-ai-web.vercel.app",
+          "default": "https://ai.aldo.tech",
           "description": "Base URL of the ALDO AI web app (used for 'Open run in browser')."
         }
       }

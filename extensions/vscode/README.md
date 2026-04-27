@@ -12,7 +12,7 @@ enforced by the platform, not by your extension settings.
    code --install-extension aldo-ai-vscode-0.1.0.vsix
    ```
 2. **Login**: open the command palette (Cmd-Shift-P) → "ALDO AI: Login".
-   Paste your API base URL (e.g. `https://aldo-ai-api.fly.dev`) and a
+   Paste your API base URL (e.g. `https://ai.aldo.tech`) and a
    token from `/settings/api-keys`.
 3. **Run an agent**: highlight a code snippet, then "ALDO AI: Run agent
    on selection". Pick an agent from the picker. The output panel

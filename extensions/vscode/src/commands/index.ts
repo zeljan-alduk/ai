@@ -53,7 +53,7 @@ export async function loginCommand(deps: CommandDeps): Promise<void> {
   const cfg = vscode.workspace.getConfiguration('aldoAi');
   const apiBaseUrl = await vscode.window.showInputBox({
     prompt: 'ALDO AI API base URL',
-    value: cfg.get<string>('apiBaseUrl', 'https://aldo-ai-api.fly.dev'),
+    value: cfg.get<string>('apiBaseUrl', 'https://ai.aldo.tech'),
     validateInput: (v) => (/^https?:\/\//.test(v) ? null : 'must start with http:// or https://'),
   });
   if (!apiBaseUrl) return;
@@ -151,7 +151,7 @@ export async function openRunInBrowserCommand(deps: CommandDeps, runId?: string)
   if (!id) return;
   const cfg = vscode.workspace.getConfiguration('aldoAi');
   const webBase = cfg
-    .get<string>('webBaseUrl', 'https://aldo-ai-web.vercel.app')
+    .get<string>('webBaseUrl', 'https://ai.aldo.tech')
     .replace(/\/+$/, '');
   await vscode.env.openExternal(vscode.Uri.parse(`${webBase}/runs/${id}`));
 }

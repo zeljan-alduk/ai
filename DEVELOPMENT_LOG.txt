@@ -4471,3 +4471,9 @@ Out of scope (per brief):
 - HTTP-challenge / DNS-01 verification (TXT only).
 - A migration 017 — the parallel wave-16C engineer owns it; my
   brief explicitly numbers mine 018.
+
+2026-04-27 — Engineer (Claude) — VPS migration + go-private prep
+- Renamed all aldo-ai-api.fly.dev / *.vercel.app references to ai.aldo.tech across 23 files (web, e2e, openapi, sdks, vscode ext, docs, scripts).
+- Removed every GitHub link from the marketing surface, docs surface, and api docs (repo is going private). Tests updated to assert no github.com URLs render.
+- Replaced FSL-1.1-ALv2 with proprietary "ALDO AI Proprietary Software License"; rewrote /docs/license to match.
+- Added scripts/vps-bootstrap.sh: self-contained installer that lays out /opt/aldo-ai, brings up postgres+api+web via docker compose on internal ports, and configures nginx + Lets Encrypt for ai.aldo.tech without touching pre-existing vhosts (slovenia-transit.aldo.tech preserved by a managed-by marker check).

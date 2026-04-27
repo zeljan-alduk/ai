@@ -59,7 +59,7 @@ def _load_config() -> dict[str, Any]:
 def _make_client(api_base: str | None = None) -> AldoClient:
     cfg = _load_config()
     base = api_base or cfg.get("api_base") or os.environ.get(
-        "ALDO_API_BASE", "https://aldo-ai-api.fly.dev"
+        "ALDO_API_BASE", "https://ai.aldo.tech"
     )
     token = os.environ.get("ALDO_TOKEN") or cfg.get("token")
     return AldoClient(api_base=base, token=token)
@@ -71,7 +71,7 @@ def auth_login(
     api_base: Annotated[
         str,
         typer.Option(help="API base URL.", envvar="ALDO_API_BASE"),
-    ] = "https://aldo-ai-api.fly.dev",
+    ] = "https://ai.aldo.tech",
 ) -> None:
     password = getpass.getpass("password: ")
     client = AldoClient(api_base=api_base)

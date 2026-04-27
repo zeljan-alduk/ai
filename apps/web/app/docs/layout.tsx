@@ -21,11 +21,9 @@
 
 import { DocsSidebar } from '@/components/docs/sidebar';
 import { listAllDocPages } from '@/lib/docs/loader';
-import { Github, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-
-const GITHUB_URL = 'https://github.com/zeljan-alduk/ai';
 
 export default function DocsLayout({ children }: { children: ReactNode }) {
   const pages = listAllDocPages();
@@ -76,15 +74,7 @@ function DocsTopBar() {
             <span className="sm:hidden">Ctrl</span>+K
           </kbd>
         </span>
-        <Link
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-fg-muted hover:text-fg"
-          aria-label="GitHub"
-        >
-          <Github aria-hidden="true" className="h-4 w-4" />
-        </Link>
+        {/* GitHub link removed — repository is private. */}
       </div>
     </header>
   );

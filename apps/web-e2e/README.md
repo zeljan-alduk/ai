@@ -19,8 +19,8 @@ pnpm install
 pnpm --filter @aldo-ai/web-e2e exec playwright install --with-deps chromium
 
 # 2) Point at deployed infra and go
-E2E_BASE_URL=https://aldo-ai-7pogem9sm-zeljanalduk-3047s-projects.vercel.app \
-E2E_API_BASE_URL=https://aldo-ai-api.fly.dev \
+E2E_BASE_URL=https://ai.aldo.tech \
+E2E_API_BASE_URL=https://ai.aldo.tech \
 pnpm --filter @aldo-ai/web-e2e e2e
 ```
 
