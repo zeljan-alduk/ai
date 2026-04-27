@@ -4487,3 +4487,10 @@ Out of scope (per brief):
 - scripts/vps-deploy-webhook.py: stdlib HTTP service on 127.0.0.1:9999. Bearer-token auth from /opt/aldo-ai/secrets/deploy_token. POST /deploy {branch} runs the deploy script, GET /status returns last result, GET /health is unauthed liveness.
 - vps-bootstrap.sh installs both as a systemd unit (aldo-deploy-webhook.service), generates the deploy token, and adds nginx /_admin/* -> 127.0.0.1:9999 (HTTPS-only via the same Let's Encrypt cert). Prints the token at the end of the run for the operator to paste back.
 - After bootstrap, Claude can deploy via: curl -X POST -H "Authorization: Bearer <token>" https://ai.aldo.tech/_admin/deploy. No SSH required.
+
+2026-04-27 — Engineer (Claude) — bootstrap detects + reuses existing edge proxy
+- Auto-detects a docker-managed nginx already binding 0.0.0.0:80 (slovenia-transit pattern: container reading conf from a host bind-mount, certbot via webroot volumes). Plugs ai.aldo.tech in as a new conf.d snippet (zzz-ai-aldo-tech.conf so it sorts after default.conf and doesn't steal the IP-direct catch-all).
+- aldo-api / aldo-web attach to the edge container's docker network so the existing nginx can resolve them by container name. aldo-postgres stays on the private aldo-internal net.
+- Issues a Let's Encrypt cert via a one-off certbot/certbot container against the edge proxy's existing certbot volumes (HTTP-01 webroot, two-pass: HTTP-only stub vhost first, then full HTTP+HTTPS once the cert is on disk).
+- Deploy webhook listens on 0.0.0.0:9999 in external mode (reached via the edge docker bridge gateway) and 127.0.0.1:9999 in system mode.
+- Falls back to host-nginx + certbot --nginx if no edge proxy is detected. Force with EDGE_STRATEGY=system|external.
