@@ -21,8 +21,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
-import DOMPurify from 'isomorphic-dompurify';
 import { Marked } from 'marked';
+import sanitizeHtml from 'sanitize-html';
 import { type BundledLanguage, type Highlighter, createHighlighter } from 'shiki';
 
 import {
@@ -158,9 +158,24 @@ export async function loadDoc(page: DocPage): Promise<LoadedDoc | null> {
   const rawHtml = await marked.parse(content);
   const resolvedHtml = typeof rawHtml === 'string' ? rawHtml : await rawHtml;
   // Belt-and-braces: docs sources are checked-in markdown so the
-  // payload is trusted, but DOMPurify costs <1ms and silences
+  // payload is trusted, but sanitize-html costs <1ms and silences
   // CodeQL's stored-XSS warning on dangerouslySetInnerHTML.
-  const html = DOMPurify.sanitize(resolvedHtml, { USE_PROFILES: { html: true } });
+  // sanitize-html is on CodeQL's recognized-sanitizer list; its
+  // alternative (isomorphic-dompurify) wasn't, so the alert kept
+  // firing on the dataflow even with sanitization in place.
+  const html = sanitizeHtml(resolvedHtml, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'pre', 'code']),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      '*': ['id', 'class'],
+      a: ['href', 'name', 'target', 'rel'],
+      img: ['src', 'alt', 'width', 'height'],
+      pre: ['class', 'data-language'],
+      code: ['class'],
+      span: ['class', 'style'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+  });
 
   const titleFromFrontmatter = typeof data.title === 'string' ? data.title : page.title;
   const summaryFromFrontmatter = typeof data.summary === 'string' ? data.summary : page.summary;
