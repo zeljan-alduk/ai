@@ -15,7 +15,7 @@
  * time.
  */
 
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { basename, extname, resolve as resolvePath } from 'node:path';
 import {
   ApiError,
@@ -217,9 +217,10 @@ export async function runDatasetsImport(
     return 1;
   }
   const resolved = resolvePath(process.cwd(), filePath);
+  // Single-step read — no stat-then-read TOCTOU. readFile errors with
+  // ENOENT when the path is missing, which we handle as a single error.
   let raw: string;
   try {
-    await stat(resolved);
     raw = await readFile(resolved, 'utf8');
   } catch (e) {
     writeErr(io, `error: could not read ${resolved}: ${asMessage(e)}`);

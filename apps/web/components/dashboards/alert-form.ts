@@ -47,7 +47,7 @@ export function validateChannel(s: string): { ok: true } | { ok: false; reason: 
   }
   if (parsed.protocol !== 'https:') return { ok: false, reason: 'must be https' };
   if (parsed.hostname !== 'hooks.slack.com') {
-    return { ok: false, reason: 'must point at hooks.slack.com' };
+    return { ok: false, reason: `must use hooks.slack.com, got ${parsed.hostname}` };
   }
   return { ok: true };
 }

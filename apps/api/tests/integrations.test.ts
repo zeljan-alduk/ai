@@ -93,7 +93,7 @@ describe('/v1/integrations', () => {
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { message: string } };
-    expect(body.error.message).toMatch(/hooks\.slack\.com/);
+    expect(body.error.message).toMatch(/must use hooks\.slack\.com,/);
   });
 
   it('GET /v1/integrations returns the list; viewer sees redacted secrets', async () => {

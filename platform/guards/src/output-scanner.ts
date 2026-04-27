@@ -146,7 +146,10 @@ function isLikelyBase64(span: string, minChars: number): boolean {
   return upper > 2 && lower > 2 && digit >= 1;
 }
 
-const MARKDOWN_LINK_RE = /\[[^\]\n]{1,200}\]\((https?:[^\s)]+)\)/g;
+// Bounded link text + bounded URL to keep CodeQL's ReDoS analyzer happy.
+// 2048 is well above any practical URL length (RFC 3986 doesn't cap, but
+// browsers stop at ~2000); 200 chars of link text covers every real link.
+const MARKDOWN_LINK_RE = /\[[^\]\n]{1,200}\]\((https?:[^\s)]{1,2048})\)/g;
 
 // ---------------------------------------------------------------------------
 // Public API.

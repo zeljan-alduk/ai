@@ -110,7 +110,7 @@ describe('slackRunner', () => {
   it('signature: rejects a webhook URL whose hostname is not hooks.slack.com', async () => {
     expect(() =>
       slackRunner.validateConfig({ webhookUrl: 'https://evil.example.com/services/T/B/X' }),
-    ).toThrow(/hooks\.slack\.com/);
+    ).toThrow(/must use hooks\.slack\.com,/);
     const result = await slackRunner.dispatch(PAYLOAD, {
       webhookUrl: 'https://evil.example.com/services/T/B/X',
     });

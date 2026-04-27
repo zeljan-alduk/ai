@@ -114,7 +114,9 @@ export function parseVerdict(raw: string): ParsedVerdict {
   }
 
   // Fallback: a bare number on the line (some judges ignore the format).
-  const bare = /^([0-9]*\.?[0-9]+)\s*$/.exec(stripped);
+  // Atomic alternation avoids the catastrophic-backtracking risk CodeQL
+  // flags on /^([0-9]*\.?[0-9]+)/ when fed strings of repeated zeros.
+  const bare = /^(\d+(?:\.\d+)?|\.\d+)\s*$/.exec(stripped);
   if (bare?.[1] !== undefined) {
     return { verdict: 'score', score: clamp01(Number(bare[1])) };
   }

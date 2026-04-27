@@ -30,7 +30,7 @@ describe('alert-form', () => {
   it('validateChannel — rejects non-Slack URLs', () => {
     const r = validateChannel('slack:https://attacker.com/hook');
     expect(r.ok).toBe(false);
-    if (r.ok === false) expect(r.reason).toMatch(/hooks.slack.com/);
+    if (r.ok === false) expect(r.reason).toMatch(/must use hooks\.slack\.com,/);
   });
 
   it('validateChannel — rejects http (not https)', () => {
