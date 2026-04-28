@@ -10,13 +10,14 @@
  *     card lists Ollama / vLLM / llama.cpp / LM Studio / MLX — those
  *     are runtime identifiers, not vendor names.
  *   - No fake testimonials, no fabricated stats, no implied compliance.
- *   - "Demo video coming soon" — we don't have one yet, so we don't
- *     claim one.
+ *   - The hero loop is a code-driven 5-scene animation of the actual
+ *     platform mechanics (spec → route → run → eval → swap). No
+ *     recorded video, no third-party iframe, no audio.
  */
 
 import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
-import { DemoVideoPlaceholder } from '@/components/marketing/demo-video-placeholder';
 import { HeroCodeSnippet } from '@/components/marketing/hero-code-snippet';
+import { PlatformDemoLoop } from '@/components/marketing/platform-demo-loop';
 import { StatsStrip } from '@/components/marketing/stats-strip';
 import { TrustStrip } from '@/components/marketing/trust-strip';
 import Link from 'next/link';
@@ -138,8 +139,8 @@ function Architecture() {
           <ArchitectureDiagram />
         </div>
         <p className="mt-3 text-[11px] text-slate-500">
-          Cloud-vs-local is decided by the agent&rsquo;s declared capability class and privacy
-          tier. No code path names a provider.
+          Cloud-vs-local is decided by the agent&rsquo;s declared capability class and privacy tier.
+          No code path names a provider.
         </p>
       </div>
     </section>
@@ -282,8 +283,8 @@ function Hero() {
               Run real software-engineering teams of LLM agents.
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-600">
-              Privacy enforced by the platform, not the prompt. Local models first-class. Every
-              run replayable. The control plane the agent stack has been missing.
+              Privacy enforced by the platform, not the prompt. Local models first-class. Every run
+              replayable. The control plane the agent stack has been missing.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
@@ -327,10 +328,10 @@ function Hero() {
               An agent is a YAML file — versioned, eval-gated, privacy-tagged. No Python class
               hierarchies. No vendor names.
             </p>
-            {/* The launch demo video lives below the snippet so it isn't the first
-                thing a visitor sees — code-first reads as a platform, not a video. */}
+            {/* Auto-looping animated walkthrough below the snippet —
+                showing actual platform mechanics, not a marketing reel. */}
             <div className="mt-8">
-              <DemoVideoPlaceholder />
+              <PlatformDemoLoop />
             </div>
           </div>
         </div>
@@ -351,8 +352,8 @@ function Features() {
             Built like a control plane, not a chat wrapper.
           </h2>
           <p className="mt-3 text-base leading-relaxed text-slate-600">
-            These shape every line of code in the platform. They&rsquo;re also why most features
-            in our roadmap are short — the constraints do the work.
+            These shape every line of code in the platform. They&rsquo;re also why most features in
+            our roadmap are short — the constraints do the work.
           </p>
         </div>
         <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -361,9 +362,7 @@ function Features() {
               key={f.title}
               className="group rounded-lg border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
             >
-              <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">
-                {f.title}
-              </h3>
+              <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">{f.title}</h3>
               <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">{f.body}</p>
             </li>
           ))}
@@ -388,14 +387,14 @@ function Builders() {
           </div>
           <div className="lg:col-span-7">
             <p className="text-base leading-relaxed text-slate-700">
-              ALDO AI is built by ALDO TECH LABS — a virtualised software agency staffed entirely
-              by LLM agents (principal, architect, engineers, reviewers). The same agency spec
-              ships with every new tenant as the default template.{' '}
+              ALDO AI is built by ALDO TECH LABS — a virtualised software agency staffed entirely by
+              LLM agents (principal, architect, engineers, reviewers). The same agency spec ships
+              with every new tenant as the default template.{' '}
               <strong>If a feature does not help that agency ship, we do not build it.</strong>
             </p>
             <p className="mt-4 text-base leading-relaxed text-slate-700">
-              The orchestrator, the eval harness, and the run tree are not afterthoughts. They
-              are the surface area we live in every day.
+              The orchestrator, the eval harness, and the run tree are not afterthoughts. They are
+              the surface area we live in every day.
             </p>
           </div>
         </div>
@@ -416,8 +415,8 @@ function HowItWorks() {
             Sixty seconds, four steps.
           </h2>
           <p className="mt-3 text-base leading-relaxed text-slate-600">
-            No fake demo video. The whole flow in plain text — and a 14-day trial that takes
-            five minutes to spin up.
+            No fake demo video. The whole flow in plain text — and a 14-day trial that takes five
+            minutes to spin up.
           </p>
         </div>
         <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
