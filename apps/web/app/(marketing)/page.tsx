@@ -17,8 +17,30 @@
 import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
 import { DemoVideoPlaceholder } from '@/components/marketing/demo-video-placeholder';
 import { HeroCodeSnippet } from '@/components/marketing/hero-code-snippet';
+import { StatsStrip } from '@/components/marketing/stats-strip';
 import { TrustStrip } from '@/components/marketing/trust-strip';
 import Link from 'next/link';
+
+export const metadata = {
+  title: 'ALDO AI — the control plane for agent teams',
+  description:
+    'Run real software-engineering teams of LLM agents. Privacy enforced by the platform. Local models first-class. Every run replayable. 14-day trial, no card.',
+  openGraph: {
+    title: 'ALDO AI — the control plane for agent teams',
+    description:
+      'Privacy enforced by the platform, not the prompt. Local models first-class. Every run replayable.',
+    url: 'https://ai.aldo.tech',
+    siteName: 'ALDO AI',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ALDO AI — the control plane for agent teams',
+    description:
+      'Privacy enforced by the platform. Local models first-class. Every run replayable.',
+  },
+};
 
 /**
  * Wave-14C — last verification of the comparison table below.
@@ -88,6 +110,7 @@ export default function HomePage() {
       <TrustStrip />
       <Architecture />
       <Features />
+      <StatsStrip />
       <Builders />
       <HowItWorks />
       <Comparison />
@@ -319,20 +342,29 @@ function Hero() {
 function Features() {
   return (
     <section className="border-t border-slate-200 bg-white">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-        <div className="mb-10 max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <div className="mb-12 max-w-2xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+            Six non-negotiables
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.1rem]">
             Built like a control plane, not a chat wrapper.
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            The non-negotiables that shape every line of code in the platform.
+          <p className="mt-3 text-base leading-relaxed text-slate-600">
+            These shape every line of code in the platform. They&rsquo;re also why most features
+            in our roadmap are short — the constraints do the work.
           </p>
         </div>
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
-            <li key={f.title} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">{f.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{f.body}</p>
+            <li
+              key={f.title}
+              className="group rounded-lg border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">
+                {f.title}
+              </h3>
+              <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">{f.body}</p>
             </li>
           ))}
         </ul>
@@ -344,27 +376,26 @@ function Features() {
 function Builders() {
   return (
     <section className="border-t border-slate-200 bg-slate-50">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-16">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1">
-            <p className="text-[11px] uppercase tracking-wider text-blue-600">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
+          <div className="lg:col-span-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               Built by ALDO TECH LABS
             </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.1rem]">
               Dogfooded by a virtual software agency.
             </h2>
           </div>
-          <div className="lg:col-span-2">
-            <p className="text-sm leading-relaxed text-slate-700">
-              ALDO AI is built by ALDO TECH LABS — a virtualised software agency staffed entirely by
-              LLM agents (principal, architect, engineers, reviewers). The same agency spec ships
-              with every new tenant as the default template. If a feature does not help that agency
-              ship, we do not build it. Everything you see in the product was used by us first to
-              build the product.
+          <div className="lg:col-span-7">
+            <p className="text-base leading-relaxed text-slate-700">
+              ALDO AI is built by ALDO TECH LABS — a virtualised software agency staffed entirely
+              by LLM agents (principal, architect, engineers, reviewers). The same agency spec
+              ships with every new tenant as the default template.{' '}
+              <strong>If a feature does not help that agency ship, we do not build it.</strong>
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-slate-700">
-              That is also why the orchestrator, the eval harness, and the run tree are not
-              afterthoughts — they are the surface area we live in every day.
+            <p className="mt-4 text-base leading-relaxed text-slate-700">
+              The orchestrator, the eval harness, and the run tree are not afterthoughts. They
+              are the surface area we live in every day.
             </p>
           </div>
         </div>
@@ -376,21 +407,32 @@ function Builders() {
 function HowItWorks() {
   return (
     <section className="border-t border-slate-200 bg-white">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-        <div className="mb-10 max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-            How it works in 60 seconds.
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <div className="mb-12 max-w-2xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+            How it works
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.1rem]">
+            Sixty seconds, four steps.
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            No demo video yet — we will not stage one. Here is the whole flow in plain text.
+          <p className="mt-3 text-base leading-relaxed text-slate-600">
+            No fake demo video. The whole flow in plain text — and a 14-day trial that takes
+            five minutes to spin up.
           </p>
         </div>
-        <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s) => (
-            <li key={s.n} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-[11px] font-mono text-blue-600">{s.n}</div>
-              <h3 className="mt-1 text-sm font-semibold text-slate-900">{s.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{s.body}</p>
+            <li
+              key={s.n}
+              className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <div className="font-mono text-[12px] font-semibold tracking-wider text-blue-600">
+                {s.n}
+              </div>
+              <h3 className="mt-2 text-[15px] font-semibold tracking-tight text-slate-900">
+                {s.title}
+              </h3>
+              <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">{s.body}</p>
             </li>
           ))}
         </ol>
