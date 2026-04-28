@@ -66,7 +66,10 @@ const PLANS: ReadonlyArray<Plan> = [
     price: 'Contact',
     priceSuffix: '',
     tagline: 'For organisations with compliance, SSO, or self-host needs.',
-    cta: { label: 'Contact sales', href: '/design-partner?plan=enterprise' },
+    cta: {
+      label: 'Contact sales',
+      href: 'mailto:info@aldo.tech?subject=ALDO%20AI%20%E2%80%94%20Enterprise%20inquiry',
+    },
     features: [
       'Unlimited users and runs',
       'SSO / SAML',
@@ -93,7 +96,7 @@ const FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: 'Can I self-host?',
-    a: 'Self-host is part of Enterprise. We ship a packaged build to your infrastructure with a commercial agreement, dedicated support, and an SLA — talk to us via the design-partner program for hands-on access today.',
+    a: 'Self-host is part of Enterprise. We ship a packaged build to your infrastructure with a commercial agreement, dedicated support, and an SLA. Email info@aldo.tech to start the conversation.',
   },
 ];
 
@@ -115,17 +118,17 @@ export default function PricingPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
       <header className="mx-auto max-w-2xl text-center">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+        <h1 className="text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
           Honest pricing.
         </h1>
-        <p className="mt-3 text-base text-slate-600">
+        <p className="mt-3 text-base text-fg-muted">
           14-day free trial on every plan. No card required to start. No surprise per-token markup —
           bring your own provider keys and pay providers directly.
         </p>
       </header>
 
       {!billingReady ? (
-        <output className="mx-auto mt-8 block max-w-3xl rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <output className="mx-auto mt-8 block max-w-3xl rounded-md border border-warning/40 bg-warning/10 p-4 text-sm text-fg">
           <strong className="font-semibold">Billing enables next sprint.</strong> Sign up for the
           trial today; we will email you before any charge. Stripe Checkout is being wired in this
           wave — your trial is real, the credit-card step is not yet.
@@ -136,34 +139,29 @@ export default function PricingPage() {
         {PLANS.map((plan) => (
           <li
             key={plan.slug}
-            className={`flex flex-col rounded-lg border bg-white p-6 shadow-sm ${
-              plan.highlight ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'
+            className={`flex flex-col rounded-lg border bg-bg-elevated p-6 shadow-sm ${
+              plan.highlight ? 'border-accent ring-1 ring-accent' : 'border-border'
             }`}
           >
             <div className="flex items-baseline justify-between">
-              <h2 className="text-base font-semibold text-slate-900">{plan.name}</h2>
+              <h2 className="text-base font-semibold text-fg">{plan.name}</h2>
               {plan.highlight ? (
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700">
+                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
                   Most popular
                 </span>
               ) : null}
             </div>
             <div className="mt-3 flex items-baseline gap-1">
-              <span className="text-3xl font-semibold tracking-tight text-slate-900">
-                {plan.price}
-              </span>
+              <span className="text-3xl font-semibold tracking-tight text-fg">{plan.price}</span>
               {plan.priceSuffix ? (
-                <span className="text-sm text-slate-500">{plan.priceSuffix}</span>
+                <span className="text-sm text-fg-muted">{plan.priceSuffix}</span>
               ) : null}
             </div>
-            <p className="mt-1 text-sm text-slate-600">{plan.tagline}</p>
-            <ul className="mt-5 flex flex-col gap-2 text-sm text-slate-700">
+            <p className="mt-1 text-sm text-fg-muted">{plan.tagline}</p>
+            <ul className="mt-5 flex flex-col gap-2 text-sm text-fg">
               {plan.features.map((f) => (
                 <li key={f} className="flex gap-2">
-                  <span
-                    aria-hidden
-                    className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600"
-                  />
+                  <span aria-hidden className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                   <span>{f}</span>
                 </li>
               ))}
@@ -173,8 +171,8 @@ export default function PricingPage() {
               href={plan.cta.href}
               className={`mt-2 inline-flex w-full items-center justify-center rounded px-4 py-2.5 text-sm font-medium transition-colors ${
                 plan.highlight
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                  ? 'bg-accent text-accent-fg hover:bg-accent-hover'
+                  : 'border border-border bg-bg-elevated text-fg hover:bg-bg-subtle'
               }`}
             >
               {plan.cta.label}
@@ -184,12 +182,12 @@ export default function PricingPage() {
       </ul>
 
       <section className="mx-auto mt-20 max-w-3xl">
-        <h2 className="text-xl font-semibold tracking-tight text-slate-900">Frequently asked</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-fg">Frequently asked</h2>
         <dl className="mt-6 space-y-5">
           {FAQ.map((item) => (
-            <div key={item.q} className="rounded-lg border border-slate-200 bg-white p-5">
-              <dt className="text-sm font-semibold text-slate-900">{item.q}</dt>
-              <dd className="mt-2 text-sm leading-relaxed text-slate-600">{item.a}</dd>
+            <div key={item.q} className="rounded-lg border border-border bg-bg-elevated p-5">
+              <dt className="text-sm font-semibold text-fg">{item.q}</dt>
+              <dd className="mt-2 text-sm leading-relaxed text-fg-muted">{item.a}</dd>
             </div>
           ))}
         </dl>

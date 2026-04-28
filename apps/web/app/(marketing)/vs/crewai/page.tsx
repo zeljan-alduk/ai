@@ -122,16 +122,12 @@ export default function VsCrewaiPage() {
       }
       whenToPickThem={
         <>
+          <p>You want a fully open-source dependency you can fork and modify in-place.</p>
           <p>
-            You want a fully open-source dependency you can fork and modify in-place.
+            Your team is mostly Python and you want the agent layer in the same codebase as the rest
+            of your stack.
           </p>
-          <p>
-            Your team is mostly Python and you want the agent layer in the same codebase as the
-            rest of your stack.
-          </p>
-          <p>
-            Privacy tier and eval-gating are nice-to-haves, not non-negotiables.
-          </p>
+          <p>Privacy tier and eval-gating are nice-to-haves, not non-negotiables.</p>
         </>
       }
       verifiedOn="2026-04-27"

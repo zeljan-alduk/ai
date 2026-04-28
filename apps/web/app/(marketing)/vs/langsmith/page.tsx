@@ -113,12 +113,8 @@ export default function VsLangsmithPage() {
             You already have a meaningful LangChain / LangGraph deployment and need eval +
             observability around it without rewriting.
           </p>
-          <p>
-            Your eval and observability needs are heavier than your agent runtime needs.
-          </p>
-          <p>
-            You need the long tail of LangChain ecosystem integrations.
-          </p>
+          <p>Your eval and observability needs are heavier than your agent runtime needs.</p>
+          <p>You need the long tail of LangChain ecosystem integrations.</p>
         </>
       }
       verifiedOn="2026-04-27"

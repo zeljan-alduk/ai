@@ -90,16 +90,16 @@ export default function VsBraintrustPage() {
       whenToPickUs={
         <>
           <p>
-            You want eval results to <strong>directly gate promotion</strong> in the runtime, not
-            be a parallel signal you have to act on manually.
+            You want eval results to <strong>directly gate promotion</strong> in the runtime, not be
+            a parallel signal you have to act on manually.
           </p>
           <p>
             You need privacy tiers, sandboxed tool execution, and multi-agent supervisors in the
             same product as your evals.
           </p>
           <p>
-            You're comparing local vs frontier models on the same agent spec — our eval harness
-            does this on every run.
+            You're comparing local vs frontier models on the same agent spec — our eval harness does
+            this on every run.
           </p>
         </>
       }
@@ -109,9 +109,7 @@ export default function VsBraintrustPage() {
             Eval ergonomics is your single biggest pain — Braintrust&rsquo;s playground and scorer
             SDK genuinely lead the field.
           </p>
-          <p>
-            You already have a stable agent runtime and just need world-class evals around it.
-          </p>
+          <p>You already have a stable agent runtime and just need world-class evals around it.</p>
           <p>
             Your team treats evals as a product surface (prompt engineers, eval reviewers) rather
             than a CI gate.

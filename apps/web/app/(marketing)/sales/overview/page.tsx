@@ -75,12 +75,12 @@ const PILLARS = [
 ];
 
 const COMPARE = [
-  { feature: 'LLM-agnostic capability routing',     aldo: 'Yes', framework: 'Per-call', wrapper: 'No' },
-  { feature: 'Local-model first-class',             aldo: 'Yes', framework: 'Possible', wrapper: 'No' },
-  { feature: 'Privacy tier — fail-closed router',   aldo: 'Yes', framework: 'No',       wrapper: 'No' },
-  { feature: 'Replayable run tree',                 aldo: 'Yes', framework: 'Logs',     wrapper: 'No' },
-  { feature: 'Sandboxed tool execution',            aldo: 'Yes', framework: 'BYO',      wrapper: 'No' },
-  { feature: 'Eval-gated promotion',                aldo: 'Yes', framework: 'BYO',      wrapper: 'No' },
+  { feature: 'LLM-agnostic capability routing', aldo: 'Yes', framework: 'Per-call', wrapper: 'No' },
+  { feature: 'Local-model first-class', aldo: 'Yes', framework: 'Possible', wrapper: 'No' },
+  { feature: 'Privacy tier — fail-closed router', aldo: 'Yes', framework: 'No', wrapper: 'No' },
+  { feature: 'Replayable run tree', aldo: 'Yes', framework: 'Logs', wrapper: 'No' },
+  { feature: 'Sandboxed tool execution', aldo: 'Yes', framework: 'BYO', wrapper: 'No' },
+  { feature: 'Eval-gated promotion', aldo: 'Yes', framework: 'BYO', wrapper: 'No' },
 ];
 
 export default function OverviewPage() {
@@ -148,15 +148,14 @@ export default function OverviewPage() {
             ALDO AI is the agent platform privacy and compliance teams can sign off on. We run real
             software-engineering teams of LLM agents — principal, architect, engineers, reviewers —
             and the platform is what we built to make that practical at production scale: a
-            privacy-tier router that fails closed, an eval harness that gates promotion,
-            replayable run trees for audit, and local-model parity with frontier models on the
-            same agent spec.
+            privacy-tier router that fails closed, an eval harness that gates promotion, replayable
+            run trees for audit, and local-model parity with frontier models on the same agent spec.
           </p>
           <p className="mt-3">
             The closest competitors ship one half of this — either an agent framework (CrewAI,
-            LangGraph) or an eval / observability product (LangSmith, Braintrust). ALDO AI ships
-            the whole control plane on the same primitive, so privacy invariants are
-            platform-level, not author discipline.
+            LangGraph) or an eval / observability product (LangSmith, Braintrust). ALDO AI ships the
+            whole control plane on the same primitive, so privacy invariants are platform-level, not
+            author discipline.
           </p>
         </section>
 
@@ -171,10 +170,7 @@ export default function OverviewPage() {
           </p>
           <div className="mt-5 space-y-4">
             {VIGNETTES.map((v) => (
-              <div
-                key={v.sector}
-                className="rounded-lg border border-slate-200 bg-white p-4"
-              >
+              <div key={v.sector} className="rounded-lg border border-slate-200 bg-white p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-700">
                   {v.sector}
                 </p>
@@ -200,10 +196,7 @@ export default function OverviewPage() {
           </p>
           <ul className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {PILLARS.map((p) => (
-              <li
-                key={p.title}
-                className="rounded-lg border border-slate-200 bg-white p-4"
-              >
+              <li key={p.title} className="rounded-lg border border-slate-200 bg-white p-4">
                 <h3 className="text-[14px] font-semibold text-slate-900">{p.title}</h3>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-slate-700">{p.body}</p>
               </li>
@@ -219,9 +212,9 @@ export default function OverviewPage() {
           <p className="mt-3">
             Three client surfaces — web, CLI, SDK — all hit the same gateway. The gateway
             authenticates, enforces quotas and rate-limits, then hands the request to the
-            privacy-tier router. The router is the single chokepoint that decides whether a
-            request can dispatch to a cloud-class model. Eval harness and replay store hang off
-            the gateway; nothing bypasses them.
+            privacy-tier router. The router is the single chokepoint that decides whether a request
+            can dispatch to a cloud-class model. Eval harness and replay store hang off the gateway;
+            nothing bypasses them.
           </p>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
             <ArchitectureDiagram />
@@ -325,9 +318,7 @@ export default function OverviewPage() {
               </div>
             ))}
           </div>
-          <p className="mt-4 text-[13px]">
-            Three deployment shapes:
-          </p>
+          <p className="mt-4 text-[13px]">Three deployment shapes:</p>
           <ul className="mt-2 space-y-1.5 text-[13px] text-slate-700">
             <li>
               <strong>Cloud (default).</strong> Hosted by us at{' '}
@@ -398,9 +389,9 @@ export default function OverviewPage() {
         </section>
 
         <footer className="mt-12 border-t border-slate-200 pt-4 text-[11px] text-slate-500">
-          Last verified: {VERIFIED_ON}. ALDO TECH LABS · ai.aldo.tech · info@aldo.tech ·
-          Comparison rows re-verified quarterly; if a row is out of date, email us and we&rsquo;ll
-          fix it in the next deploy.
+          Last verified: {VERIFIED_ON}. ALDO TECH LABS · ai.aldo.tech · info@aldo.tech · Comparison
+          rows re-verified quarterly; if a row is out of date, email us and we&rsquo;ll fix it in
+          the next deploy.
         </footer>
       </article>
     </>

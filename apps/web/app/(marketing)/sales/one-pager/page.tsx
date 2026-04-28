@@ -38,9 +38,13 @@ export default function OnePagerPage() {
       <div className="no-print mx-auto max-w-3xl px-4 pt-8 sm:px-6">
         <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
           <span>
-            <strong>One-pager.</strong> Press <kbd className="rounded border border-blue-300 bg-white px-1.5 py-0.5 text-xs">⌘ P</kbd>
-            {' '}/<kbd className="ml-1 rounded border border-blue-300 bg-white px-1.5 py-0.5 text-xs">Ctrl P</kbd>
-            {' '}then "Save as PDF" — A4 portrait, one page.
+            <strong>One-pager.</strong> Press{' '}
+            <kbd className="rounded border border-blue-300 bg-white px-1.5 py-0.5 text-xs">⌘ P</kbd>{' '}
+            /
+            <kbd className="ml-1 rounded border border-blue-300 bg-white px-1.5 py-0.5 text-xs">
+              Ctrl P
+            </kbd>{' '}
+            then "Save as PDF" — A4 portrait, one page.
           </span>
           <Link href="/sales" className="text-blue-700 hover:underline">
             ← back to sales kit
@@ -74,9 +78,9 @@ export default function OnePagerPage() {
         <section className="mt-4">
           <p className="text-[12.5px] leading-[1.55] text-slate-800">
             ALDO AI is the agent platform your security team can sign off on. Run real
-            software-engineering teams of LLM agents with <strong>privacy enforced by the router,
-            not the prompt</strong>; local models first-class; eval-gated promotion; every run
-            replayable end-to-end.
+            software-engineering teams of LLM agents with{' '}
+            <strong>privacy enforced by the router, not the prompt</strong>; local models
+            first-class; eval-gated promotion; every run replayable end-to-end.
           </p>
         </section>
 
@@ -111,8 +115,8 @@ export default function OnePagerPage() {
                 reaching a cloud model. Fails closed.
               </li>
               <li>
-                <strong>Local + cloud, same eval.</strong> Auto-discovers Ollama / vLLM /
-                llama.cpp / MLX. Same rubric, side-by-side.
+                <strong>Local + cloud, same eval.</strong> Auto-discovers Ollama / vLLM / llama.cpp
+                / MLX. Same rubric, side-by-side.
               </li>
               <li>
                 <strong>Replayable run tree.</strong> Every node, every tool call, swap any model,
@@ -130,8 +134,7 @@ export default function OnePagerPage() {
             </p>
             <ul className="mt-1.5 space-y-1.5 text-[11.5px] leading-snug text-slate-700">
               <li>
-                <strong>vs CrewAI</strong> — they ship a framework; we ship the platform around
-                it.
+                <strong>vs CrewAI</strong> — they ship a framework; we ship the platform around it.
               </li>
               <li>
                 <strong>vs LangSmith</strong> — they observe; we enforce + observe + run.
@@ -153,13 +156,21 @@ export default function OnePagerPage() {
               name: 'Solo',
               price: '$29 /mo',
               for: 'one builder',
-              features: ['1 user · 100 runs/mo', 'BYO provider keys', 'Local models out of the box'],
+              features: [
+                '1 user · 100 runs/mo',
+                'BYO provider keys',
+                'Local models out of the box',
+              ],
             },
             {
               name: 'Team',
               price: '$99 /mo',
               for: 'small team running a real agency',
-              features: ['5 users · 1,000 runs/mo', 'Role-based access', '$20 cloud credit included'],
+              features: [
+                '5 users · 1,000 runs/mo',
+                'Role-based access',
+                '$20 cloud credit included',
+              ],
               highlight: true,
             },
             {

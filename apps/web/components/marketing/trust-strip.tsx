@@ -16,18 +16,18 @@ const STACK = ['Postgres', 'Hono', 'Next.js', 'MCP', 'Ollama', 'vLLM', 'llama.cp
 
 export function TrustStrip() {
   return (
-    <section className="border-y border-slate-200 bg-white/60">
+    <section className="border-y border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
               Built for teams in
             </p>
             <ul className="mt-3 flex flex-wrap gap-2">
               {VERTICALS.map((v) => (
                 <li
                   key={v}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-medium text-slate-700"
+                  className="rounded-full border border-border bg-bg-elevated px-3 py-1 text-[12px] font-medium text-fg"
                 >
                   {v}
                 </li>
@@ -35,14 +35,14 @@ export function TrustStrip() {
             </ul>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
               Built on top of
             </p>
             <ul className="mt-3 flex flex-wrap gap-2">
               {STACK.map((s) => (
                 <li
                   key={s}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[11.5px] text-slate-700"
+                  className="rounded-full border border-border bg-bg-subtle px-3 py-1 font-mono text-[11.5px] text-fg"
                 >
                   {s}
                 </li>

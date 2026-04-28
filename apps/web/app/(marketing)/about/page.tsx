@@ -82,9 +82,8 @@ export default function AboutPage() {
         <h2 className="mt-10 text-xl font-semibold text-slate-900">License</h2>
         <p>
           ALDO AI is proprietary. Access is granted to paying customers and design partners under
-          our standard terms of service. The hosted product, the SDKs, and the integration
-          surfaces are all available through the trial — see{' '}
-          <Link href="/pricing">Pricing</Link>.
+          our standard terms of service. The hosted product, the SDKs, and the integration surfaces
+          are all available through the trial — see <Link href="/pricing">Pricing</Link>.
         </p>
 
         <h2 className="mt-10 text-xl font-semibold text-slate-900">Get involved</h2>

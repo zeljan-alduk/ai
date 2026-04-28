@@ -111,6 +111,7 @@ export default function HomePage() {
       <TrustStrip />
       <Architecture />
       <Features />
+      <RecentShipments />
       <StatsStrip />
       <Builders />
       <HowItWorks />
@@ -122,23 +123,23 @@ export default function HomePage() {
 
 function Architecture() {
   return (
-    <section className="border-t border-slate-200 bg-white">
+    <section className="border-t border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
         <div className="mb-10 max-w-2xl">
-          <p className="text-[11px] uppercase tracking-wider text-blue-600">Architecture</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+          <p className="text-[11px] uppercase tracking-wider text-accent">Architecture</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-fg">
             One picture. Privacy enforced by the platform, not the prompt.
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-fg-muted">
             Every request passes through the privacy-tier router. Sensitive agents are
             <em> physically</em> incapable of reaching a cloud model — the router fails closed
             before a token leaves your tenant boundary.
           </p>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+        <div className="overflow-x-auto rounded-xl border border-border bg-bg p-4 sm:p-6">
           <ArchitectureDiagram />
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">
+        <p className="mt-3 text-[11px] text-fg-faint">
           Cloud-vs-local is decided by the agent&rsquo;s declared capability class and privacy tier.
           No code path names a provider.
         </p>
@@ -199,20 +200,18 @@ function Comparison() {
       },
     ];
   return (
-    <section className="border-t border-slate-200 bg-slate-50">
+    <section className="border-t border-border bg-bg">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
         <div className="mb-8 max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-            Honest comparison.
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <h2 className="text-2xl font-semibold tracking-tight text-fg">Honest comparison.</h2>
+          <p className="mt-2 text-sm text-fg-muted">
             Three categories of incumbents: general-purpose agent frameworks, chat-wrapper apps, and
             us. We&rsquo;re only comparing what we ship today — no roadmap items in the table.
           </p>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-border bg-bg-elevated">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+            <thead className="bg-bg-subtle text-xs uppercase tracking-wider text-fg-muted">
               <tr>
                 <th className="px-4 py-3">Capability</th>
                 <th className="px-4 py-3">ALDO AI</th>
@@ -222,41 +221,41 @@ function Comparison() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.feature} className="border-t border-slate-100">
-                  <td className="px-4 py-3 font-medium text-slate-900">{r.feature}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.aldo}</td>
-                  <td className="px-4 py-3 text-slate-500">{r.framework}</td>
-                  <td className="px-4 py-3 text-slate-500">{r.wrapper}</td>
+                <tr key={r.feature} className="border-t border-border">
+                  <td className="px-4 py-3 font-medium text-fg">{r.feature}</td>
+                  <td className="px-4 py-3 text-fg">{r.aldo}</td>
+                  <td className="px-4 py-3 text-fg-muted">{r.framework}</td>
+                  <td className="px-4 py-3 text-fg-muted">{r.wrapper}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div className="mt-6 flex flex-wrap gap-2 text-sm">
-          <span className="text-slate-500">Side-by-side with named tools:</span>
+          <span className="text-fg-muted">Side-by-side with named tools:</span>
           <Link
             href="/vs/crewai"
-            className="rounded-full border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700"
+            className="rounded-full border border-border bg-bg-elevated px-3 py-1 font-medium text-fg transition-colors hover:border-accent hover:text-accent"
           >
             vs CrewAI
           </Link>
           <Link
             href="/vs/langsmith"
-            className="rounded-full border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700"
+            className="rounded-full border border-border bg-bg-elevated px-3 py-1 font-medium text-fg transition-colors hover:border-accent hover:text-accent"
           >
             vs LangSmith
           </Link>
           <Link
             href="/vs/braintrust"
-            className="rounded-full border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700"
+            className="rounded-full border border-border bg-bg-elevated px-3 py-1 font-medium text-fg transition-colors hover:border-accent hover:text-accent"
           >
             vs Braintrust
           </Link>
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">
+        <p className="mt-3 text-[11px] text-fg-faint">
           Last verified: {COMPARISON_TABLE_VERIFIED}. We re-verify these claims quarterly; if one is
           out of date,{' '}
-          <Link className="underline hover:text-slate-700" href="/security">
+          <Link className="underline hover:text-fg" href="/security">
             email us
           </Link>{' '}
           and we&rsquo;ll fix the row in the next deploy.
@@ -276,55 +275,55 @@ function Hero() {
         <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
           {/* Left — pitch + CTAs. */}
           <div className="lg:col-span-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
               The control plane for agent teams
             </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900 sm:text-[2.85rem] lg:text-[3.1rem] lg:leading-[1.05]">
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-fg sm:text-[2.85rem] lg:text-[3.1rem] lg:leading-[1.05]">
               Run real software-engineering teams of LLM agents.
             </h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-slate-600">
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-fg-muted">
               Privacy enforced by the platform, not the prompt. Local models first-class. Every run
               replayable. The control plane the agent stack has been missing.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/signup"
-                className="rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                className="rounded bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
               >
                 Start free trial
               </Link>
               <Link
                 href="/pricing"
-                className="rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                className="rounded border border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle"
               >
                 See pricing
               </Link>
             </div>
-            <p className="mt-4 text-xs text-slate-500">
+            <p className="mt-4 text-xs text-fg-muted">
               14-day trial, no card required. Honest pricing,{' '}
-              <Link className="underline hover:text-slate-700" href="/pricing">
+              <Link className="underline hover:text-fg" href="/pricing">
                 plans from $29/mo
               </Link>
               .
             </p>
-            <div className="mt-10 rounded-xl border border-blue-200 bg-blue-50/60 p-5">
-              <p className="text-sm text-blue-900">
-                <strong>Be one of our design partners.</strong> A small cohort of early teams
-                shaping the roadmap. NDA + source access available.
+            <div className="mt-10 rounded-xl border border-border bg-bg-subtle p-5">
+              <p className="text-sm font-semibold text-fg">Self-hosted or on-prem?</p>
+              <p className="mt-1 text-sm text-fg-muted">
+                Packaged build, dedicated support, custom MSA — all on the Enterprise tier.
               </p>
-              <Link
-                href="/design-partner"
-                className="mt-3 inline-flex rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              <a
+                href="mailto:info@aldo.tech?subject=ALDO%20AI%20%E2%80%94%20self-host%20inquiry"
+                className="mt-3 inline-flex rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
               >
-                Apply to be a design partner →
-              </Link>
+                Talk to us → info@aldo.tech
+              </a>
             </div>
           </div>
 
           {/* Right — code snippet + 60s demo. */}
           <div className="lg:col-span-6">
             <HeroCodeSnippet />
-            <p className="mt-3 text-center text-[11px] text-slate-500">
+            <p className="mt-3 text-center text-[11px] text-fg-muted">
               An agent is a YAML file — versioned, eval-gated, privacy-tagged. No Python class
               hierarchies. No vendor names.
             </p>
@@ -342,16 +341,16 @@ function Hero() {
 
 function Features() {
   return (
-    <section className="border-t border-slate-200 bg-white">
+    <section className="border-t border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="mb-12 max-w-2xl">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
             Six non-negotiables
           </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.1rem]">
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
             Built like a control plane, not a chat wrapper.
           </h2>
-          <p className="mt-3 text-base leading-relaxed text-slate-600">
+          <p className="mt-3 text-base leading-relaxed text-fg-muted">
             These shape every line of code in the platform. They&rsquo;re also why most features in
             our roadmap are short — the constraints do the work.
           </p>
@@ -360,10 +359,10 @@ function Features() {
           {FEATURES.map((f) => (
             <li
               key={f.title}
-              className="group rounded-lg border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+              className="group rounded-lg border border-border bg-bg-elevated p-6 shadow-sm transition-shadow hover:shadow-md"
             >
-              <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">{f.title}</h3>
-              <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">{f.body}</p>
+              <h3 className="text-[15px] font-semibold tracking-tight text-fg">{f.title}</h3>
+              <p className="mt-2.5 text-[14px] leading-relaxed text-fg-muted">{f.body}</p>
             </li>
           ))}
         </ul>
@@ -374,34 +373,34 @@ function Features() {
 
 function Builders() {
   return (
-    <section className="border-t border-slate-200 bg-slate-50">
+    <section className="border-t border-border bg-bg">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
           <div className="lg:col-span-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
               Built by ALDO TECH LABS
             </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.1rem]">
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
               We use ALDO&nbsp;AI to build ALDO&nbsp;AI.
             </h2>
-            <p className="mt-4 text-sm leading-relaxed text-slate-600">
+            <p className="mt-4 text-sm leading-relaxed text-fg-muted">
               The platform you evaluate is the platform our own team works in every day.
             </p>
           </div>
           <div className="lg:col-span-7">
-            <p className="text-base leading-relaxed text-slate-700">
+            <p className="text-base leading-relaxed text-fg">
               Every new tenant arrives with a reference agent organization — principal, architect,
               engineers, reviewers — preconfigured for sequential, parallel, and review handoffs. It
               is the same template our team uses internally to ship this product. Pain points
               surface in our own work first.
             </p>
-            <p className="mt-4 text-base leading-relaxed text-slate-700">
+            <p className="mt-4 text-base leading-relaxed text-fg">
               Replay, eval gates, the run tree, and the privacy-tier router are not boxes we ticked
               for a comparison table.{' '}
-              <strong className="text-slate-900">They are the surfaces we live in.</strong> If a
-              feature does not help that organization ship faster, we do not build it.
+              <strong className="text-fg">They are the surfaces we live in.</strong> If a feature
+              does not help that organization ship faster, we do not build it.
             </p>
-            <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-slate-200 pt-5 text-sm">
+            <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-border pt-5 text-sm">
               <Stat label="Eval suites gating promotion" value="every agent" />
               <Stat label="Replay against another model" value="any node" />
               <Stat label="Sensitive traffic to cloud" value="0" />
@@ -416,41 +415,128 @@ function Builders() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[11px] uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className="mt-1 font-mono text-base font-medium tabular-nums text-slate-900">{value}</dd>
+      <dt className="text-[11px] uppercase tracking-wider text-fg-muted">{label}</dt>
+      <dd className="mt-1 font-mono text-base font-medium tabular-nums text-fg">{value}</dd>
     </div>
+  );
+}
+
+/**
+ * "Recently shipped" — surfaces capabilities the homepage didn't yet
+ * mention. Each entry links into the relevant page so a visitor can
+ * verify the claim by clicking through.
+ *
+ * LAUNCH GUARD-RAIL: never list a feature here that isn't visible on
+ * the live product. The first time a visitor clicks "Replay" and the
+ * URL 404s, the section becomes a liability.
+ */
+const RECENT_SHIPMENTS: ReadonlyArray<{
+  tag: string;
+  title: string;
+  body: string;
+  href: string;
+  cta: string;
+}> = [
+  {
+    tag: 'Run debugger',
+    title: 'Replay any step against any model — side-by-side.',
+    body: 'Click swap-model on a checkpoint. We fork the run, route the new step through any provider you have, and drop you on a /runs/compare view with event-by-event, output, and cost diff.',
+    href: '/runs',
+    cta: 'See the run viewer →',
+  },
+  {
+    tag: 'Datasets',
+    title: 'Capture a production trace as an eval row, in one click.',
+    body: 'Save-as-eval-row pre-fills input + expected from the run’s message events, captures provenance metadata, and writes the row into the dataset of your choice. The eval harness then replays it against any model on this agent spec.',
+    href: '/datasets',
+    cta: 'Browse datasets →',
+  },
+  {
+    tag: 'Multi-team',
+    title: 'Projects: tenant-scoped grouping for teams.',
+    body: 'Group agents, runs, datasets, and evaluators into named projects with their own slug, settings, and (soon) RBAC. Foundation just landed; the entity-scoping retrofit ships incrementally per resource.',
+    href: '/projects',
+    cta: 'Open projects →',
+  },
+];
+
+function RecentShipments() {
+  return (
+    <section className="border-t border-border bg-bg">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+              Recently shipped
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
+              Built in-house, shipped continuously.
+            </h2>
+            <p className="mt-3 text-base leading-relaxed text-fg-muted">
+              We&rsquo;re a single team building the whole platform. That means tight feedback loops
+              and frequent releases — here&rsquo;s what landed in the last wave.
+            </p>
+          </div>
+          <Link
+            href="/changelog"
+            className="rounded border border-border bg-bg-elevated px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle"
+          >
+            Full changelog →
+          </Link>
+        </div>
+        <ul className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {RECENT_SHIPMENTS.map((s) => (
+            <li
+              key={s.title}
+              className="flex flex-col rounded-lg border border-border bg-bg-elevated p-6 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <span className="self-start rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+                {s.tag}
+              </span>
+              <h3 className="mt-3 text-[16px] font-semibold leading-snug tracking-tight text-fg">
+                {s.title}
+              </h3>
+              <p className="mt-2 text-[14px] leading-relaxed text-fg-muted">{s.body}</p>
+              <Link
+                href={s.href}
+                className="mt-4 inline-flex text-sm font-medium text-accent hover:text-accent-hover"
+              >
+                {s.cta}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }
 
 function HowItWorks() {
   return (
-    <section className="border-t border-slate-200 bg-white">
+    <section className="border-t border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="mb-12 max-w-2xl">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
             How it works
           </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.1rem]">
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
             Sixty seconds, four steps.
           </h2>
-          <p className="mt-3 text-base leading-relaxed text-slate-600">
-            No fake demo video. The whole flow in plain text — and a 14-day trial that takes five
-            minutes to spin up.
+          <p className="mt-3 text-base leading-relaxed text-fg-muted">
+            The whole flow in plain text — and a 14-day trial that takes five minutes to spin up.
           </p>
         </div>
         <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s) => (
             <li
               key={s.n}
-              className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+              className="rounded-lg border border-border bg-bg-elevated p-6 shadow-sm transition-shadow hover:shadow-md"
             >
-              <div className="font-mono text-[12px] font-semibold tracking-wider text-blue-600">
+              <div className="font-mono text-[12px] font-semibold tracking-wider text-accent">
                 {s.n}
               </div>
-              <h3 className="mt-2 text-[15px] font-semibold tracking-tight text-slate-900">
-                {s.title}
-              </h3>
-              <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">{s.body}</p>
+              <h3 className="mt-2 text-[15px] font-semibold tracking-tight text-fg">{s.title}</h3>
+              <p className="mt-2.5 text-[14px] leading-relaxed text-fg-muted">{s.body}</p>
             </li>
           ))}
         </ol>
@@ -461,7 +547,7 @@ function HowItWorks() {
 
 function BottomCta() {
   return (
-    <section className="border-t border-slate-200 bg-slate-900">
+    <section className="border-t border-slate-800 bg-slate-950">
       <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-14 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-white">
@@ -478,12 +564,12 @@ function BottomCta() {
           >
             Start free trial
           </Link>
-          <Link
-            href="/design-partner"
+          <a
+            href="mailto:info@aldo.tech?subject=ALDO%20AI%20%E2%80%94%20enterprise%20inquiry"
             className="rounded border border-slate-700 bg-transparent px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
           >
-            Apply to be a design partner
-          </Link>
+            Talk to us
+          </a>
         </div>
       </div>
     </section>

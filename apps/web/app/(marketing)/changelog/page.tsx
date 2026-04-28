@@ -13,8 +13,7 @@ import Link from 'next/link';
 
 export const metadata = {
   title: 'Changelog — ALDO AI',
-  description:
-    'What we ship, week by week. Public. Updated on every meaningful release.',
+  description: 'What we ship, week by week. Public. Updated on every meaningful release.',
 };
 
 interface Entry {
@@ -27,11 +26,11 @@ interface Entry {
 
 const TAG_BADGE: Record<Entry['tag'], string> = {
   platform: 'bg-blue-50 text-blue-700 ring-blue-200',
-  web:      'bg-violet-50 text-violet-700 ring-violet-200',
-  sdk:      'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  web: 'bg-violet-50 text-violet-700 ring-violet-200',
+  sdk: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   security: 'bg-rose-50 text-rose-700 ring-rose-200',
-  docs:     'bg-amber-50 text-amber-800 ring-amber-200',
-  ops:      'bg-slate-100 text-slate-700 ring-slate-200',
+  docs: 'bg-amber-50 text-amber-800 ring-amber-200',
+  ops: 'bg-slate-100 text-slate-700 ring-slate-200',
 };
 
 const ENTRIES: ReadonlyArray<Entry> = [
@@ -39,85 +38,73 @@ const ENTRIES: ReadonlyArray<Entry> = [
     date: '2026-04-27',
     tag: 'web',
     title: 'New landing page, sales kit, and pitch deck',
-    body:
-      'Marketing surface gets a code-first hero, an inline architecture diagram, and a trust strip with verticals (no fake logos). Three /vs/* comparison pages (CrewAI, LangSmith, Braintrust) ship side-by-side. Customer-facing /sales/one-pager, /sales/overview, and /deck routes added — same talking points, three formats. ⌘P-friendly print stylesheets on each.',
+    body: 'Marketing surface gets a code-first hero, an inline architecture diagram, and a trust strip with verticals (no fake logos). Three /vs/* comparison pages (CrewAI, LangSmith, Braintrust) ship side-by-side. Customer-facing /sales/one-pager, /sales/overview, and /deck routes added — same talking points, three formats. ⌘P-friendly print stylesheets on each.',
   },
   {
     date: '2026-04-27',
     tag: 'ops',
     title: 'Self-hosted at ai.aldo.tech with auto-deploy on every push',
-    body:
-      'Production now runs on our own VPS instead of Fly + Vercel — coexisting with the existing slovenia-transit edge proxy on the same host (it stays untouched). Every push to main or our active dev branch fires a GitHub Actions workflow that calls a token-gated webhook on the VPS to git fetch + rebuild + redeploy in under five minutes. The operator is no longer in the deploy loop.',
+    body: 'Production now runs on our own VPS instead of Fly + Vercel — coexisting with the existing slovenia-transit edge proxy on the same host (it stays untouched). Every push to main or our active dev branch fires a GitHub Actions workflow that calls a token-gated webhook on the VPS to git fetch + rebuild + redeploy in under five minutes. The operator is no longer in the deploy loop.',
   },
   {
     date: '2026-04-26',
     tag: 'security',
     title: 'CodeQL pass: XSS, ReDoS, TOCTOU, and modulo-bias fixes',
-    body:
-      'Eleven CodeQL findings triaged across the docs renderer (sanitize-html with explicit allowlists), the share-slug generator (rejection sampling instead of mod), the markdown URL regex (length-bounded), and the file readers in the FS MCP server (open + handle.stat instead of stat + read).',
+    body: 'Eleven CodeQL findings triaged across the docs renderer (sanitize-html with explicit allowlists), the share-slug generator (rejection sampling instead of mod), the markdown URL regex (length-bounded), and the file readers in the FS MCP server (open + handle.stat instead of stat + read).',
   },
   {
     date: '2026-04-25',
     tag: 'platform',
     title: 'Custom domains, per-tenant quotas, and distributed rate-limiting (wave 16)',
-    body:
-      'Bring-your-own domain support for hosted tenants. Per-tenant quotas (runs/month, dataset rows, secrets) configurable per plan. Postgres-advisory-lock token-bucket rate limiter applied to the runs API and playground for fair-share between tenants on shared deployments.',
+    body: 'Bring-your-own domain support for hosted tenants. Per-tenant quotas (runs/month, dataset rows, secrets) configurable per plan. Postgres-advisory-lock token-bucket rate limiter applied to the runs API and playground for fair-share between tenants on shared deployments.',
   },
   {
     date: '2026-04-22',
     tag: 'platform',
     title: 'Replayable run tree + per-node model swap',
-    body:
-      'Every run, every supervisor node, every tool call is now checkpointed. Re-execute any step against a different model — the run-compare view shows token-by-token diffs and the cost rollup at every node.',
+    body: 'Every run, every supervisor node, every tool call is now checkpointed. Re-execute any step against a different model — the run-compare view shows token-by-token diffs and the cost rollup at every node.',
   },
   {
     date: '2026-04-20',
     tag: 'platform',
     title: 'Privacy-tier router fails closed',
-    body:
-      'Agents tagged privacy_tier: sensitive can no longer dispatch to a cloud-class model — the router refuses before the gateway ever calls a provider. Every blocked attempt is a row in the audit log with the reason. This is the architectural commitment most competitors cannot match without a rewrite.',
+    body: 'Agents tagged privacy_tier: sensitive can no longer dispatch to a cloud-class model — the router refuses before the gateway ever calls a provider. Every blocked attempt is a row in the audit log with the reason. This is the architectural commitment most competitors cannot match without a rewrite.',
   },
   {
     date: '2026-04-18',
     tag: 'platform',
     title: 'Local-model auto-discovery — Ollama, vLLM, llama.cpp, LM Studio, MLX',
-    body:
-      'On boot the gateway probes the well-known local ports for each runtime and merges what it finds into the model registry. The eval harness then compares local vs frontier on the same agent spec — model choice becomes data-driven instead of vibes-driven.',
+    body: 'On boot the gateway probes the well-known local ports for each runtime and merges what it finds into the model registry. The eval harness then compares local vs frontier on the same agent spec — model choice becomes data-driven instead of vibes-driven.',
   },
   {
     date: '2026-04-15',
     tag: 'sdk',
     title: 'Python and TypeScript SDKs + CLI',
-    body:
-      'aldo-ai (Python) and @aldo-ai/sdk (TypeScript) ship the same shape: typed clients for runs, agents, evals, datasets, secrets. The aldo CLI bundles run / eval / dataset commands plus a one-shot tenant-bootstrap. VS Code extension wires the CLI into the editor.',
+    body: 'aldo-ai (Python) and @aldo-ai/sdk (TypeScript) ship the same shape: typed clients for runs, agents, evals, datasets, secrets. The aldo CLI bundles run / eval / dataset commands plus a one-shot tenant-bootstrap. VS Code extension wires the CLI into the editor.',
   },
   {
     date: '2026-04-12',
     tag: 'platform',
     title: 'Multi-agent supervisors: sequential, parallel, debate, iterative',
-    body:
-      'Four supervisor strategies built into the orchestrator. Each composes deterministically — the cost rollup at the root of the run tree always sums what every leaf actually consumed.',
+    body: 'Four supervisor strategies built into the orchestrator. Each composes deterministically — the cost rollup at the root of the run tree always sums what every leaf actually consumed.',
   },
   {
     date: '2026-04-08',
     tag: 'platform',
     title: 'Eval-gated promotion',
-    body:
-      'Agent specs declare a threshold + rubric. Re-promotion to the active version is blocked if the eval score regresses. The same rubric runs in CI and in production — one source of truth, no review-as-vibes.',
+    body: 'Agent specs declare a threshold + rubric. Re-promotion to the active version is blocked if the eval score regresses. The same rubric runs in CI and in production — one source of truth, no review-as-vibes.',
   },
   {
     date: '2026-04-04',
     tag: 'security',
     title: 'Sandboxed tool execution + prompt-injection scanner',
-    body:
-      'Every MCP tool call runs through process isolation, a prompt-injection spotlighter (suspicious instructions in tool output get quarantined), and an output scanner before the result reaches the agent.',
+    body: 'Every MCP tool call runs through process isolation, a prompt-injection spotlighter (suspicious instructions in tool output get quarantined), and an output scanner before the result reaches the agent.',
   },
   {
     date: '2026-04-01',
     tag: 'docs',
     title: 'Public docs site at /docs with searchable index',
-    body:
-      'Markdown-rendered docs, in-page TOC, full-text search index built at compile time. Concepts (agency, agents, supervisors, evals, privacy tiers) plus reference for the SDKs and the API.',
+    body: 'Markdown-rendered docs, in-page TOC, full-text search index built at compile time. Concepts (agency, agents, supervisors, evals, privacy tiers) plus reference for the SDKs and the API.',
   },
 ];
 
@@ -166,8 +153,8 @@ export default function ChangelogPage() {
           Want to be notified?
         </h3>
         <p className="mt-2 text-[14px] leading-relaxed text-slate-700">
-          We don&rsquo;t have a newsletter yet — pricing for spam-free engineering tooling. For
-          now: bookmark this page, or email{' '}
+          We don&rsquo;t have a newsletter yet — pricing for spam-free engineering tooling. For now:
+          bookmark this page, or email{' '}
           <a className="underline" href="mailto:info@aldo.tech">
             info@aldo.tech
           </a>{' '}
