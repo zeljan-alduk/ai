@@ -1,0 +1,47 @@
+{
+  "name": "@aldo-ai/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript / JavaScript SDK for the ALDO AI control plane — LLM-agnostic agent orchestration.",
+  "license": "FSL-1.1-ALv2-pre-publish",
+  "author": "ALDO TECH LABS",
+  "homepage": "https://ai.aldo.tech",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aldo-tech-labs/aldo-ai.git",
+    "directory": "sdks/typescript"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "keywords": [
+    "aldo",
+    "ai",
+    "agents",
+    "llm",
+    "evaluation",
+    "orchestration",
+    "model-context-protocol",
+    "mcp"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}
