@@ -17,6 +17,7 @@
  * LLM-agnostic: rows display opaque provider/model strings only.
  */
 
+import { CompositeDiagram } from '@/components/agents/composite-diagram';
 import { CommentsThread } from '@/components/annotations/comments-thread';
 import { NeutralBadge, StatusBadge } from '@/components/badge';
 import { EmptyState } from '@/components/empty-state';
@@ -32,7 +33,14 @@ import { SaveAsEvalRowButton } from '@/components/runs/save-as-eval-row-dialog';
 import { TimelineView } from '@/components/runs/timeline-view';
 import { ShareDialog } from '@/components/shares/share-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ApiClientError, getAuthMe, getRun, getRunTree, listAnnotationsApi } from '@/lib/api';
+import {
+  ApiClientError,
+  getAgent,
+  getAuthMe,
+  getRun,
+  getRunTree,
+  listAnnotationsApi,
+} from '@/lib/api';
 import { formatAbsolute, formatDuration, formatRelativeTime, formatUsd } from '@/lib/format';
 import type { Annotation, RunDetail, RunTreeNode } from '@aldo-ai/api-contract';
 import Link from 'next/link';
@@ -75,6 +83,21 @@ export default async function RunDetailPage({
       } else {
         error = err;
       }
+    }
+  }
+
+  // Pull the agent spec so we can render the spec-level composition
+  // graph as a tab. Only relevant for composite agents (sequential /
+  // parallel / debate / iterative); leaf agents skip the tab. Best-
+  // effort — never block the page on this.
+  let agentComposite: import('@aldo-ai/api-contract').CompositeWire | null = null;
+  if (data !== null) {
+    try {
+      const ag = await getAgent(data.run.agentName);
+      agentComposite = ag.agent.composite ?? null;
+    } catch {
+      // 404 or transient error — render the run detail without the
+      // composition tab. Silent because this is auxiliary context.
     }
   }
 
@@ -122,7 +145,7 @@ export default async function RunDetailPage({
         <ErrorView error={error} context="this run" />
       ) : data ? (
         <>
-          <RunDetailBody run={data.run} tree={tree} runId={id} />
+          <RunDetailBody run={data.run} tree={tree} runId={id} agentComposite={agentComposite} />
           {currentUserId.length > 0 && (
             <div className="mt-6">
               <CommentsThread
@@ -144,10 +167,12 @@ function RunDetailBody({
   run,
   tree,
   runId,
+  agentComposite,
 }: {
   run: RunDetail;
   tree: RunTreeNode | null;
   runId: string;
+  agentComposite: import('@aldo-ai/api-contract').CompositeWire | null;
 }) {
   const effectiveTree: RunTreeNode = tree ?? synthesiseTreeOfOne(run);
   const isChild = run.parentRunId !== null;
@@ -286,6 +311,32 @@ function RunDetailBody({
         timeline={timelinePanel}
         events={eventsPanel}
         tree={treePanel}
+        composition={
+          agentComposite !== null ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Composition</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-4 text-sm text-fg-muted">
+                  Spec-level supervisor structure of{' '}
+                  <Link
+                    className="font-medium text-fg hover:underline"
+                    href={`/agents/${encodeURIComponent(run.agentName)}`}
+                  >
+                    {run.agentName}
+                  </Link>
+                  . The Tree tab above shows the actual run; this view shows the declared topology.
+                </p>
+                <CompositeDiagram
+                  supervisorName={run.agentName}
+                  composite={agentComposite}
+                  knownAgents={[]}
+                />
+              </CardContent>
+            </Card>
+          ) : null
+        }
         replay={replayPanel}
       />
 

@@ -237,6 +237,53 @@ function CompositeTab({
         composite={agent.composite}
         knownAgents={knownAgents}
       />
+      {agent.termination ? <TerminationCard termination={agent.termination} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Wave-17 — render the spec's declarative termination block. The
+ * runtime currently honours the existing implicit + iterative
+ * semantics; once the orchestrator wires maxTurns / maxUsd /
+ * textMention / successRoles, this card stops being aspirational.
+ */
+function TerminationCard({
+  termination,
+}: {
+  termination: NonNullable<Awaited<ReturnType<typeof getAgent>>['agent']['termination']>;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-bg-elevated p-4 text-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">
+        Termination conditions
+      </p>
+      <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {termination.maxTurns !== undefined ? (
+          <div>
+            <dt className="text-[11px] text-fg-muted">Max supervisor↔subagent turns</dt>
+            <dd className="font-mono text-sm text-fg">{termination.maxTurns}</dd>
+          </div>
+        ) : null}
+        {termination.maxUsd !== undefined ? (
+          <div>
+            <dt className="text-[11px] text-fg-muted">Max cost</dt>
+            <dd className="font-mono text-sm text-fg">${termination.maxUsd.toFixed(2)}</dd>
+          </div>
+        ) : null}
+        {termination.textMention !== undefined ? (
+          <div>
+            <dt className="text-[11px] text-fg-muted">Text-mention sentinel</dt>
+            <dd className="font-mono text-sm text-fg">{termination.textMention}</dd>
+          </div>
+        ) : null}
+        {termination.successRoles !== undefined && termination.successRoles.length > 0 ? (
+          <div>
+            <dt className="text-[11px] text-fg-muted">Ends on success of</dt>
+            <dd className="font-mono text-sm text-fg">{termination.successRoles.join(', ')}</dd>
+          </div>
+        ) : null}
+      </dl>
     </div>
   );
 }

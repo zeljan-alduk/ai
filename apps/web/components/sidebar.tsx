@@ -31,6 +31,13 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     match: (p) => p === '/playground' || p.startsWith('/playground/'),
   },
   { href: '/agents', label: 'Agents', match: (p) => p === '/agents' || p.startsWith('/agents/') },
+  // Wave-17 — gallery of importable agent templates (the AutoGen
+  // Studio "Gallery" parallel; closes the discoverability gap).
+  {
+    href: '/gallery',
+    label: 'Gallery',
+    match: (p) => p === '/gallery' || p.startsWith('/gallery/'),
+  },
   {
     href: '/secrets',
     label: 'Secrets',

@@ -100,6 +100,42 @@ export const CompositeWire = z.object({
 });
 export type CompositeWire = z.infer<typeof CompositeWire>;
 
+/**
+ * Wave-17 — declarative termination conditions.
+ *
+ * The runtime always honours `iterative.terminate` (a YAML expression)
+ * and the per-strategy implicit "all subagents finished" rule. This
+ * block exposes a *cross-strategy* termination contract so an
+ * operator can put a hard ceiling on cost or turns regardless of
+ * supervisor pattern.
+ *
+ * v0 fields:
+ *   - `maxTurns`    — terminate after N supervisor↔subagent round-trips
+ *   - `maxUsd`      — terminate when the run's totalUsd crosses the cap
+ *   - `textMention` — terminate when any agent emits a message whose
+ *                     payload.text contains this exact substring (case-
+ *                     sensitive). Common pattern: "TERMINATE" sentinel.
+ *   - `successRoles` — terminate when any subagent in this list
+ *                      produces a `run.completed` event. Lets a
+ *                      reviewer agent end a debate.
+ *
+ * All fields are optional; an empty `termination` block is the same
+ * as omitting it — the runtime falls through to its built-in defaults.
+ *
+ * RUNTIME NOTE: as of this wave the wire shape is *additive only* —
+ * the supervisor honours the existing implicit + iterative semantics.
+ * A follow-up engineer wires `maxTurns` / `maxUsd` / `textMention` /
+ * `successRoles` into apps/api/src/runs/orchestrator and emits a
+ * `run.terminated_by` event with the matched rule.
+ */
+export const TerminationWire = z.object({
+  maxTurns: z.number().int().positive().optional(),
+  maxUsd: z.number().nonnegative().optional(),
+  textMention: z.string().min(1).optional(),
+  successRoles: z.array(z.string().min(1)).optional(),
+});
+export type TerminationWire = z.infer<typeof TerminationWire>;
+
 export const SandboxConfigWire = z.object({
   /** Wall-clock timeout in ms for any tool call. */
   timeoutMs: z.number().int().positive().optional(),
@@ -176,6 +212,14 @@ export const AgentDetail = AgentSummary.extend({
    * call directly. Pre-9 servers simply omit the field. Additive only.
    */
   composite: CompositeWire.nullish(),
+  /**
+   * Wave-17 — declarative termination conditions. Optional. Pre-17
+   * servers simply omit the field; clients fall through to "implicit
+   * termination" UX. Runtime enforcement of maxTurns / maxUsd /
+   * textMention / successRoles is a follow-up; the wire is forward-
+   * only so we can ship the spec + UI now.
+   */
+  termination: TerminationWire.nullish(),
 });
 export type AgentDetail = z.infer<typeof AgentDetail>;
 
