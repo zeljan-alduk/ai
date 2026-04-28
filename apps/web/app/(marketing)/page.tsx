@@ -458,6 +458,13 @@ const RECENT_SHIPMENTS: ReadonlyArray<{
     href: '/projects',
     cta: 'Open projects →',
   },
+  {
+    tag: 'MCP server',
+    title: 'Drive ALDO AI from Claude, Cursor, or any MCP client.',
+    body: 'A first-party Model Context Protocol server (`@aldo-ai/mcp-platform`) exposes agents, runs, datasets, and the run debugger as tools. Drop one config block into Claude Desktop or Cursor and an LLM can list agents, start runs, compare them, and capture good runs as eval rows.',
+    href: '/docs/guides/mcp-server',
+    cta: 'Set it up →',
+  },
 ];
 
 function RecentShipments() {
@@ -484,7 +491,7 @@ function RecentShipments() {
             Full changelog →
           </Link>
         </div>
-        <ul className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {RECENT_SHIPMENTS.map((s) => (
             <li
               key={s.title}

@@ -1,0 +1,37 @@
+{
+  "name": "@aldo-ai/mcp-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ALDO AI platform MCP server: expose agents, runs, datasets, and the run debugger to any MCP-compatible client.",
+  "license": "SEE LICENSE IN LICENSE",
+  "main": "./src/index.ts",
+  "bin": {
+    "aldo-mcp-platform": "./dist/index.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node --import=tsx/esm src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

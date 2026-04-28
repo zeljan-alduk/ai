@@ -178,6 +178,13 @@ export const STATIC_DOC_PAGES: ReadonlyArray<DocPage> = [
     summary: 'Run frontier-quality reasoning on your laptop without leaving the box.',
   },
   {
+    slug: 'guides/mcp-server',
+    section: 'guides',
+    title: 'MCP server',
+    summary:
+      'Drive ALDO AI from Claude Desktop, Cursor, Claude Code, or any MCP-compatible client.',
+  },
+  {
     slug: 'sdks/python',
     section: 'sdks',
     title: 'Python SDK',
