@@ -49,6 +49,12 @@ const PUBLIC_BOUNDED: ReadonlyArray<string> = [
   // signing up.
   '/api/docs',
   '/api/redoc',
+  // Wave A/B marketing additions — comparison pages, public changelog,
+  // outbound sales kit, customer-facing pitch deck.
+  '/vs',
+  '/changelog',
+  '/sales',
+  '/deck',
 ];
 
 export function isPublicPath(pathname: string): boolean {
