@@ -62,7 +62,59 @@ export function DocsSidebar({ pages }: DocsSidebarProps) {
           />
         );
       })}
+      <DocsSidebarReference />
     </nav>
+  );
+}
+
+/**
+ * "Reference & tools" — pinned to the bottom of the docs sidebar.
+ * These links leave the curated /docs surface and land on the
+ * auto-generated OpenAPI viewers (Scalar at /api/docs, Redoc at
+ * /api/redoc) and the raw spec at /openapi.json. Always visible so
+ * a developer never has to hunt for the interactive reference.
+ */
+function DocsSidebarReference() {
+  return (
+    <div>
+      <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">
+        Reference &amp; tools
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        <li>
+          <Link
+            href="/api/docs"
+            className="block rounded px-2 py-1 text-fg-muted transition-colors hover:bg-bg-subtle/50 hover:text-fg"
+          >
+            API reference (interactive)
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/api/redoc"
+            className="block rounded px-2 py-1 text-fg-muted transition-colors hover:bg-bg-subtle/50 hover:text-fg"
+          >
+            API reference (read-only)
+          </Link>
+        </li>
+        <li>
+          <a
+            href="/openapi.json"
+            className="block rounded px-2 py-1 font-mono text-[12px] text-fg-muted transition-colors hover:bg-bg-subtle/50 hover:text-fg"
+          >
+            openapi.json
+          </a>
+        </li>
+        <li>
+          <Link
+            href="/changelog"
+            className="block rounded px-2 py-1 text-fg-muted transition-colors hover:bg-bg-subtle/50 hover:text-fg"
+          >
+            Changelog
+          </Link>
+        </li>
+      </ul>
+    </div>
   );
 }
 

@@ -1,10 +1,11 @@
 /**
- * Smoke test for the `/api/docs` Swagger UI page.
+ * Smoke test for the `/api/docs` page (Scalar-powered OpenAPI viewer).
  *
  * We render the server component to a string (via React's
- * `renderToString`) and assert on the markup. We avoid `@testing-
- * library/react` here so this test doesn't pull jsdom — the page is
- * a pure server component and a string is enough to verify the shell.
+ * `renderToString`) and assert on the shell markup. The interactive
+ * UI is loaded by the Scalar standalone bundle on the client; we
+ * only verify the host elements + spec URL + noscript fallback are
+ * in the markup.
  */
 
 import { renderToString } from 'react-dom/server';
@@ -12,12 +13,11 @@ import { describe, expect, it } from 'vitest';
 import ApiDocsPage from './page.js';
 
 describe('/api/docs page', () => {
-  it('renders the Swagger UI shell', () => {
+  it('renders the Scalar host element', () => {
     const html = renderToString(<ApiDocsPage />);
-    expect(html).toContain('id="swagger-ui"');
-    expect(html).toContain('swagger-ui.css');
-    expect(html).toContain('swagger-ui-bundle.js');
-    expect(html).toContain('SwaggerUIBundle');
+    expect(html).toContain('id="api-reference"');
+    expect(html).toContain('@scalar/api-reference');
+    expect(html).toContain('data-configuration=');
   });
 
   it('points at /openapi.json on the configured API base', () => {
@@ -25,8 +25,15 @@ describe('/api/docs page', () => {
     expect(html).toContain('/openapi.json');
   });
 
-  it('renders a fallback for the spec-unavailable case', () => {
+  it('renders a noscript fallback for the JS-disabled case', () => {
     const html = renderToString(<ApiDocsPage />);
-    expect(html).toContain('aldo-swagger-fallback');
+    expect(html).toContain('<noscript>');
+    expect(html).toContain('requires JavaScript');
+  });
+
+  it('links out to Redoc and the raw spec from the header', () => {
+    const html = renderToString(<ApiDocsPage />);
+    expect(html).toContain('/api/redoc');
+    expect(html).toContain('Raw spec');
   });
 });

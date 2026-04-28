@@ -1,133 +1,154 @@
 /**
- * `/api/docs` — Swagger UI rendering the canonical OpenAPI 3.1 spec.
+ * `/api/docs` — modern OpenAPI viewer powered by Scalar.
  *
  * Strategy
  * --------
- * Swagger UI is loaded from its hosted MIT-licensed distribution at
- * runtime instead of `swagger-ui-react`. Rationale: `swagger-ui-react`
- * is ~1.5 MB and pulls react-redux + classnames + lodash. For a docs
- * surface we serve the same UI from the upstream UMD bundle and apply
- * a small CSS override to align with the design-system tokens. The
- * Swagger UI CSS class hierarchy is the upper limit on theming
- * (documented behaviour from the upstream project).
+ * Replaces the previous Swagger UI rendering with Scalar
+ * (https://github.com/scalar/scalar — MIT). What we get for free:
+ *   - three-column layout (sidebar + content + try-it-out) instead of
+ *     Swagger UI's flat scroll,
+ *   - dark mode out of the box; we wire our `--bg` / `--fg` /
+ *     `--accent` tokens through Scalar's CSS variable hooks so the
+ *     viewer flips with `html.dark` like the rest of the site,
+ *   - searchable endpoint list,
+ *   - built-in API client that emits curl + JS + Python snippets.
+ *
+ * The standalone bundle reads `data-url` on a tag with id
+ * `api-reference` and renders into the same DOM. Configuration is
+ * passed inline as a JSON string on `data-configuration`.
  *
  * Privacy / auth
  * --------------
- * The spec is public (`/openapi.json` bypasses auth in apps/api). The
- * page is in the chromeless allow-list (no app sidebar) and is itself
- * outside the auth-required surface — see `lib/middleware-shared.ts`.
+ * The OpenAPI spec is public (`/openapi.json` bypasses auth in
+ * apps/api). The page is in the chromeless allow-list (no app
+ * sidebar) and outside the auth-required surface — see
+ * `lib/middleware-shared.ts`.
  *
  * LLM-agnostic
  * ------------
- * The spec carries `x-aldo-llm-agnostic: true`; the docs page just
+ * The spec carries `x-aldo-llm-agnostic: true`; this page just
  * renders whatever the spec contains. No provider names live here.
  */
 
 import type { Metadata } from 'next';
 
-const SWAGGER_UI_VERSION = '5.17.14';
-// jsDelivr (proper CORS) instead of unpkg (CORS-blocked when crossorigin=anonymous).
-const SWAGGER_UI_CSS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui.css`;
-const SWAGGER_UI_JS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-bundle.js`;
-const SWAGGER_UI_PRESET_JS = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}/swagger-ui-standalone-preset.js`;
+// Pin to a specific Scalar version so a CDN regression cannot break
+// the docs page silently. Bump in a separate commit once a new
+// release looks stable.
+const SCALAR_VERSION = '1.25.30';
+const SCALAR_BUNDLE = `https://cdn.jsdelivr.net/npm/@scalar/api-reference@${SCALAR_VERSION}/dist/browser/standalone.min.js`;
 
 export const metadata: Metadata = {
-  title: 'ALDO AI API — Swagger UI',
-  description: 'Interactive Swagger UI for the ALDO AI Control Plane API.',
+  title: 'ALDO AI API — Reference',
+  description:
+    'Interactive OpenAPI reference for the ALDO AI Control Plane API. Searchable endpoints, try-it-out, and code samples in curl, JavaScript, and Python.',
 };
 
-/** API base URL Swagger UI fetches the spec from. */
+/** API base URL the OpenAPI spec is fetched from. */
 function specUrl(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3001';
   return `${base.replace(/\/$/, '')}/openapi.json`;
 }
 
 /**
- * Tailwind-token override for Swagger UI. Variables `--bg`, `--fg`,
- * `--border`, `--accent`, `--bg-subtle` are wired in
- * apps/web/app/globals.css.
+ * Scalar configuration. Passed as a JSON-encoded string on the
+ * `<script>` tag's `data-configuration` attribute. Theme tokens are
+ * piped through `customCss` so Scalar inherits our html.dark flip
+ * without a separate override sheet.
  */
-const themeOverrideCss = `
-  body, .swagger-ui { background: var(--bg) !important; color: var(--fg) !important; }
-  .swagger-ui .topbar { display: none !important; }
-  .swagger-ui .info, .swagger-ui .info .title, .swagger-ui .opblock-tag,
-  .swagger-ui .opblock-summary-description, .swagger-ui label,
-  .swagger-ui .response-col_status, .swagger-ui .scheme-container,
-  .swagger-ui table thead tr th { color: var(--fg) !important; }
-  .swagger-ui .opblock { border-color: var(--border) !important; background: var(--bg-subtle) !important; }
-  .swagger-ui .btn { border-color: var(--border) !important; }
-  .swagger-ui .btn.execute { background: var(--accent) !important; border-color: var(--accent) !important; }
-  .swagger-ui section.models, .swagger-ui section.models.is-open,
-  .swagger-ui .scheme-container { background: var(--bg) !important; border-color: var(--border) !important; }
-  .swagger-ui .highlight-code, .swagger-ui pre { background: var(--bg-subtle) !important; color: var(--fg) !important; }
-  #aldo-swagger-fallback { display: none; padding: 2rem; font-family: system-ui, sans-serif; color: var(--fg); }
-`;
-
-function bootScript(url: string): string {
-  return `
-    window.addEventListener('load', function() {
-      try {
-        if (typeof SwaggerUIBundle === 'undefined') {
-          var f = document.getElementById('aldo-swagger-fallback');
-          if (f) f.style.display = 'block';
-          return;
-        }
-        window.ui = SwaggerUIBundle({
-          url: ${JSON.stringify(url)},
-          dom_id: '#swagger-ui',
-          deepLinking: true,
-          defaultModelsExpandDepth: 0,
-          presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-          layout: 'BaseLayout'
-        });
-      } catch (err) {
-        var n = document.getElementById('aldo-swagger-fallback');
-        if (n) n.style.display = 'block';
-        console.error('swagger-ui boot failed', err);
+function scalarConfig(): string {
+  return JSON.stringify({
+    theme: 'default',
+    layout: 'modern',
+    showSidebar: true,
+    hideDownloadButton: false,
+    metaData: {
+      title: 'ALDO AI API Reference',
+      description:
+        'Control plane for agent teams — capability-class routing, replayable runs, eval-gated promotion.',
+    },
+    // Map Scalar's CSS variables onto our design-token system so the
+    // viewer flips with html.dark like the rest of the marketing site.
+    customCss: `
+      :root {
+        --scalar-color-1: rgb(var(--fg));
+        --scalar-color-2: rgb(var(--fg-muted));
+        --scalar-color-3: rgb(var(--fg-faint));
+        --scalar-color-accent: rgb(var(--accent));
+        --scalar-background-1: rgb(var(--bg));
+        --scalar-background-2: rgb(var(--bg-elevated));
+        --scalar-background-3: rgb(var(--bg-subtle));
+        --scalar-background-accent: rgb(var(--accent));
+        --scalar-border-color: rgb(var(--border));
       }
-    });
-  `;
+    `,
+  });
 }
 
 export default function ApiDocsPage() {
   const url = specUrl();
+  const config = scalarConfig();
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <link rel="stylesheet" href={SWAGGER_UI_CSS} />
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static literal CSS, no user input */}
-      <style dangerouslySetInnerHTML={{ __html: themeOverrideCss }} />
       <header className="border-b border-border px-6 py-3">
-        <h1 className="text-lg font-semibold">ALDO AI API — Swagger UI</h1>
-        <p className="text-sm text-fg-muted">
-          Spec source:{' '}
-          <a className="underline" href={url}>
-            {url}
-          </a>
-          . Read-only browsing at{' '}
-          <a className="underline" href="/api/redoc">
-            /api/redoc
-          </a>
-          .
-        </p>
+        <div className="mx-auto flex max-w-7xl items-baseline justify-between gap-4">
+          <div>
+            <h1 className="text-lg font-semibold">ALDO AI API</h1>
+            <p className="text-xs text-fg-muted">
+              Interactive reference. Spec:{' '}
+              <a className="underline hover:text-fg" href={url}>
+                <code className="font-mono text-[11px]">{url}</code>
+              </a>
+            </p>
+          </div>
+          <nav className="flex items-center gap-3 text-xs">
+            <a className="text-fg-muted hover:text-fg" href="/api/redoc">
+              Redoc
+            </a>
+            <span className="text-fg-faint">·</span>
+            <a className="text-fg-muted hover:text-fg" href={url}>
+              Raw spec
+            </a>
+            <span className="text-fg-faint">·</span>
+            <a className="text-fg-muted hover:text-fg" href="/docs">
+              Guides
+            </a>
+          </nav>
+        </div>
       </header>
-      <div id="swagger-ui" />
+
+      {/*
+        Scalar API Reference standalone bundle. The script tag with
+        id="api-reference" is the host element; the bundle reads
+        `data-url` and `data-configuration`, then renders into the
+        page. dangerouslySetInnerHTML with an empty body forces React
+        to emit a self-closing-equivalent <script> with no children
+        (Scalar requires the tag to exist before the bundle loads).
+      */}
+      <script
+        id="api-reference"
+        data-url={url}
+        data-configuration={config}
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: standalone bundle requires this tag in DOM with no body
+        dangerouslySetInnerHTML={{ __html: '' }}
+      />
+      <script src={SCALAR_BUNDLE} defer />
+
       <noscript>
-        <p style={{ padding: '2rem' }}>
-          Swagger UI requires JavaScript. Browse the raw spec at <a href={url}>{url}</a>.
-        </p>
+        <div className="p-8 text-center">
+          <p className="text-fg">
+            The interactive reference requires JavaScript. Browse the raw spec at{' '}
+            <a className="underline" href={url}>
+              {url}
+            </a>
+            , or read the static reference at{' '}
+            <a className="underline" href="/api/redoc">
+              /api/redoc
+            </a>
+            .
+          </p>
+        </div>
       </noscript>
-      <div id="aldo-swagger-fallback">
-        <h2>Spec unavailable</h2>
-        <p>
-          The Swagger UI bundle could not be loaded, or the API spec at <code>{url}</code> is not
-          reachable. Fetch directly with{' '}
-          <code>curl {url}</code>.
-        </p>
-      </div>
-      <script src={SWAGGER_UI_JS} async />
-      <script src={SWAGGER_UI_PRESET_JS} async />
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static boot script with JSON-encoded URL only */}
-      <script dangerouslySetInnerHTML={{ __html: bootScript(url) }} />
     </div>
   );
 }

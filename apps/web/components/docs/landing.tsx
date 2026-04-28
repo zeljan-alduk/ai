@@ -64,7 +64,25 @@ export function DocsLanding({ sections, quickstart }: DocsLandingProps) {
           >
             Browse the API reference
           </Link>
+          <Link
+            href="/api/docs"
+            className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-fg hover:bg-bg-subtle"
+          >
+            Open Swagger UI
+            <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
+          </Link>
         </div>
+        <p className="text-xs text-fg-muted">
+          Prefer Redoc?{' '}
+          <Link href="/api/redoc" className="underline hover:text-fg">
+            Three-column read-only reference
+          </Link>
+          . Need the raw spec?{' '}
+          <Link href="/openapi.json" className="underline hover:text-fg">
+            <code className="font-mono text-[12px]">openapi.json</code>
+          </Link>
+          .
+        </p>
       </header>
 
       <div className="grid gap-6 sm:grid-cols-2">
