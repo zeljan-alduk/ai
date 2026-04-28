@@ -4526,3 +4526,10 @@ Out of scope (per brief):
 - Cause of the build failure: apps/web/Dockerfile (introduced in fecba45) only copies `platform/api-contract` + `apps/web` + `tsconfig.base.json` into the build context. But the web prebuild runs `tsx scripts/generate-api-docs.ts`, which `readdirSync('apps/api/src/routes')` to enumerate endpoints from API route source. That dir is not in the web build context, so prebuild ENOENTs and the next-build step fails.
 - Fix: COPY apps/api/src/routes ./apps/api/src/routes in the `sources` stage. The script only reads .ts files (regex match for `app.<verb>('<path>')`), no execution — so we copy only that one subtree, not all of @aldo-ai/api.
 - Slovenia-transit (transit-nginx, transit-frontend, transit-backend, transit-r5, transit-mongodb, transit-postgres, transit-certbot) is healthy on the same VPS and untouched by this work.
+
+2026-04-28 — Engineer (Claude) — replay-as-headline UI iteration
+- Closes the marketing /vs "tie" with Braintrust+LangSmith on replay. Engine already supported swap-model with parent_run_id lineage and `/runs/compare` already existed; the gap was UX glue.
+- /runs/[id]/debug after swap-model now redirects to /runs/compare?a=<orig>&b=<new> instead of dropping the user on the new run alone. The compare page tolerates an in-progress B run (events fill in as SSE streams).
+- /runs/[id]/debug header strip now shows a "Forked from <id>" pill on a child run, linking to the compare view. Round-trip from a forked-run URL back to the comparison is one click.
+- /runs/compare now detects parent_run_id ↔ id relationships between A and B and renders a "Replay:" banner that explains the fork (same prompt history up to fork point; everything after = new model). Each side gains a "Debug" button so the user can drill straight into either run from the compare view.
+- Marketing copy in /vs/braintrust + /vs/langsmith already says "per-node model swap" and "replay-first development loop"; this change makes that the obvious user-visible feature, not a hidden capability.

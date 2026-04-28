@@ -319,11 +319,17 @@ export function DebuggerClient({
         setSwapping(false);
         setToast({
           kind: 'ok',
-          text: `Swapped — new run ${res.newRunId.slice(0, 12)}.`,
+          text: `Swapped — comparing ${runId.slice(0, 8)} vs ${res.newRunId.slice(0, 8)}.`,
           at: Date.now(),
         });
+        // Land on the side-by-side compare view rather than the new run
+        // alone — the whole point of swap-model is to see the diff. The
+        // compare page tolerates an in-progress B run; events fill in as
+        // the new run streams.
         if (res.newRunId !== runId) {
-          router.push(`/runs/${encodeURIComponent(res.newRunId)}/debug`);
+          router.push(
+            `/runs/compare?a=${encodeURIComponent(runId)}&b=${encodeURIComponent(res.newRunId)}`,
+          );
         }
       } catch (err) {
         setToast({ kind: 'err', text: errMsg(err), at: Date.now() });
@@ -373,6 +379,16 @@ export function DebuggerClient({
         {state.terminalReason ? (
           <Field label="Finished">
             <span className="text-xs text-slate-700">{state.terminalReason}</span>
+          </Field>
+        ) : null}
+        {initialRun.parentRunId ? (
+          <Field label="Forked from">
+            <a
+              href={`/runs/compare?a=${encodeURIComponent(initialRun.parentRunId)}&b=${encodeURIComponent(runId)}`}
+              className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-xs text-amber-800 hover:bg-amber-100"
+            >
+              {initialRun.parentRunId.slice(0, 12)} — compare ↔
+            </a>
           </Field>
         ) : null}
       </section>

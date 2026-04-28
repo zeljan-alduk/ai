@@ -23,8 +23,22 @@ export function RunCompareHeader({
   b: RunDetail;
   diff: RunCompareDiff;
 }) {
+  // Detect a swap-model fork: B was forked from A, or A from B. The
+  // common case is B forked from A (the user clicks "swap model" on
+  // the original run and we redirect them here).
+  const forkRelation: 'b-from-a' | 'a-from-b' | null =
+    b.parentRunId === a.id ? 'b-from-a' : a.parentRunId === b.id ? 'a-from-b' : null;
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {forkRelation !== null ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 lg:col-span-2">
+          <span className="font-semibold">Replay:</span>{' '}
+          {forkRelation === 'b-from-a'
+            ? 'Run B was forked from Run A via swap-model. Same prompt history up to the fork point; everything after is what the new model produced.'
+            : 'Run A was forked from Run B via swap-model. Same prompt history up to the fork point; everything after is what the new model produced.'}
+        </div>
+      ) : null}
       <RunCompareHeaderPane side="A" run={a} modelChanged={diff.modelChanged} />
       <RunCompareHeaderPane side="B" run={b} modelChanged={diff.modelChanged} />
       <Card className="lg:col-span-2">
@@ -60,12 +74,20 @@ function RunCompareHeaderPane({
       <CardContent className="pt-6">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-[10px] uppercase tracking-wider text-slate-400">Run {side}</span>
-          <Link
-            href={`/runs/${encodeURIComponent(run.id)}`}
-            className="font-mono text-[11px] text-blue-600 hover:underline"
-          >
-            {run.id.slice(0, 16)}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/runs/${encodeURIComponent(run.id)}`}
+              className="font-mono text-[11px] text-blue-600 hover:underline"
+            >
+              {run.id.slice(0, 16)}
+            </Link>
+            <Link
+              href={`/runs/${encodeURIComponent(run.id)}/debug`}
+              className="rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700 hover:bg-slate-50"
+            >
+              Debug
+            </Link>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Status">
