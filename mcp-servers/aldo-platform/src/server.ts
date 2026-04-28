@@ -2,10 +2,11 @@
  * aldo-platform — MCP server wiring.
  *
  * Exposes ALDO AI's platform capabilities (agents, runs, datasets,
- * the run debugger) as MCP tools. Any MCP-compatible client (Claude
- * Desktop, Claude Code, Cursor, ChatGPT plugins, OpenAI / Anthropic
- * agent SDKs, …) can drop this server into its config and drive
- * ALDO AI directly — no per-client integration work.
+ * the run debugger) as MCP tools. Any MCP-compatible client — Claude
+ * Desktop & Code, OpenAI Codex & ChatGPT connectors, Cursor, Windsurf,
+ * GitHub Copilot Chat in VS Code, Zed, Continue.dev, and the major
+ * agent SDKs — can drop this server into its config and drive ALDO AI
+ * directly. No per-client integration work.
  *
  * v0 surface
  * ----------

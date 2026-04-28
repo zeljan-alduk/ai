@@ -460,8 +460,8 @@ const RECENT_SHIPMENTS: ReadonlyArray<{
   },
   {
     tag: 'MCP server',
-    title: 'Drive ALDO AI from Claude, Cursor, or any MCP client.',
-    body: 'A first-party Model Context Protocol server (`@aldo-ai/mcp-platform`) exposes agents, runs, datasets, and the run debugger as tools. Drop one config block into Claude Desktop or Cursor and an LLM can list agents, start runs, compare them, and capture good runs as eval rows.',
+    title: 'Drive ALDO AI from Claude, Codex, Cursor, VS Code, and more.',
+    body: 'A first-party Model Context Protocol server (`@aldo-ai/mcp-platform`) exposes agents, runs, datasets, and the run debugger as MCP tools. One config block works in Claude Desktop, Claude Code, OpenAI Codex, Cursor, GitHub Copilot Chat, Windsurf, Zed, and Continue.dev.',
     href: '/docs/guides/mcp-server',
     cta: 'Set it up →',
   },
