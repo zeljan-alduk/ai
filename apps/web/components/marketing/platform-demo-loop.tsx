@@ -81,20 +81,20 @@ export function PlatformDemoLoop() {
   const current = SCENES[scene] ?? SCENES[0];
 
   return (
-    <div className="mt-10 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="mt-10 overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-sm">
       {/* Title strip */}
-      <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 px-5 py-3">
+      <div className="flex items-baseline justify-between gap-4 border-b border-border px-5 py-3">
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-slate-500">
+          <div className="text-[11px] uppercase tracking-wider text-fg-muted">
             Scene {scene + 1} / {SCENE_COUNT} — {current?.label}
           </div>
-          <div className="mt-0.5 text-sm font-semibold text-slate-900">{current?.title}</div>
-          <div className="text-xs text-slate-500">{current?.subtitle}</div>
+          <div className="mt-0.5 text-sm font-semibold text-fg">{current?.title}</div>
+          <div className="text-xs text-fg-muted">{current?.subtitle}</div>
         </div>
         <button
           type="button"
           onClick={() => setPaused((p) => !p)}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+          className="rounded border border-border bg-bg-elevated px-2 py-1 text-[11px] text-fg hover:bg-bg-subtle"
           aria-label={paused ? 'Play demo loop' : 'Pause demo loop'}
         >
           {paused ? '▶ Play' : '❚❚ Pause'}
@@ -102,7 +102,7 @@ export function PlatformDemoLoop() {
       </div>
 
       {/* Stage */}
-      <div className="relative h-[22rem] bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <div className="relative h-[22rem] bg-bg">
         <SceneFrame visible={scene === 0}>
           <SpecScene />
         </SceneFrame>
@@ -121,14 +121,14 @@ export function PlatformDemoLoop() {
       </div>
 
       {/* Scrubber */}
-      <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-2.5">
+      <div className="flex items-center gap-2 border-t border-border px-5 py-2.5">
         {SCENES.map((s, i) => (
           <button
             key={s.id}
             type="button"
             onClick={() => goTo(i)}
             className={`group flex flex-1 flex-col gap-1 ${
-              i === scene ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
+              i === scene ? 'text-fg' : 'text-fg-muted hover:text-fg'
             }`}
             aria-current={i === scene ? 'step' : undefined}
             aria-label={`Jump to scene ${i + 1}: ${s.label}`}
@@ -137,10 +137,10 @@ export function PlatformDemoLoop() {
             <span
               className={`h-1 w-full rounded-full ${
                 i === scene
-                  ? 'bg-slate-900'
+                  ? 'bg-fg'
                   : i < scene
-                    ? 'bg-slate-400'
-                    : 'bg-slate-200 group-hover:bg-slate-300'
+                    ? 'bg-fg-muted'
+                    : 'bg-border group-hover:bg-border-strong'
               }`}
             />
           </button>
@@ -228,17 +228,17 @@ function RouteScene() {
     <div className="flex h-full items-center justify-center px-6">
       <div className="w-full max-w-xl">
         <div className="mb-3 flex items-center gap-2 text-xs">
-          <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 font-medium text-rose-700">
+          <span className="rounded-full border border-danger/30 bg-danger/10 px-2 py-0.5 font-medium text-danger">
             privacy_tier: sensitive
           </span>
-          <span className="text-slate-400">→</span>
-          <span className="text-slate-600">router enforces, agent author cannot bypass</span>
+          <span className="text-fg-faint">→</span>
+          <span className="text-fg-muted">router enforces, agent author cannot bypass</span>
         </div>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] uppercase tracking-wider text-slate-500">
+        <div className="overflow-hidden rounded-lg border border-border bg-bg-elevated shadow-sm">
+          <div className="border-b border-border bg-bg-subtle px-4 py-2 text-[11px] uppercase tracking-wider text-fg-muted">
             Model gateway — capability: reasoning-large
           </div>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-border">
             {ROUTE_PROVIDERS.map((p, i) => (
               <li
                 key={`${p.provider}/${p.model}`}
@@ -251,21 +251,19 @@ function RouteScene() {
                   className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
                     p.allowed
                       ? p.picked
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-emerald-100 text-emerald-700'
-                      : 'bg-rose-100 text-rose-700'
+                        ? 'bg-success text-white'
+                        : 'bg-success/15 text-success'
+                      : 'bg-danger/15 text-danger'
                   }`}
                   aria-hidden
                 >
                   {p.allowed ? '✓' : '✕'}
                 </span>
-                <span className="font-mono text-[13px] text-slate-800">
+                <span className="font-mono text-[13px] text-fg">
                   {p.provider} / {p.model}
                 </span>
-                <span className="text-[11px] uppercase tracking-wider text-slate-400">
-                  {p.tier}
-                </span>
-                <span className="ml-auto text-[11px] text-slate-500">
+                <span className="text-[11px] uppercase tracking-wider text-fg-faint">{p.tier}</span>
+                <span className="ml-auto text-[11px] text-fg-muted">
                   {p.allowed
                     ? p.picked
                       ? 'picked — fail-closed'
@@ -276,7 +274,7 @@ function RouteScene() {
             ))}
           </ul>
         </div>
-        <div className="mt-3 text-center text-[11px] text-slate-500">
+        <div className="mt-3 text-center text-[11px] text-fg-muted">
           Switching providers is a config change. The router is the invariant.
         </div>
       </div>
@@ -301,15 +299,15 @@ function RunScene() {
   const visible = useStaggeredReveal(RUN_EVENTS.length, 600);
   return (
     <div className="flex h-full items-center justify-center px-6">
-      <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] uppercase tracking-wider text-slate-500">
+      <div className="w-full max-w-xl rounded-lg border border-border bg-bg-elevated shadow-sm">
+        <div className="flex items-center justify-between border-b border-border bg-bg-subtle px-4 py-2 text-[11px] uppercase tracking-wider text-fg-muted">
           <span>Run tree — live</span>
-          <span className="flex items-center gap-1 normal-case tracking-normal text-emerald-600">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+          <span className="flex items-center gap-1 normal-case tracking-normal text-success">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
             streaming
           </span>
         </div>
-        <ol className="divide-y divide-slate-100">
+        <ol className="divide-y divide-border">
           {RUN_EVENTS.map((e, i) => (
             <li
               key={`${e.kind}-${i}`}
@@ -317,11 +315,11 @@ function RunScene() {
                 i < visible ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0'
               }`}
             >
-              <span className="w-12 font-mono text-[10px] tabular-nums text-slate-400">
+              <span className="w-12 font-mono text-[10px] tabular-nums text-fg-faint">
                 +{e.ms}ms
               </span>
               <EventBadge kind={e.kind} />
-              <span className="font-mono text-[12px] text-slate-700">{e.detail}</span>
+              <span className="font-mono text-[12px] text-fg">{e.detail}</span>
             </li>
           ))}
         </ol>
@@ -331,16 +329,20 @@ function RunScene() {
 }
 
 function EventBadge({ kind }: { kind: string }) {
+  // Tone classes use the design tokens for surfaces (success/warning/
+  // danger/accent are already theme-aware) and a slight transparency
+  // for the muted backgrounds so the badge sits on either light or
+  // dark page backgrounds.
   const tone =
     kind === 'tool_call'
-      ? 'bg-violet-50 text-violet-700 border-violet-200'
+      ? 'bg-accent/10 text-accent border-accent/30'
       : kind === 'tool_result'
-        ? 'bg-slate-100 text-slate-700 border-slate-200'
+        ? 'bg-bg-subtle text-fg border-border'
         : kind === 'checkpoint'
-          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          ? 'bg-warning/10 text-warning border-warning/30'
           : kind === 'run.completed'
-            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-            : 'bg-blue-50 text-blue-700 border-blue-200';
+            ? 'bg-success/10 text-success border-success/30'
+            : 'bg-accent/10 text-accent border-accent/30';
   return (
     <span
       className={`rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${tone}`}
@@ -364,14 +366,14 @@ function EvalScene() {
   const composite = EVAL_ROWS.reduce((s, r) => s + r.score, 0) / EVAL_ROWS.length;
   return (
     <div className="flex h-full items-center justify-center px-6">
-      <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] uppercase tracking-wider text-slate-500">
+      <div className="w-full max-w-xl rounded-lg border border-border bg-bg-elevated shadow-sm">
+        <div className="flex items-center justify-between border-b border-border bg-bg-subtle px-4 py-2 text-[11px] uppercase tracking-wider text-fg-muted">
           <span>Eval suite — finance_v1</span>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 normal-case tracking-normal text-emerald-700">
+          <span className="rounded-full border border-success/30 bg-success/10 px-2 py-0.5 normal-case tracking-normal text-success">
             promote — gate passed
           </span>
         </div>
-        <ul className="divide-y divide-slate-100 px-4 py-2">
+        <ul className="divide-y divide-border px-4 py-2">
           {EVAL_ROWS.map((r, i) => (
             <li
               key={r.name}
@@ -380,25 +382,24 @@ function EvalScene() {
               }`}
             >
               <div className="flex items-baseline justify-between text-[12.5px]">
-                <span className="text-slate-700">{r.name}</span>
-                <span className="font-mono tabular-nums text-slate-900">
+                <span className="text-fg">{r.name}</span>
+                <span className="font-mono tabular-nums text-fg">
                   {r.score.toFixed(2)}{' '}
-                  <span className="text-[10px] text-slate-400">/ {r.threshold.toFixed(2)}</span>
+                  <span className="text-[10px] text-fg-faint">/ {r.threshold.toFixed(2)}</span>
                 </span>
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-bg-subtle">
                 <div
-                  className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                  className="h-full rounded-full bg-success transition-all duration-700"
                   style={{ width: i < visible ? `${Math.min(r.score * 100, 100)}%` : '0%' }}
                 />
               </div>
             </li>
           ))}
         </ul>
-        <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-center text-[12px] text-slate-700">
-          composite{' '}
-          <span className="font-mono font-semibold text-slate-900">{composite.toFixed(2)}</span> ≥
-          0.85 → version <span className="font-mono">0.4.2</span> promoted
+        <div className="border-t border-border bg-bg-subtle px-4 py-2 text-center text-[12px] text-fg">
+          composite <span className="font-mono font-semibold text-fg">{composite.toFixed(2)}</span>{' '}
+          ≥ 0.85 → version <span className="font-mono">0.4.2</span> promoted
         </div>
       </div>
     </div>
@@ -411,7 +412,7 @@ function SwapScene() {
   return (
     <div className="flex h-full items-center justify-center px-6">
       <div className="w-full max-w-2xl">
-        <div className="mb-2 text-center text-[11px] uppercase tracking-wider text-slate-500">
+        <div className="mb-2 text-center text-[11px] uppercase tracking-wider text-fg-muted">
           /runs/compare — same prompt, two models
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -436,7 +437,7 @@ function SwapScene() {
           <Delta label="Tokens Δ" value="−180" tone="neutral" />
           <Delta label="Same agent" value="yes" tone="neutral" />
         </div>
-        <div className="mt-3 text-center text-[11px] text-slate-500">
+        <div className="mt-3 text-center text-[11px] text-fg-muted">
           Replay any node against any model — without changing a line of agent code.
         </div>
       </div>
@@ -459,16 +460,17 @@ function SwapPane({
   output: string;
   tone?: 'neutral' | 'amber';
 }) {
-  const ring = tone === 'amber' ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200 bg-white';
+  const ring =
+    tone === 'amber' ? 'border-warning/40 bg-warning/10' : 'border-border bg-bg-elevated';
   return (
     <div className={`rounded-lg border ${ring} px-3 py-2.5 shadow-sm`}>
-      <div className="flex items-baseline justify-between text-[10px] uppercase tracking-wider text-slate-500">
+      <div className="flex items-baseline justify-between text-[10px] uppercase tracking-wider text-fg-muted">
         <span>{tag}</span>
-        <span className="font-mono normal-case tracking-normal text-slate-700">{cost}</span>
+        <span className="font-mono normal-case tracking-normal text-fg">{cost}</span>
       </div>
-      <div className="mt-1 font-mono text-[11px] text-slate-700">{model}</div>
-      <div className="mt-2 text-[12px] leading-snug text-slate-800">{output}</div>
-      <div className="mt-2 text-[10px] text-slate-400">{tokens} tokens</div>
+      <div className="mt-1 font-mono text-[11px] text-fg-muted">{model}</div>
+      <div className="mt-2 text-[12px] leading-snug text-fg">{output}</div>
+      <div className="mt-2 text-[10px] text-fg-faint">{tokens} tokens</div>
     </div>
   );
 }
@@ -485,11 +487,11 @@ function Delta({
   return (
     <div
       className={`rounded border px-2 py-1.5 ${
-        tone === 'amber' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'
+        tone === 'amber' ? 'border-warning/40 bg-warning/10' : 'border-border bg-bg-subtle'
       }`}
     >
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="mt-0.5 font-mono text-[12px] tabular-nums text-slate-900">{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-fg-muted">{label}</div>
+      <div className="mt-0.5 font-mono text-[12px] tabular-nums text-fg">{value}</div>
     </div>
   );
 }
