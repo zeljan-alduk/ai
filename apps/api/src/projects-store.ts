@@ -13,15 +13,21 @@
 import type { Project } from '@aldo-ai/api-contract';
 import type { SqlClient } from '@aldo-ai/storage';
 
+/**
+ * Postgres TIMESTAMPTZ columns come back from `pg` as JS `Date`
+ * instances by default. The wire schema is ISO strings — we coerce
+ * via `toIso()` below. Without this, `ListProjectsResponse.parse`
+ * fails server-side with `Expected string, received date`.
+ */
 interface ProjectRow {
   readonly id: string;
   readonly tenant_id: string;
   readonly slug: string;
   readonly name: string;
   readonly description: string;
-  readonly archived_at: string | null;
-  readonly created_at: string;
-  readonly updated_at: string;
+  readonly archived_at: Date | string | null;
+  readonly created_at: Date | string;
+  readonly updated_at: Date | string;
 }
 
 export class ProjectSlugConflictError extends Error {
@@ -31,6 +37,15 @@ export class ProjectSlugConflictError extends Error {
   }
 }
 
+function toIso(v: Date | string): string {
+  return v instanceof Date ? v.toISOString() : v;
+}
+
+function toIsoOrNull(v: Date | string | null): string | null {
+  if (v === null) return null;
+  return toIso(v);
+}
+
 function toWire(r: ProjectRow): Project {
   return {
     id: r.id,
@@ -38,9 +53,9 @@ function toWire(r: ProjectRow): Project {
     slug: r.slug,
     name: r.name,
     description: r.description,
-    archivedAt: r.archived_at,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    archivedAt: toIsoOrNull(r.archived_at),
+    createdAt: toIso(r.created_at),
+    updatedAt: toIso(r.updated_at),
   };
 }
 

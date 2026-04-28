@@ -180,9 +180,21 @@ export function TourProvider({ children }: { children: ReactNode }) {
   // route differs from the current pathname. The library calls
   // `afterOpen` and `beforeClose`; we re-implement minimal navigation
   // by reading `currentStep` via window event.
+  //
+  // GUARD: ignore step events when the user has marked the tour as
+  // complete OR has no in-progress tour state. Without this, the
+  // bridge effect in `<TourBridge />` re-fires `aldo:tour:step` on
+  // every layout mount with `currentStep=0`, which triggers a
+  // router.push('/welcome'). End result: any sidebar click drops the
+  // user back to /welcome until they finish the tour. Detected via
+  // chrome-mcp e2e on 2026-04-28.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onStep = (e: Event) => {
+      const complete = window.localStorage.getItem(COMPLETE_KEY);
+      const stepState = window.localStorage.getItem(STORAGE_KEY);
+      // Tour not active — never auto-navigate.
+      if (complete === 'true' || stepState === null) return;
       const ce = e as CustomEvent<number>;
       const step = STEPS[ce.detail];
       if (step !== undefined && window.location.pathname !== step.route) {
