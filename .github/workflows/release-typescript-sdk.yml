@@ -1,0 +1,88 @@
+name: Release TypeScript SDK
+
+# Manual-trigger only — never publishes on plain pushes. Mirrors the
+# release-python-sdk.yml pattern. The maintainer bumps the version
+# in `sdks/typescript/package.json`, runs this workflow with
+# `dry_run=false`, and the job publishes to npm.
+#
+# `dry_run=true` (the default) builds + tests + does a `--dry-run`
+# `npm publish` so we can see exactly what would have been uploaded
+# without flipping the bit. Use it before the real release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build + test + dry-run publish (does NOT push to npm)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  # Required when authenticating to npm via GitHub OIDC. Even with a
+  # plain token we read it from secrets, but `id-token: write` is
+  # cheap to keep here so we can switch to provenance later.
+  id-token: write
+
+jobs:
+  release:
+    name: Build, test, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          # Use the public npm registry. `npm publish` reads
+          # NODE_AUTH_TOKEN from env (set on the publish step).
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@aldo-ai'
+
+      - name: Install workspace deps
+        # The TS SDK declares dev deps locally; full workspace install
+        # is the simplest way to keep the lockfile authoritative.
+        working-directory: ${{ github.workspace }}
+        run: pnpm install --frozen-lockfile
+
+      # Quality gate — typecheck + unit tests + production build.
+      - name: typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: tests
+        run: pnpm exec vitest run
+
+      - name: build
+        run: pnpm exec tsc -p tsconfig.json
+
+      - name: Show version
+        run: node -e "console.log('@aldo-ai/sdk', require('./package.json').version)"
+
+      - name: Publish (dry-run)
+        if: ${{ inputs.dry_run == 'true' }}
+        run: pnpm publish --access public --no-git-checks --dry-run
+
+      - name: Publish (real)
+        if: ${{ inputs.dry_run == 'false' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::error::NPM_PUBLISH_TOKEN secret is not configured on this repo."
+            exit 1
+          fi
+          pnpm publish --access public --no-git-checks

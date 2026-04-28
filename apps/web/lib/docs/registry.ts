@@ -194,7 +194,7 @@ export const STATIC_DOC_PAGES: ReadonlyArray<DocPage> = [
     slug: 'sdks/typescript',
     section: 'sdks',
     title: 'TypeScript SDK',
-    summary: '`@aldo-ai/api-contract` is the TypeScript SDK — Zod schemas + a typed fetch surface.',
+    summary: '`@aldo-ai/sdk` — typed client for Node, browsers, Cloudflare Workers, Bun, Deno.',
   },
   {
     slug: 'changelog',

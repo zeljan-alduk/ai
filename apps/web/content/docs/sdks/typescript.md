@@ -1,82 +1,104 @@
 ---
 title: TypeScript SDK
-summary: '@aldo-ai/api-contract is the TypeScript SDK — Zod schemas + a typed fetch surface.'
+summary: '@aldo-ai/sdk — typed client for Node, browsers, Cloudflare Workers, Bun, Deno.'
 ---
 
-The TypeScript SDK is the same `@aldo-ai/api-contract` package the
-control-plane web app uses. Every endpoint has Zod schemas for the
-request and response, and the package re-exports a typed fetch
-helper for client code.
+`@aldo-ai/sdk` is the official TypeScript / JavaScript client for the
+ALDO AI control plane. Single class entry point, four resource
+modules (agents, runs, datasets, projects), typed errors, AbortSignal
+support.
+
+Works in any runtime with the global `fetch` — Node 18+, modern
+browsers, Cloudflare Workers, Bun, Deno.
 
 ## Install
 
 ```bash
-pnpm add @aldo-ai/api-contract
+npm install @aldo-ai/sdk
+# or pnpm add @aldo-ai/sdk
+# or yarn add @aldo-ai/sdk
 ```
 
 ## Authenticate
 
-Mint a key under [Settings → API keys](/docs/guides/api-keys), then:
+Mint a key at [Settings → API keys](/docs/guides/api-keys), then:
 
 ```ts
-import { createClient } from '@aldo-ai/api-contract/client';
+import { Aldo } from '@aldo-ai/sdk';
 
-const client = createClient({
-  baseUrl: 'https://ai.aldo.tech',
-  apiKey: process.env.ALDO_API_KEY,
+const aldo = new Aldo({
+  apiKey: process.env.ALDO_API_KEY!,
+  // baseUrl defaults to https://ai.aldo.tech
 });
 ```
 
 ## List agents
 
 ```ts
-const { agents } = await client.agents.list();
+const agents = await aldo.agents.list();
 for (const a of agents) {
-  console.log(a.name, a.latestVersion);
+  console.log(a.name, a.latestVersion, a.privacyTier);
 }
 ```
 
-## Run in the playground
+## Run an agent
 
 ```ts
-const result = await client.playground.run({
-  agentName: 'changelog-writer',
-  input: { prompt: 'Generate a changelog for v0.4.2' },
+const { run } = await aldo.runs.create({ agentName: 'researcher' });
+
+// Poll until terminal.
+let detail = run;
+while (detail.status === 'running') {
+  await new Promise((r) => setTimeout(r, 1_000));
+  detail = (await aldo.runs.get(run.id)).run;
+}
+console.log('finished', detail.status, 'cost', detail.totalUsd);
+```
+
+## Capture a run as an eval row
+
+```ts
+await aldo.datasets.createExample('ds_finance_v1', {
+  input: 'Summarize Q3 earnings.',
+  expected: 'Q3 revenue grew 18% YoY…',
+  metadata: { runId: run.id },
 });
-console.log(result.runId, result.status);
 ```
 
-## Stream events
+## Compare two runs
 
 ```ts
-const events = client.runs.events('run_abc123');
-for await (const ev of events) {
-  console.log(ev.type, ev.payload);
-}
+const diff = await aldo.runs.compare(runA.id, runB.id);
+// Same payload as the /runs/compare?a=&b= UI page.
 ```
 
-## Error shape
+## Errors
 
-Every failure throws an `ApiClientError` carrying the HTTP status,
-the structured error body, and the request id:
+Every method either resolves or rejects with one of:
+
+- `AldoApiError` — 4xx/5xx with parsed `{ status, code, message, details }`
+- `AldoNetworkError` — no response (timeout, DNS, abort)
 
 ```ts
-import { ApiClientError } from '@aldo-ai/api-contract/client';
+import { AldoApiError } from '@aldo-ai/sdk';
 
 try {
-  await client.agents.get('does-not-exist');
+  await aldo.projects.create({ slug: 'finance', name: 'Finance' });
 } catch (err) {
-  if (err instanceof ApiClientError && err.status === 404) {
-    // not found
+  if (err instanceof AldoApiError && err.code === 'project_slug_conflict') {
+    // Show "slug already taken" UX.
   } else {
     throw err;
   }
 }
 ```
 
-## Schemas as the contract
+## Privacy
 
-Because the contract IS the SDK, every endpoint type is statically
-checked end-to-end. The
-[API reference](/docs/api) is auto-generated from the same Zod
-schemas this package exports.
+This SDK runs **in your environment**. It is a thin REST client; no
+credentials or run data leave that process except as direct calls to
+the platform API your key is already authorised for.
+
+## Source
+
+[GitHub →](https://github.com/aldo-tech-labs/aldo-ai/tree/main/sdks/typescript)
