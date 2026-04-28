@@ -8,6 +8,9 @@ name: E2E (Playwright)
 #   - pull_request: only when the PR is labelled `e2e` OR the diff
 #     touches apps/web/**. The path filter alone isn't enough because
 #     Playwright config / suite changes live under apps/web-e2e/**.
+#   - workflow_run: AFTER `deploy-vps` succeeds, so we exercise the
+#     now-live code, not the pre-deploy state. This is the post-merge
+#     regression net for things like the post-signup spec.
 #   - workflow_dispatch: manual run, with optional URL overrides.
 on:
   # No `paths:` filter here — we want the workflow to fire on every PR
@@ -17,6 +20,9 @@ on:
   # still triggers the workflow.
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+  workflow_run:
+    workflows: ['deploy-vps']
+    types: [completed]
   workflow_dispatch:
     inputs:
       e2e_base_url:
@@ -64,9 +70,21 @@ jobs:
           HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'e2e') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEPLOY_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            # Only run after a successful deploy. A failed deploy means
+            # the live site is still on the previous commit; testing it
+            # would be misleading.
+            if [ "$DEPLOY_CONCLUSION" = "success" ]; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$HAS_LABEL" = "true" ]; then
@@ -89,11 +107,20 @@ jobs:
     if: needs.gate.outputs.run == 'true'
     env:
       # Defaults point at production. workflow_dispatch can override
-      # both via inputs; the secrets CRUD path stays disabled unless
-      # the operator explicitly opts in.
+      # the URL inputs.
+      #
+      # ALLOW_WRITES policy:
+      #   - workflow_run (post-deploy): enable writes. The post-signup
+      #     regression spec creates a fresh user per run; without
+      #     writes it skips, leaving the silent-bug class uncovered.
+      #   - workflow_dispatch: honour the operator's input (defaults
+      #     false to protect ad-hoc runs).
+      #   - pull_request: false. PR runs read-only by design — they
+      #     can target prod and we never want to leak test rows in
+      #     PRs from forks.
       E2E_BASE_URL: ${{ github.event.inputs.e2e_base_url || 'https://ai.aldo.tech' }}
       E2E_API_BASE_URL: ${{ github.event.inputs.e2e_api_base_url || 'https://ai.aldo.tech' }}
-      E2E_ALLOW_WRITES: ${{ github.event.inputs.e2e_allow_writes || 'false' }}
+      E2E_ALLOW_WRITES: ${{ github.event_name == 'workflow_run' && 'true' || (github.event.inputs.e2e_allow_writes || 'false') }}
     steps:
       - uses: actions/checkout@v4
 
