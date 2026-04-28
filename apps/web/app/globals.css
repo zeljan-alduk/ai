@@ -27,10 +27,17 @@
   --bg-elevated: 255 255 255; /* white */
   --bg-subtle: 241 245 249; /* slate-100 */
 
-  /* Foreground. */
+  /* Foreground.
+   *
+   * --fg-faint was slate-400 (148 163 184). On white that's ~2.85:1
+   * contrast — fails WCAG AA's 4.5:1 normal-text requirement. axe-core
+   * flagged this on /, /pricing, and a handful of other surfaces in
+   * the post-Wave-A token migration. Bumped to slate-500 (~4.62:1)
+   * which matches the dark-mode value's intent — visibly de-emphasised
+   * but still readable for users with low vision. */
   --fg: 15 23 42; /* slate-900 */
   --fg-muted: 71 85 105; /* slate-600 */
-  --fg-faint: 148 163 184; /* slate-400 */
+  --fg-faint: 100 116 139; /* slate-500 */
   --fg-inverse: 248 250 252; /* slate-50 (text on a dark surface) */
 
   /* Borders / dividers. */
