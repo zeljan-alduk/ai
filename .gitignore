@@ -15,3 +15,6 @@ coverage/
 *.tsbuildinfo
 .vitest-cache/
 scripts/__pycache__/
+
+# claude code transient files
+.claude/
