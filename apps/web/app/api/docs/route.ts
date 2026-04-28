@@ -58,85 +58,78 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
  * sees both the host `<script id="api-reference">` and the bundle tag,
  * which is the contract Scalar's own examples use.
  *
- * Theme: Scalar exposes CSS variables (`--scalar-color-1`, etc.) and a
- * built-in `default` theme that already has dark-mode support. We add
- * a tiny stylesheet that hooks Scalar's variables to our design tokens
- * so the viewer flips with `html.dark` like the rest of the site.
+ * Theme: Scalar's `default` theme has its own dark-mode toggle and
+ * persists the choice to localStorage. We deliberately do NOT override
+ * Scalar's CSS variables — earlier attempts to bridge `--scalar-*` into
+ * our design tokens broke Scalar's toggle (the variables ended up
+ * pointing at our `html.dark`-conditional tokens, which Scalar's toggle
+ * does not flip). The header strip uses neutral system colors so it
+ * looks fine in either Scalar mode.
  */
 function renderHtml(specUrlAbs: string): string {
-  // Theme tokens are read from the host page's `<html>` class. Because
-  // this is a separate top-level document (route handler, not embedded
-  // in the app shell), we must apply the dark class ourselves based on
-  // a stored preference. We default to `system` and let the inline
-  // boot script flip the class before paint to avoid a flash.
+  // Initial-mode boot. Scalar persists `theme-mode` (or similar) to
+  // localStorage; on a cold page we honour `prefers-color-scheme` so
+  // a dark-mode user doesn't flash light. The boot script paints the
+  // `<html>` `data-scalar-mode` attribute before Scalar mounts so the
+  // header below also matches.
   const themeBoot = `
     (function() {
       try {
-        var m = document.cookie.match(/(?:^|;\\s*)aldo_theme=([^;]+)/);
-        var pref = m ? decodeURIComponent(m[1]) : 'system';
-        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (dark) document.documentElement.classList.add('dark');
+        var stored = null;
+        try { stored = localStorage.getItem('default-color-mode'); } catch (e) {}
+        var mode = stored;
+        if (mode !== 'dark' && mode !== 'light') {
+          mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-scalar-mode', mode);
+        // Watch Scalar's own writes so when the user clicks the toggle,
+        // our header re-styles to match without a reload.
+        var t = setInterval(function() {
+          try {
+            var s = localStorage.getItem('default-color-mode');
+            if (s === 'dark' || s === 'light') {
+              document.documentElement.setAttribute('data-scalar-mode', s);
+            }
+          } catch (e) {}
+        }, 500);
+        // Also flip on system change while the page is open.
+        try {
+          window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+            var s = null; try { s = localStorage.getItem('default-color-mode'); } catch (err) {}
+            if (s !== 'dark' && s !== 'light') {
+              document.documentElement.setAttribute('data-scalar-mode', e.matches ? 'dark' : 'light');
+            }
+          });
+        } catch (e) {}
       } catch (e) {}
     })();
   `;
 
-  // Token bridge: design tokens live in --bg / --fg / --accent etc. on
-  // the marketing CSS. We mirror them here for this standalone document
-  // and wire Scalar's CSS variables into the same values. Light theme
-  // uses slate-50 base, dark theme uses slate-950 base — same palette
-  // as the rest of the site.
+  // Header-only stylesheet. Two palettes: light + dark. We do NOT touch
+  // Scalar's variables — Scalar owns its own viewport. The
+  // `data-scalar-mode` attribute on `<html>` is stamped by the boot
+  // script above (and re-stamped when Scalar's toggle fires).
   const tokenCss = `
-    :root {
-      --bg: 248 250 252;
-      --bg-elevated: 255 255 255;
-      --bg-subtle: 241 245 249;
-      --fg: 15 23 42;
-      --fg-muted: 71 85 105;
-      --fg-faint: 148 163 184;
-      --border: 226 232 240;
-      --accent: 37 99 235;
-      --accent-fg: 255 255 255;
-      color-scheme: light;
-    }
-    html.dark {
-      --bg: 2 6 23;
-      --bg-elevated: 15 23 42;
-      --bg-subtle: 30 41 59;
-      --fg: 248 250 252;
-      --fg-muted: 148 163 184;
-      --fg-faint: 100 116 139;
-      --border: 30 41 59;
-      --accent: 59 130 246;
-      color-scheme: dark;
-    }
-    html, body { margin: 0; padding: 0; min-height: 100%; background: rgb(var(--bg)); color: rgb(var(--fg)); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    .topstrip { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid rgb(var(--border)); }
+    html { color-scheme: light; }
+    html[data-scalar-mode="dark"] { color-scheme: dark; }
+    html, body { margin: 0; padding: 0; min-height: 100%; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f8fafc; color: #0f172a; }
+    html[data-scalar-mode="dark"], html[data-scalar-mode="dark"] body { background: #020617; color: #f8fafc; }
+    .topstrip { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
+    html[data-scalar-mode="dark"] .topstrip { border-bottom-color: #1e293b; }
     .topstrip h1 { margin: 0; font-size: 1rem; font-weight: 600; }
-    .topstrip p { margin: 0.15rem 0 0 0; font-size: 0.7rem; color: rgb(var(--fg-muted)); }
+    .topstrip p { margin: 0.15rem 0 0 0; font-size: 0.7rem; color: #475569; }
+    html[data-scalar-mode="dark"] .topstrip p { color: #94a3b8; }
     .topstrip code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.7rem; }
     .topstrip nav { display: flex; gap: 0.75rem; font-size: 0.7rem; }
-    .topstrip a { color: rgb(var(--fg-muted)); text-decoration: none; }
-    .topstrip a:hover { color: rgb(var(--fg)); }
-    .topstrip .sep { color: rgb(var(--fg-faint)); }
-    /* Scalar variable bridge — these names come from Scalar's
-       documented theming surface. */
-    .scalar-app, scalar-api-reference {
-      --scalar-color-1: rgb(var(--fg));
-      --scalar-color-2: rgb(var(--fg-muted));
-      --scalar-color-3: rgb(var(--fg-faint));
-      --scalar-color-accent: rgb(var(--accent));
-      --scalar-background-1: rgb(var(--bg));
-      --scalar-background-2: rgb(var(--bg-elevated));
-      --scalar-background-3: rgb(var(--bg-subtle));
-      --scalar-background-accent: rgb(var(--accent));
-      --scalar-border-color: rgb(var(--border));
-    }
+    .topstrip a { color: #475569; text-decoration: none; }
+    html[data-scalar-mode="dark"] .topstrip a { color: #94a3b8; }
+    .topstrip a:hover { color: #0f172a; }
+    html[data-scalar-mode="dark"] .topstrip a:hover { color: #f8fafc; }
+    .topstrip .sep { color: #94a3b8; }
+    html[data-scalar-mode="dark"] .topstrip .sep { color: #475569; }
   `;
 
-  // Scalar configuration. Kept minimal: theme + layout + sidebar. We
-  // do NOT pass `customCss` here — the token bridge above is enough
-  // and customCss with newlines tends to mis-encode through HTML attr
-  // round-trips.
+  // Scalar configuration. Minimal — let Scalar own its theme.
   const config = JSON.stringify({
     theme: 'default',
     layout: 'modern',
