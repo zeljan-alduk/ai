@@ -19,6 +19,7 @@
  * stabilises.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { ApiError } from '@aldo-ai/api-contract';
 import type { SqlClient } from '@aldo-ai/storage';
 import { Hono } from 'hono';
@@ -26,6 +27,7 @@ import { z } from 'zod';
 import { seedDefaultDashboards } from '../dashboards/seed-defaults.js';
 import type { Deps } from '../deps.js';
 import { HttpError, validationError } from '../middleware/error.js';
+import { createProject } from '../projects-store.js';
 import { type SessionAuth, type SessionTokenClaims, signSessionToken } from './jwt.js';
 import { forbidden, getAuth } from './middleware.js';
 import { assertPasswordPolicy, hashPassword, verifyPassword } from './passwords.js';
@@ -185,6 +187,24 @@ export function authRoutes(deps: AuthRoutesDeps): Hono {
       });
     } catch (err) {
       console.error('[dashboards] default-dashboard seed failed', err);
+    }
+    // Wave 17: seed a Default project. The 019_projects.sql migration
+    // backfills existing tenants but new tenants created after the
+    // migration must be seeded at signup time. Same best-effort
+    // pattern — never block signup. Discovered via post-signup e2e
+    // on 2026-04-28; the /projects page came up empty for fresh
+    // tenants.
+    try {
+      await createProject(deps.db, {
+        id: randomUUID(),
+        tenantId: created.tenant.id,
+        slug: 'default',
+        name: 'Default',
+        description:
+          'Auto-created on first launch. Rename or archive once you set up named projects.',
+      });
+    } catch (err) {
+      console.error('[projects] default-project seed failed', err);
     }
     // Wave 13: audit signup (best-effort). We can't go through
     // `recordAudit(c)` here because the request hasn't been stamped
