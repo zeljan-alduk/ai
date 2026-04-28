@@ -28,34 +28,37 @@ test.describe('api health', () => {
     expect(typeof body.version, '/health body must include a version string').toBe('string');
   });
 
-  test('GET /v1/models returns 200 with non-empty models array', async ({ request }) => {
+  test('GET /v1/models without auth returns 401 (auth gate is wired)', async ({ request }) => {
+    // Wave 10 made every /v1/* endpoint auth-required. The earlier
+    // assertion ("returns 200 with non-empty models") presumed a
+    // pre-wave-10 world where /v1/models was accidentally public.
+    // The meaningful invariant today is "the auth gate fires" —
+    // responding 401 to an unauthenticated request.
     const res = await request.get(`${API_BASE_URL}/v1/models`);
-    expect(res.status(), 'GET /v1/models should be 200').toBe(200);
-    const body = (await res.json()) as { models?: unknown };
-    expect(Array.isArray(body.models), '/v1/models.models must be an array').toBe(true);
-    const models = body.models as unknown[];
-    expect(models.length, '/v1/models.models must be non-empty').toBeGreaterThan(0);
-
-    // Shape check on the first row — we deliberately do NOT inspect
-    // `provider` or `model` string values to keep this LLM-agnostic.
-    const first = models[0] as Record<string, unknown>;
-    expect(typeof first.id).toBe('string');
-    expect(typeof first.provider).toBe('string');
-    expect(typeof first.locality).toBe('string');
-    expect(Array.isArray(first.privacyAllowed)).toBe(true);
+    expect(res.status(), 'GET /v1/models without Authorization must 401').toBe(401);
+    const body = (await res.json()) as { error?: { code?: unknown } };
+    expect(typeof body.error?.code, 'response must carry the standard error envelope').toBe(
+      'string',
+    );
   });
 
-  test('GET /v1/secrets returns 200 with a secrets array (may be empty)', async ({ request }) => {
+  test('GET /v1/secrets without auth returns 401 (auth gate is wired)', async ({ request }) => {
+    // Same fix as /v1/models above. The "secrets list must never echo
+    // raw values" check is preserved as a separate test in the
+    // authenticated suite (post-signup spec), not here.
     const res = await request.get(`${API_BASE_URL}/v1/secrets`);
-    expect(res.status(), 'GET /v1/secrets should be 200').toBe(200);
-    const body = (await res.json()) as { secrets?: unknown };
-    expect(Array.isArray(body.secrets), '/v1/secrets.secrets must be an array').toBe(true);
-    // Each row (if any) must have name + redacted preview, never a raw
-    // value field. Empty list is also a valid response.
-    for (const row of body.secrets as Array<Record<string, unknown>>) {
-      expect(typeof row.name).toBe('string');
-      expect(typeof row.preview).toBe('string');
-      expect('value' in row, 'secrets list must never echo raw values').toBe(false);
-    }
+    expect(res.status(), 'GET /v1/secrets without Authorization must 401').toBe(401);
+  });
+
+  test('GET /openapi.json is public (no auth required)', async ({ request }) => {
+    // The OpenAPI spec is an explicit allow-list entry on the API's
+    // bearer-token middleware. This is the canary that the
+    // documentation surfaces (Scalar, Redoc) can fetch the spec
+    // without a key.
+    const res = await request.get(`${API_BASE_URL}/openapi.json`);
+    expect(res.status(), 'GET /openapi.json must be 200 without auth').toBe(200);
+    const body = (await res.json()) as { openapi?: unknown; paths?: unknown };
+    expect(typeof body.openapi, 'response must declare an openapi version string').toBe('string');
+    expect(typeof body.paths, 'response must include a paths object').toBe('object');
   });
 });

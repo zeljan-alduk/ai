@@ -24,18 +24,23 @@ import { expect, test } from '@playwright/test';
 const ALLOW_WRITES = process.env.E2E_ALLOW_WRITES === 'true';
 
 test.describe('auth — unauthenticated guard', () => {
-  test('GET / unauthenticated redirects to /login', async ({ page, context }) => {
+  test('GET / unauthenticated renders the marketing site (200, no redirect)', async ({
+    page,
+    context,
+  }) => {
     // Belt-and-braces: blow away any stray cookies before we navigate
     // so the guard actually sees an unauthenticated request.
     await context.clearCookies();
     const res = await page.goto('/', { waitUntil: 'domcontentloaded' });
     expect(res?.status() ?? 0, 'home should not 5xx').toBeLessThan(500);
-    // The middleware emits a 307 to /login?next=/runs (the home page
-    // redirects to /runs first, so the original target is /runs).
-    await expect(page).toHaveURL(/\/login(\?|$)/);
-    // The auth chrome must render — that's the canary that the
-    // (auth) layout is wired up.
-    await expect(page.getByText('Sign in', { exact: false })).toBeVisible();
+    // Wave-A/B (2026-04-27) flipped `/` from an auth-required redirect
+    // into the public marketing site. The headline + Sign-up CTA must
+    // render; we should NOT bounce to /login.
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/?$/);
+    await expect(
+      page.getByRole('heading', { name: /run real software-engineering/i }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: /start free trial/i }).first()).toBeVisible();
   });
 
   test('GET /agents unauthenticated redirects with next= preserved', async ({ page, context }) => {
@@ -94,7 +99,9 @@ test.describe('auth — signup → logout → login flow', () => {
     ]);
 
     // ---- Login ----
-    await expect(page.getByText('Sign in', { exact: false })).toBeVisible();
+    // Use the heading role to disambiguate from the submit button —
+    // both render the literal text "Sign in".
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill(password);
     await Promise.all([

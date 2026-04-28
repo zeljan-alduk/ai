@@ -20,49 +20,48 @@ const ALLOW_WRITES = process.env.E2E_ALLOW_WRITES === 'true';
 const API_BASE_URL = process.env.E2E_API_BASE_URL ?? process.env.E2E_BASE_URL ?? '';
 
 test.describe('golden path — public reads', () => {
-  test('home redirects, sidebar shows ALDO AI branding', async ({ page }) => {
-    await page.goto('/');
-    // The home page is a server redirect to /runs; either landing page is
-    // fine, but the branding must render. Use `exact: true` for "control
-    // plane" because the footer also contains the substring
-    // ("v0 control plane. Read-only.") and a loose match would trip
-    // Playwright's strict-mode locator check.
-    await expect(page.getByText('ALDO AI', { exact: true })).toBeVisible();
-    await expect(page.getByText('control plane', { exact: true })).toBeVisible();
+  test('homepage renders the marketing hero (no auth-redirect)', async ({ page }) => {
+    // Wave-A/B (2026-04-27) flipped `/` from a server redirect into
+    // the public marketing site. The hero headline + a Sign-up CTA
+    // must render. We previously asserted a redirect to /runs and
+    // the sidebar branding; both are stale.
+    const res = await page.goto('/', { waitUntil: 'domcontentloaded' });
+    expect(res?.status() ?? 0, 'home should not 5xx').toBeLessThan(500);
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/?$/);
+    await expect(
+      page.getByRole('heading', { name: /run real software-engineering/i }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: /start free trial/i }).first()).toBeVisible();
   });
 
-  test('sidebar walk: /runs, /agents, /models', async ({ page }) => {
+  test('unauthenticated /runs redirects to /login (sidebar walk skipped)', async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies();
     await page.goto('/runs');
-    await expect(page).toHaveURL(/\/runs(\/|$|\?)/);
-    await expect(page.getByText('ALDO AI', { exact: true })).toBeVisible();
-
-    // Use the sidebar nav links (each is a top-level <a>) instead of typing
-    // URLs — that's what a user does, and it catches client-routing
-    // regressions that direct goto() would miss.
-    await page.getByRole('link', { name: 'Agents', exact: true }).click();
-    await expect(page).toHaveURL(/\/agents(\/|$|\?)/);
-
-    await page.getByRole('link', { name: 'Models', exact: true }).click();
-    await expect(page).toHaveURL(/\/models(\/|$|\?)/);
-
-    await page.getByRole('link', { name: 'Runs', exact: true }).click();
-    await expect(page).toHaveURL(/\/runs(\/|$|\?)/);
+    await expect(page).toHaveURL(/\/login\?.*next=/);
+    // The full sidebar walk used to live here; it requires an
+    // authenticated session and is now exercised by post-signup.spec.
+    // Keeping a smoke check that the auth gate fires preserves the
+    // wave-12 regression coverage.
   });
 
-  test('/secrets page loads (or is gracefully missing)', async ({ page }) => {
-    // The secrets UI may not be wired into the sidebar yet; we still want
-    // the route to either render or 404 cleanly — never 500. Treat both
-    // 200 and 404 as acceptable; fail on 5xx.
-    const response = await page.goto('/secrets', { waitUntil: 'domcontentloaded' });
-    const status = response?.status() ?? 0;
-    expect(status, `/secrets returned ${status}`).toBeLessThan(500);
-    // Branding still visible regardless of route status — the layout
-    // chrome is shared.
-    await expect(page.getByText('ALDO AI', { exact: true })).toBeVisible();
+  test('/secrets unauthenticated also redirects to /login', async ({ page, context }) => {
+    await context.clearCookies();
+    await page.goto('/secrets');
+    await expect(page).toHaveURL(/\/login\?.*next=/);
   });
 });
 
 test.describe('golden path — secrets CRUD (writes)', () => {
+  // Wave 10 made every /v1/* endpoint auth-required. The original
+  // form of this test hit /v1/secrets directly without a Bearer
+  // header, which now returns 401. Re-enable once we have a stable
+  // service-account API key in CI secrets that we can fan out for
+  // the test request context. The auth-proxy + signup happy path is
+  // already covered by the post-signup spec.
+  test.skip(true, 'needs an authenticated APIRequestContext — wave-17 follow-up');
   test.skip(
     !ALLOW_WRITES,
     'E2E_ALLOW_WRITES is not "true" — refusing to mutate target environment',
