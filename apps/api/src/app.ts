@@ -51,6 +51,7 @@ import { notificationsRoutes } from './routes/notifications.js';
 import { observabilityRoutes } from './routes/observability.js';
 import { openApiRoutes } from './routes/openapi.js';
 import { playgroundRoutes } from './routes/playground.js';
+import { projectsRoutes } from './routes/projects.js';
 import { quotasRoutes } from './routes/quotas.js';
 import { runsCompareRoutes } from './routes/runs-compare.js';
 import { runsRoutes } from './routes/runs.js';
@@ -256,6 +257,9 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   // Wave-16D — per-tenant monthly quota snapshot + custom domain CRUD.
   app.route('/', quotasRoutes(deps));
   app.route('/', domainsRoutes(deps));
+  // Wave-17 — projects (entity foundation; agents/runs/datasets not
+  // yet scoped by project_id — that's the follow-up retrofit).
+  app.route('/', projectsRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>

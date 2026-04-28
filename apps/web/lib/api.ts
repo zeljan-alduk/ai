@@ -53,6 +53,7 @@ import {
   type CreateDatasetExampleRequest,
   type CreateDatasetRequest,
   type CreateEvaluatorRequest,
+  type CreateProjectRequest,
   type CreateSavedViewRequest,
   Dataset,
   DatasetExample,
@@ -72,6 +73,7 @@ import {
   ListFailureClustersResponse,
   ListModelsResponse,
   ListNotificationsResponse,
+  ListProjectsResponse,
   type ListRunsQuery,
   ListRunsResponse,
   ListSavedViewsResponse,
@@ -83,6 +85,7 @@ import {
   ObservabilitySummary,
   type PortalRequest,
   PortalResponse,
+  Project,
   RunCompareResponse,
   type RunSearchRequest,
   RunSearchResponse,
@@ -101,6 +104,7 @@ import {
   type UpdateDatasetRequest,
   type UpdateDesignPartnerApplicationRequest,
   type UpdateEvaluatorRequest,
+  type UpdateProjectRequest,
   type UpdateSavedViewRequest,
 } from '@aldo-ai/api-contract';
 import { z } from 'zod';
@@ -1102,5 +1106,40 @@ export function listFailureClusters(sweepId: string) {
 export function clusterSweepFailures(sweepId: string) {
   return request(`/v1/eval/sweeps/${encodeURIComponent(sweepId)}/cluster`, ClusterSweepResponse, {
     method: 'POST',
+  });
+}
+
+/* ------------------------------- Projects ----------------------------- */
+//
+// Wave 17. Foundation only — agents/runs/datasets are not yet scoped
+// by project_id. The /projects page and create dialog use these
+// directly; the project picker in the top nav comes once entity
+// scoping lands.
+
+const ProjectEnvelope = z.object({ project: Project });
+
+export function listProjects(opts: { includeArchived?: boolean } = {}) {
+  const q: Record<string, string | number | undefined> = {};
+  if (opts.includeArchived) q.archived = '1';
+  return request('/v1/projects', ListProjectsResponse, { query: q });
+}
+
+export function getProjectBySlug(slug: string) {
+  return request(`/v1/projects/${encodeURIComponent(slug)}`, ProjectEnvelope);
+}
+
+export function createProject(req: CreateProjectRequest) {
+  return request('/v1/projects', ProjectEnvelope, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function updateProject(slug: string, req: UpdateProjectRequest) {
+  return request(`/v1/projects/${encodeURIComponent(slug)}`, ProjectEnvelope, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
   });
 }

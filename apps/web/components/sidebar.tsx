@@ -11,6 +11,13 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => boolean }> = [
+  // Wave-17 — projects entity. Foundation only in this wave: clicking a
+  // project shows its settings, not yet a scoped view of work.
+  {
+    href: '/projects',
+    label: 'Projects',
+    match: (p) => p === '/projects' || p.startsWith('/projects/'),
+  },
   { href: '/runs', label: 'Runs', match: (p) => p === '/runs' || p.startsWith('/runs/') },
   // Wave-14 — between Runs and Agents per the brief.
   {

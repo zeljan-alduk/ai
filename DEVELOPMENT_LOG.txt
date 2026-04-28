@@ -4551,3 +4551,12 @@ Out of scope (per brief):
 - New copy: "We use ALDO AI to build ALDO AI." Frames it as engineering practice (same platform our team works in every day) instead of an org-chart claim. Emphasizes that the seeded reference organization is a real internal template, and that pain points surface in our own work first. Drops the words "dogfood" and "virtualised".
 - Added a 3-stat dl strip (every agent eval-gated; any node replayable; 0 sensitive→cloud) — reinforces the non-negotiables without inventing customer counts.
 - Step 02 of HowItWorks updated to match: "Start with the reference organization" instead of "Use the default agency template … same template we dogfood with."
+
+2026-04-28 — Engineer (Claude) — Wave 17 foundations: projects entity + Python SDK release workflow
+- Two pieces of the wave-17 plan landed: a workflow_dispatch path for publishing the Python SDK to (Test)PyPI, and the projects entity end-to-end (DB → API → UI).
+- .github/workflows/release-python-sdk.yml runs the full PUBLISHING.md gate (pytest + mypy + ruff + twine check) and uploads to TestPyPI by default; flip dry_run=false to hit real PyPI. Reads PYPI_API_TOKEN / TEST_PYPI_API_TOKEN secrets and refuses to publish without them.
+- platform/storage/migrations/019_projects.sql: projects table (tenant-scoped, slug unique per tenant, soft-archive) + a Default project seeded per existing tenant. Idempotent. The default project's id is deterministic per tenant ('00000000-0000-0000-0000-' + last 12 chars of tenant_id) so follow-up backfills can compute it.
+- platform/api-contract/src/projects.ts: Project / Create / Update zod schemas. Slug = lowercase alnum + dashes, 1..64.
+- apps/api/src/projects-store.ts + routes/projects.ts: list/get/create/patch + slug-conflict typed error mapped to 409.
+- apps/web/app/projects/{page,[slug]/page}.tsx + components/projects/{projects-list,create-project-button,project-settings-card}.tsx: list, create, detail with rename/archive. Sidebar gets a "Projects" entry.
+- *Foundation only*: agents/runs/datasets/evaluators/etc. are NOT yet scoped by project_id. The retrofit lands in follow-up migrations one entity at a time, behind a per-tenant feature flag, so each ships independently reviewable.

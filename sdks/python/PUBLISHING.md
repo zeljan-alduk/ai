@@ -1,8 +1,27 @@
 # Publishing the `aldo-ai` Python package
 
-This package is **pre-publish**: 0.1.0 ships in-tree only. PyPI
-release is gated on a maintainer running the steps below; do NOT
-publish from CI in this wave.
+The fastest path is the **`Release Python SDK` GitHub Actions
+workflow** — `workflow_dispatch` only, with a `dry_run` input that
+defaults to TestPyPI. The workflow runs every gate listed below,
+builds the dist, and uploads. The manual steps further down are
+preserved as a fallback for offline / break-glass releases.
+
+## One-shot via GitHub Actions
+
+1. Bump the two version strings (see Pre-flight #1 below) and merge.
+2. Maintainer with `contents: read` on the repo opens **Actions →
+   Release Python SDK → Run workflow**.
+3. Pick `dry_run = true` (TestPyPI). Review the uploaded build:
+   ```bash
+   pip install --index-url https://test.pypi.org/simple/ \
+       --extra-index-url https://pypi.org/simple/ aldo-ai==<version>
+   ```
+4. Re-run with `dry_run = false` to publish to PyPI.
+5. Tag the repo: `git tag python-sdk-vX.Y.Z && git push origin python-sdk-vX.Y.Z`.
+
+The workflow reads `PYPI_API_TOKEN` (real) and `TEST_PYPI_API_TOKEN`
+(dry-run) from repo secrets. Both must be PyPI **API tokens scoped
+to this project**, not account-wide tokens.
 
 ## Pre-flight
 
@@ -49,7 +68,9 @@ unzip -l dist/aldo_ai-*.whl
 tar tzf dist/aldo_ai-*.tar.gz
 ```
 
-## Upload (manual, maintainer-only)
+## Manual upload (fallback only)
+
+Use this only if the GitHub Actions workflow is unavailable.
 
 ```bash
 # Dry-run via TestPyPI first.

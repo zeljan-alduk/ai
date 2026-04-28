@@ -1,0 +1,90 @@
+name: Release Python SDK
+
+# Manual-trigger only — never publishes on plain pushes. The maintainer
+# bumps `sdks/python/pyproject.toml`'s version + `__version__`, runs
+# this workflow with `dry_run=false`, and the job publishes to PyPI.
+#
+# A `dry_run=true` run goes through every gate but uploads to TestPyPI
+# instead. Use it before the real release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Upload to TestPyPI instead of PyPI'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build, test, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sdks/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dev deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      # Quality gate — every check from sdks/python/PUBLISHING.md.
+      - name: pytest
+        run: python -m pytest -q
+
+      - name: mypy
+        run: python -m mypy src/aldo_ai
+
+      - name: ruff
+        run: python -m ruff check src/aldo_ai
+
+      # Confirm the package version matches the tag-style intent before
+      # we waste a build minute on a misnumbered release.
+      - name: Show version
+        run: python -c "import aldo_ai; print('aldo-ai', aldo_ai.__version__)"
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install build
+          python -m build
+
+      - name: twine check
+        run: python -m twine check dist/*
+
+      - name: Upload (TestPyPI)
+        if: ${{ inputs.dry_run == 'true' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: |
+          if [ -z "${TWINE_PASSWORD}" ]; then
+            echo "::error::TEST_PYPI_API_TOKEN secret is not configured on this repo."
+            exit 1
+          fi
+          python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+
+      - name: Upload (PyPI)
+        if: ${{ inputs.dry_run == 'false' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "${TWINE_PASSWORD}" ]; then
+            echo "::error::PYPI_API_TOKEN secret is not configured on this repo."
+            exit 1
+          fi
+          python -m twine upload dist/*

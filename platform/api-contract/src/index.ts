@@ -33,3 +33,5 @@ export * from './cache.js';
 // Wave-16 — per-tenant quotas + custom domains.
 export * from './quotas.js';
 export * from './domains.js';
+// Wave-17 — projects (foundation only; entity scoping retrofits next).
+export * from './projects.js';
