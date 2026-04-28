@@ -47,7 +47,7 @@ describe('AgentDetail (wave 7.5 additive fields)', () => {
       outputScanner: {
         enabled: true,
         severityBlock: 'error' as const,
-        urlAllowlist: ['api.github.com', 'docs.aldo-ai.dev'],
+        urlAllowlist: ['api.github.com', 'docs.aldo.tech'],
       },
       quarantine: {
         enabled: true,

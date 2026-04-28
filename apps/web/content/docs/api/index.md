@@ -13,7 +13,7 @@ TypeScript examples.
 ## Base URL
 
 ```
-https://app.aldo-ai.dev
+https://ai.aldo.tech
 ```
 
 For self-hosted deployments, replace this with your operator's
@@ -27,7 +27,7 @@ requires a bearer token. Mint a key under
 `Authorization` header:
 
 ```bash
-curl https://app.aldo-ai.dev/api/auth-proxy/v1/agents \
+curl https://ai.aldo.tech/api/auth-proxy/v1/agents \
   -H "Authorization: Bearer $ALDO_API_KEY"
 ```
 

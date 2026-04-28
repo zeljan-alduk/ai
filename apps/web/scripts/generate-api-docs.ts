@@ -354,7 +354,7 @@ function contractFileForRoute(routeFile: string): string {
 }
 
 function buildExamples(endpoint: ExtractedEndpoint): EndpointDoc['examples'] {
-  const url = `https://app.aldo-ai.dev${endpoint.path.replace(/:(\w+)/g, '{$1}')}`;
+  const url = `https://ai.aldo.tech${endpoint.path.replace(/:(\w+)/g, '{$1}')}`;
   const headers = `-H "Authorization: Bearer $ALDO_API_KEY" \\\n  -H "Content-Type: application/json"`;
   const wantsBody =
     endpoint.method === 'POST' || endpoint.method === 'PATCH' || endpoint.method === 'PUT';

@@ -15,7 +15,7 @@ import type { MetadataRoute } from 'next';
 
 import { listAllDocPages } from '@/lib/docs/loader';
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.aldo-ai.dev';
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://ai.aldo.tech';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const docs = listAllDocPages().map((page) => ({
@@ -24,7 +24,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: 'weekly' as const,
     priority: page.slug === '' ? 0.9 : 0.7,
   }));
-  const marketing = ['/', '/pricing', '/about', '/security', '/design-partner'].map((path) => ({
+  const marketing = [
+    '/',
+    '/pricing',
+    '/about',
+    '/security',
+    '/changelog',
+    '/vs/braintrust',
+    '/vs/langsmith',
+    '/vs/crewai',
+  ].map((path) => ({
     url: `${SITE}${path}`,
     lastModified: new Date(),
     changeFrequency: 'weekly' as const,

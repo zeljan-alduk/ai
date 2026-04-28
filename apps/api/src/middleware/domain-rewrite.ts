@@ -55,8 +55,14 @@ export function domainRewrite(db: SqlClient): MiddlewareHandler {
     // Skip the platform-default domains so we don't pay the SQL
     // roundtrip on every API call. The custom-domain table only
     // stores user-provided hostnames, so this short-circuit is safe.
+    //
+    // Canonical platform host is `ai.aldo.tech`. The legacy
+    // `*.aldo-ai.dev` entry is preserved as a defensive fallback
+    // for any stale bookmarks pointed at the pre-2026-04 URL.
     if (
       hostname === 'localhost' ||
+      hostname === 'ai.aldo.tech' ||
+      hostname.endsWith('.aldo.tech') ||
       hostname.endsWith('.aldo-ai.dev') ||
       hostname.endsWith('.fly.dev') ||
       hostname.endsWith('.vercel.app')

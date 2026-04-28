@@ -22,7 +22,7 @@ Mint a key under [Settings → API keys](/docs/guides/api-keys), then:
 import { createClient } from '@aldo-ai/api-contract/client';
 
 const client = createClient({
-  baseUrl: 'https://app.aldo-ai.dev',
+  baseUrl: 'https://ai.aldo.tech',
   apiKey: process.env.ALDO_API_KEY,
 });
 ```

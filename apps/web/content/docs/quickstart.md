@@ -19,7 +19,7 @@ ALDO TECH LABS uses to dogfood the platform. From the welcome screen
 click **Seed default agency**, or run:
 
 ```bash
-curl -X POST https://app.aldo-ai.dev/api/auth-proxy/v1/tenants/me/seed-default \
+curl -X POST https://ai.aldo.tech/api/auth-proxy/v1/tenants/me/seed-default \
   -H "Authorization: Bearer $ALDO_API_KEY"
 ```
 

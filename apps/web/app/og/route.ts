@@ -110,7 +110,7 @@ export function GET(req: NextRequest): Response {
 
   <!-- URL chip, bottom-right -->
   <g transform="translate(${W - 280},${H - 80})">
-    <text font-family="Inter,system-ui,sans-serif" font-size="22" fill="#94a3b8">app.aldo-ai.dev</text>
+    <text font-family="Inter,system-ui,sans-serif" font-size="22" fill="#94a3b8">ai.aldo.tech</text>
   </g>
 </svg>`;
 

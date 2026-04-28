@@ -15,14 +15,14 @@
 
 import type { MetadataRoute } from 'next';
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.aldo-ai.dev';
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://ai.aldo.tech';
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/docs', '/pricing', '/about', '/security', '/design-partner'],
+        allow: ['/', '/docs', '/pricing', '/about', '/security', '/changelog', '/vs'],
         disallow: [
           '/api/',
           '/runs',

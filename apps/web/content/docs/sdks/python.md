@@ -19,7 +19,7 @@ pip install aldo-ai
 from aldo_ai import AldoClient
 
 client = AldoClient(
-    base_url="https://app.aldo-ai.dev",
+    base_url="https://ai.aldo.tech",
     api_key="sk-aldo-...",   # or set ALDO_API_KEY in env
 )
 

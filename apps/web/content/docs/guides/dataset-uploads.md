@@ -32,7 +32,7 @@ aldo dataset push ./changelog-cases.jsonl --name changelog-cases
 Via the API:
 
 ```bash
-curl -X POST https://app.aldo-ai.dev/api/auth-proxy/v1/datasets \
+curl -X POST https://ai.aldo.tech/api/auth-proxy/v1/datasets \
   -H "Authorization: Bearer $ALDO_API_KEY" \
   -H "Content-Type: application/x-ndjson" \
   --data-binary @changelog-cases.jsonl

@@ -43,7 +43,7 @@ export function GET(req: NextRequest): Response {
     <text x="50" y="0" font-family="Inter,system-ui,sans-serif" font-size="28" font-weight="600" fill="#ffffff">ALDO AI</text>
   </g>
   <g transform="translate(${W - 280},${H - 80})">
-    <text font-family="Inter,system-ui,sans-serif" font-size="22" fill="#94a3b8">app.aldo-ai.dev/docs</text>
+    <text font-family="Inter,system-ui,sans-serif" font-size="22" fill="#94a3b8">ai.aldo.tech/docs</text>
   </g>
 </svg>`;
 

@@ -363,6 +363,12 @@ server {
   location = /openapi.yaml { proxy_pass http://aldo_api/openapi.yaml; proxy_set_header Host \$host; }
   location = /health       { proxy_pass http://aldo_api/health;       proxy_set_header Host \$host; }
 
+  # Documentation viewers live as Next.js pages under /api/* — must be
+  # routed to aldo_web BEFORE the catch-all /api/ block above sends
+  # them to aldo_api (which 401s every non-/v1 path).
+  location = /api/docs  { proxy_pass http://aldo_web; proxy_http_version 1.1; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
+  location = /api/redoc { proxy_pass http://aldo_web; proxy_http_version 1.1; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
+
   location /_admin/ {
     proxy_pass http://aldo_admin/;
     proxy_http_version 1.1;
@@ -447,6 +453,12 @@ server {
   location = /openapi.json { proxy_pass http://aldo_api/openapi.json; proxy_set_header Host \$host; }
   location = /openapi.yaml { proxy_pass http://aldo_api/openapi.yaml; proxy_set_header Host \$host; }
   location = /health       { proxy_pass http://aldo_api/health;       proxy_set_header Host \$host; }
+
+  # Documentation viewers live as Next.js pages under /api/* — route
+  # them to aldo_web BEFORE the catch-all /api/ block above sends
+  # them to aldo_api (which 401s every non-/v1 path).
+  location = /api/docs  { proxy_pass http://aldo_web; proxy_http_version 1.1; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
+  location = /api/redoc { proxy_pass http://aldo_web; proxy_http_version 1.1; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto \$scheme; }
 
   location /_admin/ {
     proxy_pass http://127.0.0.1:9999/;
