@@ -28,6 +28,7 @@ import { CostRollupCard } from '@/components/runs/cost-rollup-card';
 import { ReplayScrubber } from '@/components/runs/replay-scrubber';
 import { RunDetailTabs } from '@/components/runs/run-detail-tabs';
 import { RunTree } from '@/components/runs/run-tree';
+import { SaveAsEvalRowButton } from '@/components/runs/save-as-eval-row-dialog';
 import { TimelineView } from '@/components/runs/timeline-view';
 import { ShareDialog } from '@/components/shares/share-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,6 +106,7 @@ export default async function RunDetailPage({
         description="Trace, events, and replay. Click any bar to drill into a span."
         actions={
           <div className="flex items-center gap-2">
+            {data ? <SaveAsEvalRowButton run={data.run} /> : null}
             <CompareWithButton currentRunId={id} />
             <ShareDialog targetKind="run" targetId={id} />
             <Link
