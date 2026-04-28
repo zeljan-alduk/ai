@@ -4520,3 +4520,9 @@ Out of scope (per brief):
 - ai.aldo.tech serving from the VPS via the existing transit-nginx edge proxy (untouched slovenia-transit). API healthy, web serving, deploy webhook reachable.
 - End-to-end auto-deploy live: push to claude/ai-agent-orchestrator-hAmzy or main -> deploy-vps GitHub Actions workflow -> POST /_admin/deploy with VPS_DEPLOY_TOKEN -> vps-deploy.sh -> git fetch + emit compose + docker compose up -d --build -> public smoke (api /health + homepage + /_admin/health). Operator no longer in the loop.
 - Remaining: decommission Fly (apps/api/fly.toml + .github/workflows/deploy-api.yml) and Vercel after a cool-off window.
+
+2026-04-28 — Engineer (Claude) — fix broken web Dockerfile build (5 deploys failing in a row)
+- Symptom: every deploy since 5ad20c2 (Wave A marketing) reported HTTP 500 from /_admin/deploy. New routes /vs /changelog /sales /deck were 307'ing to /login on prod even though the middleware allow-list already had them on origin (94eba80). Root cause: aldo-web container was 15h old — newer pushes never produced a new image because the build step exited 1 and `docker compose up -d --build` aborted.
+- Cause of the build failure: apps/web/Dockerfile (introduced in fecba45) only copies `platform/api-contract` + `apps/web` + `tsconfig.base.json` into the build context. But the web prebuild runs `tsx scripts/generate-api-docs.ts`, which `readdirSync('apps/api/src/routes')` to enumerate endpoints from API route source. That dir is not in the web build context, so prebuild ENOENTs and the next-build step fails.
+- Fix: COPY apps/api/src/routes ./apps/api/src/routes in the `sources` stage. The script only reads .ts files (regex match for `app.<verb>('<path>')`), no execution — so we copy only that one subtree, not all of @aldo-ai/api.
+- Slovenia-transit (transit-nginx, transit-frontend, transit-backend, transit-r5, transit-mongodb, transit-postgres, transit-certbot) is healthy on the same VPS and untouched by this work.

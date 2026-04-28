@@ -32,6 +32,12 @@ COPY platform/api-contract ./platform/api-contract
 COPY apps/web ./apps/web
 COPY tsconfig.base.json ./
 
+# The web prebuild's `generate-api-docs.ts` regex-scans the API route
+# sources (apps/api/src/routes/*.ts) to enumerate endpoints. It does
+# NOT execute them — it just reads the .ts source — so we copy only
+# the routes directory, not the rest of @aldo-ai/api or its deps.
+COPY apps/api/src/routes ./apps/api/src/routes
+
 # ---- 3. Build (next build, which triggers prebuild via tsx) ----
 FROM sources AS build
 WORKDIR /repo
