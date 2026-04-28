@@ -4545,3 +4545,9 @@ Out of scope (per brief):
 - Pre-fill is best-effort: composite/tool-only runs may have no user/assistant messages, in which case both fields start empty and the user types them in. Validation: dataset required, non-empty input required.
 - Wired into apps/web/app/runs/[id]/page.tsx header next to CompareWithButton + ShareDialog. Skipped /runs/[id]/debug for this iteration — same hook fits there but the live debugger has its own UX flow worth thinking about separately.
 - Inline labeling on /datasets/[id] (the polish half) intentionally not changed — the existing Sheet-based inline-edit per row already covers it; adding click-to-edit on the cell would clutter the table.
+
+2026-04-28 — Engineer (Claude) — homepage Builders section: professional rewrite
+- Old copy: "Dogfooded by a virtual software agency" / "virtualised software agency staffed entirely by LLM agents". Read as a toy claim to enterprise buyers — sounded like the company itself was run by AI, undermining the trust the rest of the page builds.
+- New copy: "We use ALDO AI to build ALDO AI." Frames it as engineering practice (same platform our team works in every day) instead of an org-chart claim. Emphasizes that the seeded reference organization is a real internal template, and that pain points surface in our own work first. Drops the words "dogfood" and "virtualised".
+- Added a 3-stat dl strip (every agent eval-gated; any node replayable; 0 sensitive→cloud) — reinforces the non-negotiables without inventing customer counts.
+- Step 02 of HowItWorks updated to match: "Start with the reference organization" instead of "Use the default agency template … same template we dogfood with."

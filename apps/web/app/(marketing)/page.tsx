@@ -89,8 +89,8 @@ const STEPS: ReadonlyArray<{ n: string; title: string; body: string }> = [
   },
   {
     n: '02',
-    title: 'Use the default agency template',
-    body: 'A reference organisation (principal, architect, engineers, reviewers) is seeded into your tenant on first login. It is the same template we dogfood with.',
+    title: 'Start with the reference organization',
+    body: 'A working agent organization (principal, architect, engineers, reviewers) is seeded into your tenant on first login — the same template our team uses internally. Edit it freely or replace it entirely.',
   },
   {
     n: '03',
@@ -382,24 +382,43 @@ function Builders() {
               Built by ALDO TECH LABS
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.1rem]">
-              Dogfooded by a virtual software agency.
+              We use ALDO&nbsp;AI to build ALDO&nbsp;AI.
             </h2>
+            <p className="mt-4 text-sm leading-relaxed text-slate-600">
+              The platform you evaluate is the platform our own team works in every day.
+            </p>
           </div>
           <div className="lg:col-span-7">
             <p className="text-base leading-relaxed text-slate-700">
-              ALDO AI is built by ALDO TECH LABS — a virtualised software agency staffed entirely by
-              LLM agents (principal, architect, engineers, reviewers). The same agency spec ships
-              with every new tenant as the default template.{' '}
-              <strong>If a feature does not help that agency ship, we do not build it.</strong>
+              Every new tenant arrives with a reference agent organization — principal, architect,
+              engineers, reviewers — preconfigured for sequential, parallel, and review handoffs. It
+              is the same template our team uses internally to ship this product. Pain points
+              surface in our own work first.
             </p>
             <p className="mt-4 text-base leading-relaxed text-slate-700">
-              The orchestrator, the eval harness, and the run tree are not afterthoughts. They are
-              the surface area we live in every day.
+              Replay, eval gates, the run tree, and the privacy-tier router are not boxes we ticked
+              for a comparison table.{' '}
+              <strong className="text-slate-900">They are the surfaces we live in.</strong> If a
+              feature does not help that organization ship faster, we do not build it.
             </p>
+            <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-slate-200 pt-5 text-sm">
+              <Stat label="Eval suites gating promotion" value="every agent" />
+              <Stat label="Replay against another model" value="any node" />
+              <Stat label="Sensitive traffic to cloud" value="0" />
+            </dl>
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-wider text-slate-500">{label}</dt>
+      <dd className="mt-1 font-mono text-base font-medium tabular-nums text-slate-900">{value}</dd>
+    </div>
   );
 }
 
