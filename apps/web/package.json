@@ -39,7 +39,7 @@
     "sanitize-html": "^2.13.1",
     "lucide-react": "^0.460.0",
     "marked": "^15.0.0",
-    "next": "^15.0.3",
+    "next": "^16.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.8.1",
