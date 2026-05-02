@@ -1,0 +1,72 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+{{/*
+  Schema migrations Job — runs the API container in one-shot mode against
+  the configured Postgres before the rolling update of the api Deployment.
+
+  The API also runs migrations on boot (apps/api/src/index.ts), so this
+  Job is belt + suspenders: it lets us fail the upgrade fast if the
+  migration step explodes, instead of cascading into a CrashLoopBackOff
+  on every replica.
+
+  Triggered as a post-install + post-upgrade hook so it sees the new
+  image tag. before-hook-creation policy deletes the previous Job before
+  re-creating, so naming stays stable.
+*/}}
+{{- if .Values.migrations.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-migrations
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "migrations") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: {{ .Values.migrations.ttlSecondsAfterFinished }}
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "aldo-ai.componentLabels" (dict "root" . "component" "migrations") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "aldo-ai.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "aldo-ai.apiImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "aldo-ai.fullname" . }}-config
+            - secretRef:
+                name: {{ include "aldo-ai.appSecretName" . }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aldo-ai.postgresPasswordSecretName" . }}
+                  key: {{ include "aldo-ai.postgresPasswordSecretKey" . }}
+            - name: DATABASE_URL
+              value: "postgres://{{ include "aldo-ai.postgresUser" . }}:$(POSTGRES_PASSWORD)@{{ include "aldo-ai.postgresHost" . }}:{{ include "aldo-ai.postgresPort" . }}/{{ include "aldo-ai.postgresDatabase" . }}"
+            - name: ALDO_MIGRATE_AND_EXIT
+              value: "true"
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          # The API entrypoint short-circuits to migrate-then-exit when
+          # ALDO_MIGRATE_AND_EXIT=true. If that env-gate is not yet wired
+          # in apps/api, the Job still ends up running normal boot —
+          # migrations will be applied as a side-effect and the Job will
+          # be killed by the activeDeadline below.
+          command: ["node_modules/.bin/tsx", "src/index.ts"]
+      activeDeadlineSeconds: 300
+{{- end }}

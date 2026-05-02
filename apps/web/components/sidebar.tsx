@@ -70,6 +70,14 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     label: 'Datasets',
     match: (p) => p === '/datasets' || p.startsWith('/datasets/'),
   },
+  // Wave-18 (Tier 3.5) — Git integration: connect a customer GitHub /
+  // GitLab repo and sync agent specs from `aldo/agents/*.yaml`.
+  // Net-new competitive wedge.
+  {
+    href: '/integrations/git',
+    label: 'Integrations',
+    match: (p) => p === '/integrations' || p.startsWith('/integrations/'),
+  },
   {
     href: '/settings',
     label: 'Settings',
@@ -264,19 +272,32 @@ function EvalSubLinks({
   pathname: string;
   onNavigate: () => void;
 }) {
-  const active = pathname === '/evaluators' || pathname.startsWith('/evaluators/');
+  const evaluatorsActive = pathname === '/evaluators' || pathname.startsWith('/evaluators/');
+  // Wave-3 (Tier-3.1) — playground is its own surface under /eval.
+  const playgroundActive = pathname === '/eval/playground';
   return (
     <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
       <Link
         href="/evaluators"
         onClick={onNavigate}
-        aria-current={active ? 'page' : undefined}
+        aria-current={evaluatorsActive ? 'page' : undefined}
         className={cn(
           'flex min-h-touch items-center rounded px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          active ? 'bg-fg text-fg-inverse' : 'text-fg-muted hover:bg-bg-subtle',
+          evaluatorsActive ? 'bg-fg text-fg-inverse' : 'text-fg-muted hover:bg-bg-subtle',
         )}
       >
         Evaluators
+      </Link>
+      <Link
+        href="/eval/playground"
+        onClick={onNavigate}
+        aria-current={playgroundActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-touch items-center rounded px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          playgroundActive ? 'bg-fg text-fg-inverse' : 'text-fg-muted hover:bg-bg-subtle',
+        )}
+      >
+        Playground
       </Link>
     </div>
   );

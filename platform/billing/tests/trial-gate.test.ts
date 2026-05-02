@@ -22,6 +22,8 @@ function sub(overrides: Partial<Subscription>): Subscription {
     currentPeriodEnd: null,
     cancelledAt: null,
     metadata: {},
+    retentionDays: null,
+    lastPrunedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,

@@ -1,0 +1,58 @@
+# Licensed under FSL-1.1-ALv2
+# ============================================================================
+# values-minikube.yaml — local kind / minikube / k3d dev override
+# ----------------------------------------------------------------------------
+# Single-replica everything. Bundled Postgres on a 5Gi PVC. No ingress —
+# reach the UI by `kubectl port-forward`.
+# ============================================================================
+
+replicas:
+  api: 1
+  web: 1
+
+resources:
+  api:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  web:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+postgres:
+  enabled: true
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: false
+
+# Local dev — placeholder Secret with empty values is fine; provider keys
+# can be plumbed in via `kubectl edit secret` after install.
+secrets:
+  bringYourOwnSecret: false
+  values:
+    OLLAMA_BASE_URL: "http://host.minikube.internal:11434"
+
+privacyTier:
+  enforced: false   # most CNIs in dev clusters don't enforce NetPol
+
+pdb:
+  api:
+    enabled: false
+  web:
+    enabled: false

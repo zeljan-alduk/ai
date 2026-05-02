@@ -34,10 +34,15 @@ export {
 } from './stores/index.js';
 export {
   copyTenantAgents,
+  forkGalleryTemplate,
   seedDefaultTenantFromAgency,
   seedFromDirectory,
+  TemplateInvalidError,
+  TemplateNotFoundError,
   type CopyTenantOptions,
   type CopyTenantResult,
+  type ForkGalleryTemplateOptions,
+  type ForkGalleryTemplateResult,
   type SeedDefaultTenantOptions,
   type SeedFromDirectoryOptions,
   type SeedResult,

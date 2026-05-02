@@ -18,3 +18,20 @@ scripts/__pycache__/
 
 # claude code transient files
 .claude/
+
+# terraform — state, lock, plan caches stay local
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!**/*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# helm — packaged charts
+charts/*/charts/
+charts/*-*.tgz

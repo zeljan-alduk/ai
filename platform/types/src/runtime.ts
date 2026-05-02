@@ -60,6 +60,11 @@ export interface RunEvent {
      *
      * The terminal `run.completed` / `run.cancelled` event still
      * follows; this one explains *why* the run ended where it did.
+     *
+     * Wave-MVP follow-up: the engine now also emits this on a LEAF
+     * agent run when its own `spec.termination` block fires — same
+     * payload shape, same downstream contract. `successRoles` never
+     * fires on a leaf (no aliased subagents); the other three rules do.
      */
     | 'run.terminated_by';
   readonly at: string;

@@ -187,3 +187,98 @@ export const CreateSuiteResponse = z.object({
   caseCount: z.number().int().nonnegative(),
 });
 export type CreateSuiteResponse = z.infer<typeof CreateSuiteResponse>;
+
+// ───────────────────────────────────────────── Eval scorer playground (Wave-3)
+//
+// Tier-3.1 — Braintrust playground / LangSmith evaluators-as-product gap.
+// Pick one evaluator + one dataset + a sample size, hit Run, watch
+// per-row scores stream in alongside aggregate stats. The playground
+// does NOT persist to the suite store — it's evaluator-development,
+// not suite execution. A future "Save as suite" promotion endpoint
+// converts a playground session into a permanent suite + sweep.
+//
+// LLM-agnostic: only `llm_judge` evaluator kinds touch a model, and
+// they go through the gateway (capability-class string only) the same
+// way the existing /v1/evaluators/:id/test path does.
+
+/** Status of a transient playground run. */
+export const PlaygroundRunStatus = z.enum(['running', 'completed', 'failed', 'cancelled']);
+export type PlaygroundRunStatus = z.infer<typeof PlaygroundRunStatus>;
+
+/** Per-example score row in a playground run. */
+export const PlaygroundScoredRow = z.object({
+  exampleId: z.string(),
+  /** Truncated input, ready to render in a table cell. */
+  inputPreview: z.string(),
+  /** Truncated expected (or empty when the example has none). */
+  expectedPreview: z.string(),
+  /** What the evaluator actually scored. For built-ins, the example's
+   *  `expected` field is what we pass as the model output (since the
+   *  playground isn't running an agent — it's scoring known data). */
+  output: z.string(),
+  passed: z.boolean(),
+  score: z.number().min(0).max(1),
+  /** Whatever the evaluator returned (regex match, judge rationale, etc.). */
+  detail: z.unknown().optional(),
+  /** Per-row evaluator wall time. */
+  durationMs: z.number().int().nonnegative(),
+  /** Per-row USD cost (non-zero only when the evaluator uses an LLM). */
+  costUsd: z.number().nonnegative(),
+});
+export type PlaygroundScoredRow = z.infer<typeof PlaygroundScoredRow>;
+
+/** Aggregate stats over a playground run's scored rows. */
+export const PlaygroundAggregate = z.object({
+  /** Rows scored so far. Equals total once status is terminal. */
+  scored: z.number().int().nonnegative(),
+  /** Target row count (sample size or full dataset). */
+  total: z.number().int().nonnegative(),
+  passed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  passRate: z.number().min(0).max(1),
+  meanScore: z.number().min(0).max(1),
+  p50Score: z.number().min(0).max(1),
+  p95Score: z.number().min(0).max(1),
+  minScore: z.number().min(0).max(1),
+  maxScore: z.number().min(0).max(1),
+  meanDurationMs: z.number().nonnegative(),
+  totalCostUsd: z.number().nonnegative(),
+});
+export type PlaygroundAggregate = z.infer<typeof PlaygroundAggregate>;
+
+export const StartPlaygroundRunRequest = z.object({
+  evaluatorId: z.string().min(1),
+  datasetId: z.string().min(1),
+  /** When set, randomly sample this many examples from the dataset
+   *  (capped to the dataset size). Omit to score the full dataset. */
+  sampleSize: z.number().int().positive().max(500).optional(),
+});
+export type StartPlaygroundRunRequest = z.infer<typeof StartPlaygroundRunRequest>;
+
+export const StartPlaygroundRunResponse = z.object({
+  runId: z.string(),
+});
+export type StartPlaygroundRunResponse = z.infer<typeof StartPlaygroundRunResponse>;
+
+export const PlaygroundRun = z.object({
+  id: z.string(),
+  evaluatorId: z.string(),
+  evaluatorName: z.string(),
+  evaluatorKind: z.string(),
+  datasetId: z.string(),
+  datasetName: z.string(),
+  sampleSize: z.number().int().nonnegative(),
+  status: PlaygroundRunStatus,
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  /** Failure reason when status='failed'; absent otherwise. */
+  errorMessage: z.string().optional(),
+  rows: z.array(PlaygroundScoredRow),
+  aggregate: PlaygroundAggregate,
+});
+export type PlaygroundRun = z.infer<typeof PlaygroundRun>;
+
+export const GetPlaygroundRunResponse = z.object({
+  run: PlaygroundRun,
+});
+export type GetPlaygroundRunResponse = z.infer<typeof GetPlaygroundRunResponse>;

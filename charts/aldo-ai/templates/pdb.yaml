@@ -1,0 +1,28 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+{{- if and .Values.pdb.api.enabled (gt (int .Values.replicas.api) 1) -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-api
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "api") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.api.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "aldo-ai.componentSelectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+{{- end }}
+{{- if and .Values.pdb.web.enabled (gt (int .Values.replicas.web) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-web
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.web.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "aldo-ai.componentSelectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+{{- end }}

@@ -78,6 +78,48 @@ describe('probe(ollama)', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://[::1]:11434/api/tags', expect.any(Object));
   });
 
+  it('Tier 4.1 — Llama 3.1 70B reports effectiveContextTokens=131072 from the table', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        models: [{ name: 'llama3.1:70b', model: 'llama3.1:70b' }],
+      }),
+    );
+    const out = await probe({ fetch: fetchMock });
+    expect(out).toHaveLength(1);
+    expect(out[0]?.effectiveContextTokens).toBe(131_072);
+  });
+
+  it('Tier 4.1 — unknown model falls back to 8192', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        models: [{ name: 'totally-niche-experimental:0.5b' }],
+      }),
+    );
+    const out = await probe({ fetch: fetchMock });
+    expect(out).toHaveLength(1);
+    expect(out[0]?.effectiveContextTokens).toBe(8_192);
+  });
+
+  it('Tier 4.1 — server-reported context_length wins over the table', async () => {
+    // Even though the table says Llama 3.1 70B → 131072, the server's
+    // own report (e.g. user launched Ollama with --num-ctx 32768) is
+    // authoritative.
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        models: [
+          {
+            name: 'llama3.1:70b',
+            model: 'llama3.1:70b',
+            details: { context_length: 32_768 },
+          },
+        ],
+      }),
+    );
+    const out = await probe({ fetch: fetchMock });
+    expect(out).toHaveLength(1);
+    expect(out[0]?.effectiveContextTokens).toBe(32_768);
+  });
+
   it('aborts when the per-probe timeout is exceeded', async () => {
     const fetchMock: typeof fetch = vi.fn(async (_url, init) => {
       return await new Promise<Response>((_resolve, reject) => {

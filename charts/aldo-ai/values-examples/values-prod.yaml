@@ -1,0 +1,116 @@
+# Licensed under FSL-1.1-ALv2
+# ============================================================================
+# values-prod.yaml — production placeholder
+# ----------------------------------------------------------------------------
+# BYO managed Postgres. Real ingress + cert-manager. Privacy tier enforced.
+# Provider keys come from a pre-existing Secret managed by ExternalSecrets
+# / SealedSecrets / Vault — NOT by this chart.
+# ============================================================================
+
+image:
+  registry: ghcr.io
+  pullPolicy: IfNotPresent
+  api:
+    repository: aldo-tech-labs/aldo-api
+    tag: ""    # pin to an immutable tag in real deployments
+  web:
+    repository: aldo-tech-labs/aldo-web
+    tag: ""
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+replicas:
+  api: 3
+  web: 2
+
+autoscaling:
+  api:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 65
+  web:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+resources:
+  api:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  web:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+postgres:
+  enabled: false
+  external:
+    host: aldo-prod.cluster-XXXX.us-east-1.rds.amazonaws.com
+    port: 5432
+    database: aldo
+    user: aldo
+    existingSecret: aldo-postgres-credentials
+    existingSecretPasswordKey: password
+    sslMode: require
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+  hosts:
+    web: aldo.example.com
+    api: api.aldo.example.com
+  tls:
+    enabled: true
+    secretName: aldo-tls
+
+config:
+  apiPublicUrl: https://api.aldo.example.com
+  webPublicUrl: https://aldo.example.com
+  defaultPrivacy: internal
+  runUsdCap: "1.00"
+
+secrets:
+  bringYourOwnSecret: true
+  name: aldo-app-secrets   # pre-create with all provider keys
+
+privacyTier:
+  enforced: true
+  # If you run Ollama on the same VPC, list its CIDR here so sensitive
+  # pods can still reach it — internet egress remains denied.
+  allowedEgressCIDRs: []
+
+serviceAccount:
+  create: true
+  annotations:
+    # AWS IRSA example — bind the service account to a role that has
+    # access to S3 (replay bundles), KMS, and Bedrock if used.
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/aldo-platform
+
+pdb:
+  api:
+    enabled: true
+    minAvailable: 2
+  web:
+    enabled: true
+    minAvailable: 1
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/part-of: aldo-ai

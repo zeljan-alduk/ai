@@ -25,8 +25,10 @@
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import type { AgentSpec } from '@aldo-ai/types';
+import YAML from 'yaml';
 import { parseYaml } from './loader.js';
-import type { RegisteredAgentStore } from './stores/types.js';
+import type { RegisteredAgent, RegisteredAgentStore } from './stores/types.js';
 
 export interface SeedResult {
   /** Number of agents successfully registered. */
@@ -193,4 +195,161 @@ export async function copyTenantAgents(
     copied += 1;
   }
   return { copied, skipped };
+}
+
+// ---------------------------------------------------------------------------
+// Wave-3 — per-template gallery fork.
+//
+// `forkGalleryTemplate` powers `POST /v1/gallery/fork`. It reads ONE
+// template YAML from `agency/<team>/<templateId>.yaml`, resolves a
+// non-colliding name in the destination tenant + project, and registers
+// the spec under the caller's tenant. Slug collisions are resolved by
+// appending `-2`, `-3`, … unless the caller passes an explicit name
+// override.
+//
+// The function does NOT touch raw SQL — it goes through `store.register`
+// like every other write path, which keeps tenant isolation, the
+// pointer table, and the project_id column behaving identically to the
+// CLI/API write paths.
+// ---------------------------------------------------------------------------
+
+/** A template YAML failed Zod validation. */
+export class TemplateInvalidError extends Error {
+  public readonly templateId: string;
+  public readonly errors: readonly { readonly path: string; readonly message: string }[];
+  constructor(
+    templateId: string,
+    errors: readonly { readonly path: string; readonly message: string }[],
+  ) {
+    super(
+      `template ${templateId} failed schema validation: ${errors
+        .map((e) => `${e.path}: ${e.message}`)
+        .join('; ')}`,
+    );
+    this.name = 'TemplateInvalidError';
+    this.templateId = templateId;
+    this.errors = errors;
+  }
+}
+
+/** No YAML file was found for the requested template id. */
+export class TemplateNotFoundError extends Error {
+  public readonly templateId: string;
+  constructor(templateId: string) {
+    super(`template not found: ${templateId}`);
+    this.name = 'TemplateNotFoundError';
+    this.templateId = templateId;
+  }
+}
+
+export interface ForkGalleryTemplateOptions {
+  /** Root directory carrying `agency/<team>/<id>.yaml`. */
+  readonly directory: string;
+  /** Template id (matches the YAML filename without `.yaml`). */
+  readonly templateId: string;
+  /** Destination tenant. */
+  readonly tenantId: string;
+  /** Destination project. Stored verbatim alongside the spec row. */
+  readonly projectId: string;
+  /** Explicit name override; when omitted the template's name is used (with `-2`, `-3` collision suffix). */
+  readonly nameOverride?: string;
+}
+
+export interface ForkGalleryTemplateResult {
+  readonly agent: RegisteredAgent;
+  /**
+   * The name the spec actually landed under. Equal to
+   * `opts.nameOverride` when set; else the template's identity.name +
+   * an optional `-N` suffix when there was a slug collision.
+   */
+  readonly agentName: string;
+  /** The template's identity.version, copied verbatim. */
+  readonly version: string;
+}
+
+export async function forkGalleryTemplate(
+  store: RegisteredAgentStore,
+  opts: ForkGalleryTemplateOptions,
+): Promise<ForkGalleryTemplateResult> {
+  // 1. Locate the YAML. The seeder's `collectYamlFiles` already
+  //    handles the agency layout — we re-use it so the gallery surface
+  //    accepts the same set of templates the boot-time seeder does.
+  const files = await collectYamlFiles(opts.directory);
+  const match = files.find((f) => yamlBaseName(f) === opts.templateId);
+  if (match === undefined) {
+    throw new TemplateNotFoundError(opts.templateId);
+  }
+  const text = await readFile(match, 'utf8');
+  const res = parseYaml(text);
+  if (!res.ok || res.spec === undefined) {
+    throw new TemplateInvalidError(opts.templateId, res.errors);
+  }
+  const sourceSpec = res.spec;
+
+  // 2. Resolve a non-colliding name in the destination tenant.
+  //    The store keys on (tenantId, name, version); a register() call
+  //    with a name that already exists at the same version would
+  //    overwrite the spec_yaml in place. We avoid that by checking
+  //    `get(tenant, name)` first and rotating to `<name>-2`, `-3`, …
+  //    until we find an unused name. With an explicit override we
+  //    do NOT rotate — the caller asked for this exact name, so
+  //    surface a collision as a regular over-write at the registry
+  //    layer (the route turns this into a 409 if it cares).
+  const desiredName = opts.nameOverride ?? sourceSpec.identity.name;
+  let resolvedName = desiredName;
+  if (opts.nameOverride === undefined) {
+    let suffix = 2;
+    while ((await store.get(opts.tenantId, resolvedName)) !== null) {
+      resolvedName = `${desiredName}-${suffix}`;
+      suffix += 1;
+      if (suffix > 1000) {
+        // Defensive cap — a thousand `-N` rotations means the operator
+        // is running into something they should be cleaning up
+        // manually, not papering over.
+        throw new Error(`fork: too many slug collisions for ${desiredName}`);
+      }
+    }
+  }
+
+  // 3. Build the spec + YAML to persist. We rewrite identity.name in
+  //    BOTH the parsed spec and the stored YAML so the audit-quality
+  //    document on disk matches what the runtime actually executes.
+  //    Comments + key ordering in the YAML are preserved via the
+  //    `yaml` library's Document API.
+  const newSpec: AgentSpec = {
+    ...sourceSpec,
+    identity: { ...sourceSpec.identity, name: resolvedName },
+  };
+  const newYaml = rewriteIdentityName(text, resolvedName);
+
+  // 4. Register through the store. This is the same write path the
+  //    CLI + `/v1/agents` POST take — same audit columns, same
+  //    pointer-table bump, same project_id semantics.
+  const agent = await store.register(opts.tenantId, newSpec, newYaml, {
+    projectId: opts.projectId,
+  });
+  return { agent, agentName: agent.name, version: agent.version };
+}
+
+function yamlBaseName(p: string): string {
+  // Strip directories and the `.yaml` suffix. We avoid a path-module
+  // import for one operation; the seeder is happy with POSIX-style
+  // paths from `resolve()` on every platform we ship to.
+  const slash = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  const base = slash === -1 ? p : p.slice(slash + 1);
+  return base.endsWith('.yaml') ? base.slice(0, -'.yaml'.length) : base;
+}
+
+/**
+ * Rewrite `identity.name` inside a YAML document while preserving
+ * comments + ordering + every other field. We round-trip through the
+ * `yaml` library's Document API rather than a regex so an embedded
+ * `name:` (e.g. inside `tools.mcp[].name`) doesn't get clobbered.
+ */
+function rewriteIdentityName(yamlText: string, newName: string): string {
+  const doc = YAML.parseDocument(yamlText);
+  // Document.setIn keeps the surrounding nodes untouched. The path is
+  // the same snake_case the schema uses (`identity.name`).
+  doc.setIn(['identity', 'name'], newName);
+  return doc.toString();
 }

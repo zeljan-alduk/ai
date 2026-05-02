@@ -8,8 +8,18 @@
  *
  * The OpenAI-compat endpoint lives at `${baseUrl}/v1`, which is what the
  * gateway adapter dials. We stamp `providerConfig.baseUrl` accordingly.
+ *
+ * Tier 4.1: per-model `effectiveContextTokens` is now resolved per
+ * discovered model. Some Ollama builds expose `context_length` (or the
+ * `details.context_length`) on `/api/show`; when present we honour the
+ * server's value as authoritative. Otherwise we fall back to the
+ * `model-context` lookup table keyed off the model id (`llama3.1:70b`
+ * → 131_072, `mistral:7b` → 32_768, etc). Unknown models keep the
+ * historical 8192 default — additive change, never widens the context
+ * window beyond what the server / table actually reports.
  */
 
+import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
 
@@ -19,6 +29,18 @@ interface OllamaTagsResponse {
   readonly models?: ReadonlyArray<{
     readonly name?: string;
     readonly model?: string;
+    /**
+     * Some Ollama versions surface model-level metadata directly on the
+     * `tags` row (size, parameter_size, family). Newer builds also
+     * include `context_length` here; older builds require a follow-up
+     * `/api/show` round-trip. We accept either shape.
+     */
+    readonly details?: {
+      readonly context_length?: number;
+      readonly parameter_size?: string;
+      readonly family?: string;
+    };
+    readonly context_length?: number;
   }>;
 }
 
@@ -35,6 +57,12 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
   for (const m of body.models) {
     const id = (m?.name ?? m?.model ?? '').trim();
     if (id.length === 0) continue;
+    // Server-reported context wins when present; otherwise the lookup
+    // table fills in. The helper treats zero / NaN / undefined as
+    // "missing" so a partially-populated `details: {}` doesn't tank
+    // the value to 0 and crash the gateway's positive-int validator.
+    const serverCtx = m?.details?.context_length ?? m?.context_length;
+    const effectiveContextTokens = resolveContextTokens(id, serverCtx);
     out.push({
       id,
       provider: 'ollama',
@@ -43,7 +71,7 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
       capabilityClass: 'local-reasoning',
       provides: ['streaming'],
       privacyAllowed: ['public', 'internal', 'sensitive'],
-      effectiveContextTokens: 8192,
+      effectiveContextTokens,
       cost: { usdPerMtokIn: 0, usdPerMtokOut: 0 },
       providerConfig: {
         baseUrl: `${base}/v1`,

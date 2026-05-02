@@ -40,9 +40,12 @@ import { datasetsRoutes } from './routes/datasets.js';
 import { debuggerRoutes } from './routes/debugger.js';
 import { designPartnersRoutes } from './routes/design-partners.js';
 import { domainsRoutes } from './routes/domains.js';
+import { evalPlaygroundRoutes } from './routes/eval-playground.js';
 import { evalRoutes } from './routes/eval.js';
 import { evaluatorsRoutes } from './routes/evaluators.js';
+import { galleryRoutes } from './routes/gallery.js';
 import { healthRoutes } from './routes/health.js';
+import { integrationsGitRoutes } from './routes/integrations-git.js';
 import { integrationsRoutes } from './routes/integrations.js';
 import { invitationsRoutes } from './routes/invitations.js';
 import { membersRoutes } from './routes/members.js';
@@ -226,8 +229,15 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', observabilityRoutes(deps));
   app.route('/', debuggerRoutes(deps));
   app.route('/', evalRoutes(deps, deps.evalDeps !== undefined ? { evalDeps: deps.evalDeps } : {}));
+  // Wave-3 (Tier-3.1) — eval scorer playground. Closes the Braintrust
+  // playground / LangSmith evaluators-as-product gap. Pick one
+  // evaluator + one dataset, watch per-row scores stream alongside
+  // aggregate stats. Re-uses the existing evaluator runner.
+  app.route('/', evalPlaygroundRoutes(deps));
   app.route('/', secretsRoutes(deps));
   app.route('/', tenantsRoutes(deps));
+  // Wave-3 — per-template gallery fork (companion to seed-default).
+  app.route('/', galleryRoutes(deps));
   app.route('/', designPartnersRoutes(deps));
   app.route('/', billingRoutes(deps));
   app.route('/', viewsRoutes(deps));
@@ -248,6 +258,10 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   // Wave-14C — outbound integrations (Slack/GitHub/Discord/webhook) +
   // their dispatcher hooked into the notification sink.
   app.route('/', integrationsRoutes(deps));
+  // Wave-18 (Tier 3.5) — Git integration: read-only sync of agent specs
+  // from a customer GitHub/GitLab repo into the registry. The webhook
+  // path under /v1/webhooks/git/ is on the auth allow-list.
+  app.route('/', integrationsGitRoutes(deps));
   // Wave-16 — datasets (tenant-scoped collections of input/expected
   // examples) + custom evaluators (built-in + llm_judge).
   app.route('/', datasetsRoutes(deps));

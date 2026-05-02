@@ -3,15 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "ALDO AI platform MCP server: expose agents, runs, datasets, and the run debugger to any MCP-compatible client.",
+  "description": "ALDO AI platform MCP server: expose agents, runs, datasets, and the run debugger to any MCP-compatible client. Stdio + HTTP/SSE transports.",
   "license": "FSL-1.1-ALv2",
   "main": "./src/index.ts",
   "bin": {
-    "aldo-mcp-platform": "./dist/index.js"
+    "aldo-mcp-platform": "./dist/index.js",
+    "aldo-mcp-http": "./dist/server-http.js"
   },
   "exports": {
     ".": "./src/index.ts",
     "./server": "./src/server.ts",
+    "./server-http": "./src/server-http.ts",
+    "./server-stdio": "./src/server-stdio.ts",
     "./client": "./src/client.ts"
   },
   "scripts": {
@@ -19,15 +22,19 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "node --import=tsx/esm src/index.ts"
+    "start": "node --import=tsx/esm src/index.ts",
+    "start:http": "node --import=tsx/esm src/server-http.ts"
   },
   "dependencies": {
+    "@hono/node-server": "^1.13.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "hono": "^4.6.0",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.23.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   },

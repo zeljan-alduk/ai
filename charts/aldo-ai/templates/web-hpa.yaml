@@ -1,0 +1,25 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+{{- if .Values.autoscaling.web.enabled -}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-web
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "aldo-ai.fullname" . }}-web
+  minReplicas: {{ .Values.autoscaling.web.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.web.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.web.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.web.targetCPUUtilizationPercentage }}
+    {{- end }}
+{{- end }}

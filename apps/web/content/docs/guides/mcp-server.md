@@ -115,13 +115,32 @@ ALDO_BASE_URL = "https://ai.aldo.tech"
 
 Or via `codex mcp add aldo --command npx --args "-y @aldo-ai/mcp-platform"` if your version ships the helper.
 
-## ChatGPT (custom GPT connector)
+## ChatGPT (custom GPT connector) — HTTP transport
 
 ChatGPT consumes MCP servers via the **Connectors** surface in a
-custom GPT or workspace. You'll need the **HTTP/SSE transport** for
-this — stdio doesn't reach ChatGPT's hosted runtime. That transport
-is on our roadmap (`mcp.aldo.tech`); in the meantime, use the local
-clients above.
+custom GPT or workspace. Stdio doesn't reach ChatGPT's hosted runtime
+— you need the **HTTP/SSE (streamable HTTP) transport**.
+
+> **Status:** the server-side code ships in this release (run it via
+> `aldo-mcp-http` or `--transport http`, see [Hosted endpoint]
+> (#hosted-endpoint) below). The hosted endpoint at `mcp.aldo.tech`
+> is being staged behind our edge. Until that lands you can self-host
+> the same image; the connector config is identical, only the URL
+> changes.
+
+In your custom GPT's connector configuration:
+
+```yaml
+schema_version: v1
+type: mcp
+url: https://mcp.aldo.tech/mcp
+authentication:
+  type: bearer
+  token: aldo_live_...   # generate at /settings/api-keys
+```
+
+The same eight tools the desktop clients see (`aldo.list_agents`,
+`aldo.run_agent`, `aldo.compare_runs`, …) appear inside ChatGPT.
 
 ## VS Code (GitHub Copilot Chat)
 
@@ -237,14 +256,57 @@ container, your CI). It is a thin REST client; no credentials or run
 data leave your local process except as direct API calls your key is
 already authorised for.
 
-## Hosted transport (coming next)
+## Hosted endpoint
 
-The current server runs over **stdio** — your MCP host launches it
-as a subprocess and pipes JSON-RPC over stdin/stdout. That's the
-standard pattern and works in every local client today.
+The same `@aldo-ai/mcp-platform` package ships **two transports**
+from one binary:
 
-Phase 2 adds **SSE/HTTP transport** at `mcp.aldo.tech` so hosted
-clients (ChatGPT connectors, Cloudflare Workers AI, etc.) can
-connect over OAuth without spawning a local subprocess. The tool
-surface is identical; only the transport changes. Watch the
-[changelog](/changelog).
+| Transport | Use case | Selection |
+|---|---|---|
+| `stdio` | local desktop / CLI clients (everything above) | default |
+| `http` (streamable HTTP per the MCP spec — both SSE streams and direct JSON responses on the same endpoint) | ChatGPT connectors, Cursor remote, OpenAI Agents SDK in remote mode, anything that can't spawn a subprocess | `--transport http` flag, `ALDO_MCP_TRANSPORT=http` env, or the dedicated `aldo-mcp-http` bin |
+
+The hosted endpoint will live at `https://mcp.aldo.tech/mcp` once
+deployed. In the meantime you can self-host the HTTP transport in
+30 seconds with Docker:
+
+```bash
+git clone https://github.com/aldo-tech-labs/aldo-ai
+cd aldo-ai
+docker build -f mcp-servers/aldo-platform/Dockerfile -t aldo-mcp-http:dev .
+docker run --rm -p 3030:3030 -e ALDO_BASE_URL=https://ai.aldo.tech aldo-mcp-http:dev
+```
+
+…then point any HTTP-aware MCP client at `http://localhost:3030/mcp`.
+
+### Cursor (remote MCP)
+
+Recent Cursor builds accept a remote `url`+`headers` shape in
+`~/.cursor/mcp.json`:
+
+```jsonc
+{
+  "mcpServers": {
+    "aldo": {
+      "url": "https://mcp.aldo.tech/mcp",
+      "headers": {
+        "Authorization": "Bearer aldo_live_..."
+      }
+    }
+  }
+}
+```
+
+### Auth (HTTP)
+
+Unlike stdio (env or `--api-key` flag), the HTTP transport reads the
+token **per request** from the standard `Authorization: Bearer …`
+header. The container itself has no key — every connected client
+uses their own ALDO API key. Missing or malformed headers get a
+`401` JSON-RPC error response.
+
+### Health check
+
+`GET /healthz` on the HTTP endpoint returns
+`{ ok: true, transport: 'http', version }` with no auth — useful
+for load-balancer probes and uptime monitors.

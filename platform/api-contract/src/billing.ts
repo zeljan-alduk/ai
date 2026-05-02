@@ -57,8 +57,55 @@ export const Subscription = z.object({
   cancelledAt: z.string().nullable(),
   /** Days remaining on the trial — null when not trialing. */
   trialDaysRemaining: z.number().int().min(0).nullable(),
+  /**
+   * Wave 3 — per-tenant retention override (`subscriptions.retention_days`,
+   * mig 022). `null` means "use the plan default" — the
+   * `effectiveRetentionDays` field below resolves that.
+   */
+  retentionDays: z.number().int().min(0).nullable(),
+  /**
+   * Wave 3 — resolved retention window after applying the plan
+   * default. `null` for enterprise customers with no override
+   * (interpreted as ∞ by the prune job). The web /billing page
+   * renders THIS value, not the raw override.
+   */
+  effectiveRetentionDays: z.number().int().min(0).nullable(),
+  /**
+   * Wave 3 — last successful prune pass for this tenant
+   * (`subscriptions.last_pruned_at`, mig 022). `null` until the
+   * scheduled job has touched the tenant at least once.
+   */
+  lastPrunedAt: z.string().nullable(),
 });
 export type Subscription = z.infer<typeof Subscription>;
+
+// ─────────────────────────────────────── PATCH /v1/billing/subscription
+//
+// Wave 3 — customer-facing retention override. Only enterprise plans
+// can set a finite `retentionDays`; the API returns 403 with a
+// friendly error for solo / team plans (the application-side gate
+// mirrors the policy doc). Pass `retentionDays: null` (enterprise
+// only) to revert to "infinite / contract-default".
+
+export const UpdateSubscriptionRequest = z
+  .object({
+    /**
+     * Per-tenant retention override in days. `null` clears the override
+     * (revert to plan default). Must be non-negative; `0` is allowed
+     * and maps to "purge on every job pass" (an operator hatch — most
+     * customers will set this to a sensible window like 7/30/365).
+     */
+    retentionDays: z.number().int().min(0).nullable().optional(),
+  })
+  .refine((v) => v.retentionDays !== undefined, {
+    message: 'no fields to update',
+  });
+export type UpdateSubscriptionRequest = z.infer<typeof UpdateSubscriptionRequest>;
+
+export const UpdateSubscriptionResponse = z.object({
+  subscription: Subscription,
+});
+export type UpdateSubscriptionResponse = z.infer<typeof UpdateSubscriptionResponse>;
 
 // ─────────────────────────────────────── /v1/billing/checkout
 

@@ -1,0 +1,322 @@
+# Licensed under FSL-1.1-ALv2
+# ============================================================================
+# ALDO AI — default chart values
+# ----------------------------------------------------------------------------
+# Sane defaults for self-hosting. Override with -f values-prod.yaml.
+# Every secret is referenced by name (`existingSecret`), never inlined.
+# ============================================================================
+
+# -- Override the chart's full name ("<release>-aldo-ai" by default).
+nameOverride: ""
+fullnameOverride: ""
+
+# ----------------------------------------------------------------------------
+# Container images
+# ----------------------------------------------------------------------------
+# NOTE: ghcr image references are placeholders; the publish workflow is
+# tracked in ROADMAP.md as a follow-up. Customers can point these at a
+# private registry today.
+image:
+  registry: ghcr.io
+  pullPolicy: IfNotPresent
+  api:
+    repository: aldo-tech-labs/aldo-api
+    tag: ""              # falls back to .Chart.AppVersion when empty
+  web:
+    repository: aldo-tech-labs/aldo-web
+    tag: ""              # falls back to .Chart.AppVersion when empty
+
+# -- imagePullSecrets references created out of band (e.g. via `kubectl
+#    create secret docker-registry`). Keep the chart from minting them.
+imagePullSecrets: []
+# - name: ghcr-pull-secret
+
+# ----------------------------------------------------------------------------
+# ServiceAccount
+# ----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""               # generated when blank
+  annotations: {}        # IRSA / Workload Identity bindings go here
+
+# ----------------------------------------------------------------------------
+# Replica counts
+# ----------------------------------------------------------------------------
+replicas:
+  api: 2
+  web: 2
+
+# ----------------------------------------------------------------------------
+# Resources (per pod)
+# ----------------------------------------------------------------------------
+resources:
+  api:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  web:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# ----------------------------------------------------------------------------
+# Horizontal Pod Autoscalers (optional — disabled by default)
+# ----------------------------------------------------------------------------
+autoscaling:
+  api:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  web:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+# ----------------------------------------------------------------------------
+# Pod-level scheduling
+# ----------------------------------------------------------------------------
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# ----------------------------------------------------------------------------
+# Service ports (ClusterIP)
+# ----------------------------------------------------------------------------
+service:
+  api:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+  web:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+
+# ----------------------------------------------------------------------------
+# Ingress
+# ----------------------------------------------------------------------------
+# Two hosts: web (UI) + api (control plane). Disabled by default — most
+# customers terminate TLS at a cluster ingress controller they already own.
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    web: aldo.example.com
+    api: api.aldo.example.com
+  tls:
+    enabled: true
+    secretName: aldo-tls
+
+# ----------------------------------------------------------------------------
+# Postgres — bundled (StatefulSet) OR bring-your-own.
+# ----------------------------------------------------------------------------
+# When `enabled: true`, the chart provisions a single-node Postgres 16
+# StatefulSet with a PVC. Suitable for dev / single-tenant. For production,
+# set `enabled: false` and fill in `external` to point at a managed RDS /
+# Cloud SQL / Azure Database instance.
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  database: aldo
+  user: aldo
+  # When `passwordSecret.create: true`, the chart mints a Secret with a
+  # random password. When `false`, you must pre-create a Secret with the
+  # given key and name.
+  passwordSecret:
+    create: true
+    name: ""              # generated when blank
+    key: postgres-password
+  storage:
+    size: 20Gi
+    storageClass: ""      # cluster default
+    accessModes:
+      - ReadWriteOnce
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  service:
+    port: 5432
+  # External Postgres — when `postgres.enabled: false`, these are used to
+  # construct DATABASE_URL.
+  external:
+    host: ""
+    port: 5432
+    database: aldo
+    user: aldo
+    # Reference an out-of-band Secret holding the password. The chart does
+    # not create it.
+    existingSecret: ""
+    existingSecretPasswordKey: password
+    sslMode: require
+
+# ----------------------------------------------------------------------------
+# Migrations job — runs `migrate(deps.db)` against postgres.
+# Belt + suspenders: the API also runs migrations on boot. The post-install
+# Job exists so admins can `helm upgrade` and trust that schema is current
+# before any new pod accepts traffic.
+# ----------------------------------------------------------------------------
+migrations:
+  enabled: true
+  # Hook policy: run on install + upgrade, delete the previous job before
+  # the new one fires.
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ----------------------------------------------------------------------------
+# Application configuration
+# ----------------------------------------------------------------------------
+config:
+  # NODE_ENV inside the api + web containers.
+  nodeEnv: production
+  # Default privacy tier when an agent spec omits one. See CLAUDE.md.
+  defaultPrivacy: internal
+  # Hard kill-switch — caps a single run at this many USD.
+  runUsdCap: "1.00"
+  # Public origin used by the web app to call the api (server-side fetch).
+  # Defaults to the in-cluster service. Override when ingress is on.
+  apiPublicUrl: ""        # e.g. https://api.aldo.example.com
+  webPublicUrl: ""        # e.g. https://aldo.example.com
+
+# ----------------------------------------------------------------------------
+# Secrets — referenced, never inlined
+# ----------------------------------------------------------------------------
+# When `bringYourOwnSecret: true`, the chart consumes the named Secret
+# verbatim. When `false`, the chart creates a placeholder Secret with the
+# keys below populated from the `values` map (NOT recommended for prod —
+# that map ends up in the Helm release manifest).
+secrets:
+  bringYourOwnSecret: true
+  # Pre-existing Secret name. Only used when bringYourOwnSecret: true.
+  name: aldo-app-secrets
+  # Placeholder Secret values — only used when bringYourOwnSecret: false.
+  # WARNING: these end up base64'd in the Helm release. Use only in dev.
+  values:
+    ANTHROPIC_API_KEY: ""
+    OPENAI_API_KEY: ""
+    GEMINI_API_KEY: ""
+    GROQ_API_KEY: ""
+    OPENROUTER_API_KEY: ""
+    XAI_API_KEY: ""
+    OLLAMA_BASE_URL: ""
+    VLLM_BASE_URL: ""
+    LLAMACPP_BASE_URL: ""
+    LM_STUDIO_BASE_URL: ""
+    TGI_BASE_URL: ""
+    S3_ENDPOINT: ""
+    S3_REGION: "auto"
+    S3_ACCESS_KEY_ID: ""
+    S3_SECRET_ACCESS_KEY: ""
+    S3_BUCKET: ""
+    OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    OTEL_EXPORTER_OTLP_HEADERS: ""
+    STRIPE_SECRET_KEY: ""
+    STRIPE_WEBHOOK_SIGNING_SECRET: ""
+    STRIPE_PRICE_SOLO: ""
+    STRIPE_PRICE_TEAM: ""
+    STRIPE_PRICE_ENTERPRISE: ""
+    STRIPE_BILLING_PORTAL_RETURN_URL: ""
+    STRIPE_PUBLISHABLE_KEY: ""
+    JWT_SIGNING_KEY: ""
+
+# ----------------------------------------------------------------------------
+# Privacy-tier enforcement (CLAUDE.md non-negotiable #3)
+# ----------------------------------------------------------------------------
+# When enforced, the chart applies a NetworkPolicy that drops all egress
+# from pods labelled `aldo.tech/privacy-tier=sensitive` except to the
+# in-cluster Postgres + DNS. Cloud-model providers are physically
+# unreachable from sensitive workloads — the router can't be tricked.
+privacyTier:
+  enforced: true
+  # Allow these CIDRs even from `sensitive` pods (e.g. local-LLM gateways
+  # the operator runs inside the same VPC). Empty = no exceptions.
+  allowedEgressCIDRs: []
+  # Pod labels that mark a workload as sensitive-tier. The router stamps
+  # these onto sub-agent run pods at scheduling time.
+  sensitivePodLabels:
+    aldo.tech/privacy-tier: sensitive
+
+# ----------------------------------------------------------------------------
+# Probes (liveness + readiness)
+# ----------------------------------------------------------------------------
+probes:
+  api:
+    liveness:
+      path: /health
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /health
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+  web:
+    liveness:
+      path: /
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /
+      initialDelaySeconds: 20
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+# ----------------------------------------------------------------------------
+# PodDisruptionBudget — keep at least one pod alive across drains.
+# ----------------------------------------------------------------------------
+pdb:
+  api:
+    enabled: true
+    minAvailable: 1
+  web:
+    enabled: true
+    minAvailable: 1
+
+# ----------------------------------------------------------------------------
+# Extra environment variables (non-secret) appended to api + web pods.
+# ----------------------------------------------------------------------------
+extraEnv: []
+# - name: SOMETHING
+#   value: "value"

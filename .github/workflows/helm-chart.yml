@@ -1,0 +1,111 @@
+# Licensed under FSL-1.1-ALv2
+# ============================================================================
+# Helm chart CI — lint + render + offline schema validation
+# ----------------------------------------------------------------------------
+# Runs on:
+#   - push to main / claude/* affecting charts/** or terraform/**
+#   - pull_request affecting the same paths
+# ============================================================================
+name: Helm chart
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "charts/**"
+      - "terraform/**"
+      - ".github/workflows/helm-chart.yml"
+  pull_request:
+    paths:
+      - "charts/**"
+      - "terraform/**"
+      - ".github/workflows/helm-chart.yml"
+
+concurrency:
+  group: helm-chart-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  helm:
+    name: helm lint + template + kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          KCV=v0.7.0
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KCV}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: helm lint (charts/aldo-ai)
+        run: helm lint charts/aldo-ai
+
+      - name: helm template — defaults
+        run: |
+          helm template aldo-ai charts/aldo-ai > /tmp/manifests-default.yaml
+          wc -l /tmp/manifests-default.yaml
+
+      - name: helm template — values-minikube.yaml
+        run: |
+          helm template aldo-ai charts/aldo-ai \
+            -f charts/aldo-ai/values-examples/values-minikube.yaml \
+            > /tmp/manifests-mini.yaml
+          wc -l /tmp/manifests-mini.yaml
+
+      - name: helm template — values-prod.yaml
+        run: |
+          helm template aldo-ai charts/aldo-ai \
+            -f charts/aldo-ai/values-examples/values-prod.yaml \
+            > /tmp/manifests-prod.yaml
+          wc -l /tmp/manifests-prod.yaml
+
+      - name: kubeconform — defaults
+        run: kubeconform -strict -summary -kubernetes-version 1.31.0 /tmp/manifests-default.yaml
+
+      - name: kubeconform — minikube
+        run: kubeconform -strict -summary -kubernetes-version 1.31.0 /tmp/manifests-mini.yaml
+
+      - name: kubeconform — prod
+        run: kubeconform -strict -summary -kubernetes-version 1.31.0 /tmp/manifests-prod.yaml
+
+      - name: kubectl apply --dry-run=client (offline)
+        run: |
+          # Without a cluster, kubectl validates structure + parses every
+          # manifest. The --validate=false flag skips OpenAPI schema fetch
+          # since there's no apiserver to ask. The kubeconform step above
+          # already covers schema validation against pinned k8s 1.31.
+          kubectl apply --dry-run=client --validate=false -f /tmp/manifests-default.yaml
+          kubectl apply --dry-run=client --validate=false -f /tmp/manifests-mini.yaml
+          kubectl apply --dry-run=client --validate=false -f /tmp/manifests-prod.yaml
+
+  terraform:
+    name: terraform fmt + validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [aws-eks, gcp-gke, azure-aks]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.0
+
+      - name: terraform fmt
+        run: terraform -chdir=terraform/${{ matrix.module }} fmt -check -diff
+
+      - name: terraform init (no backend)
+        run: terraform -chdir=terraform/${{ matrix.module }} init -backend=false
+
+      - name: terraform validate
+        run: terraform -chdir=terraform/${{ matrix.module }} validate

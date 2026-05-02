@@ -369,3 +369,55 @@ export const SeedDefaultResponse = z.object({
   skipped: z.number().int().nonnegative(),
 });
 export type SeedDefaultResponse = z.infer<typeof SeedDefaultResponse>;
+
+/**
+ * `POST /v1/gallery/fork` — wave-3 per-template fork.
+ *
+ * Closes the AutoGen-Studio Gallery + CrewAI templates parallel: the
+ * `/gallery` page used to offer a single "use the whole agency" CTA
+ * (`POST /v1/tenants/me/seed-default`); this endpoint forks ONE template
+ * by id into the caller's tenant + a chosen project. Slug collisions on
+ * `name` are resolved by appending `-2`, `-3`, … unless the caller
+ * supplies an explicit `name` override.
+ *
+ * `templateId` is a stable identifier the gallery page uses; the server
+ * resolves it to the YAML at `agency/<team>/<templateId>.yaml`. Unknown
+ * → 404 `template_not_found`.
+ *
+ * `projectSlug` (optional) picks the destination project. Unknown slug
+ * → 404 `project_not_found`. Omitted → the tenant's Default project.
+ */
+export const GalleryForkRequest = z.object({
+  templateId: z
+    .string()
+    .min(1)
+    // Restrict to lowercase agent-name tokens. Mirrors agent.v1
+    // identity.name validation in the registry; rejecting weird
+    // characters here means the route never has to think about path
+    // traversal when it resolves agency/<team>/<id>.yaml.
+    .regex(/^[a-z][a-z0-9-]*$/, 'templateId must be lowercase kebab-case'),
+  projectSlug: z.string().min(1).optional(),
+  /**
+   * Explicit override for the new agent's `identity.name`. When omitted
+   * the server uses the template's name and appends `-2`, `-3`, … if a
+   * row of that name already exists in the destination project.
+   */
+  name: z
+    .string()
+    .min(1)
+    .regex(/^[a-z][a-z0-9-]*$/, 'name must be lowercase kebab-case')
+    .optional(),
+});
+export type GalleryForkRequest = z.infer<typeof GalleryForkRequest>;
+
+export const GalleryForkResponse = z.object({
+  /** The name the spec landed under (post slug-collision rewrite). */
+  agentName: z.string(),
+  /** The version copied from the template (verbatim). */
+  version: z.string(),
+  /** The project the new row landed in (resolved slug → id). */
+  projectId: z.string(),
+  /** The project's slug for client-side routing convenience. */
+  projectSlug: z.string(),
+});
+export type GalleryForkResponse = z.infer<typeof GalleryForkResponse>;

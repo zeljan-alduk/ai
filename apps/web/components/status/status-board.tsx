@@ -3,13 +3,17 @@
 /**
  * Live component-status grid for `/status`.
  *
- * Polls three probes from the browser every 30 seconds:
+ * Polls two HTTP endpoints from the browser every 30 seconds and
+ * derives three component rows from the results:
  *
- *   - API: GET /health on the canonical origin → expects { ok: true }
- *   - Web: GET / on the marketing origin → expects HTTP 200
- *   - DB:  inferred from the API probe. The current /health endpoint
- *          does not run a DB ping (apps/api/src/routes/health.ts);
- *          when it does, swap this row to read its dedicated field.
+ *   - API: GET /health on the canonical origin → 200 + { ok: true }
+ *   - Web: GET / on the marketing origin → HTTP 200
+ *   - DB:  read from the SAME /health response's `db` field
+ *          (`'ok' | 'down'`). Wave-MVP follow-up — the endpoint now
+ *          runs a real `SELECT 1` and reports the result; the page
+ *          surfaces it directly instead of inferring from API liveness.
+ *          When the API probe itself fails (network error / non-2xx),
+ *          DB falls back to "Down" because we can't separate the two.
  *
  * Network errors, non-2xx responses, and probe timeouts all degrade
  * the row to "Down". The row stays "Checking" until the first probe
@@ -51,7 +55,7 @@ const COMPONENTS: ReadonlyArray<ComponentRow> = [
   {
     key: 'db',
     name: 'Database',
-    subtitle: 'Inferred from API liveness',
+    subtitle: 'Postgres SELECT 1 via /health',
   },
 ];
 
@@ -81,14 +85,33 @@ async function fetchWithTimeout(url: string, signal: AbortSignal): Promise<Respo
   });
 }
 
-async function probeApi(signal: AbortSignal): Promise<Status> {
+/**
+ * Probe the API health endpoint and return BOTH the API and DB
+ * statuses derived from the same response. Wave-MVP follow-up: the
+ * endpoint now ships a `db` field (`'ok' | 'down'`) sourced from a
+ * real `SELECT 1`; we surface it directly. When the response itself
+ * is missing the field (e.g. an older API build is still in
+ * production), fall back to the legacy "DB liveness == API liveness"
+ * behaviour so the page never goes blank during a deploy lap.
+ */
+async function probeApiAndDb(
+  signal: AbortSignal,
+): Promise<{ readonly api: Status; readonly db: Status }> {
   try {
     const res = await fetchWithTimeout(API_HEALTH_URL, signal);
-    if (!res.ok) return 'down';
-    const body = (await res.json()) as { ok?: unknown };
-    return body.ok === true ? 'operational' : 'degraded';
+    if (!res.ok) return { api: 'down', db: 'down' };
+    const body = (await res.json()) as { ok?: unknown; db?: unknown; status?: unknown };
+    const api: Status = body.ok === true ? 'operational' : 'degraded';
+    let db: Status;
+    if (body.db === 'ok') db = 'operational';
+    else if (body.db === 'down') db = 'down';
+    // Field absent → older API build; mirror api status until the new
+    // shape lands in production. Once /health always carries `db`, the
+    // fallback branch becomes unreachable and can be removed.
+    else db = api;
+    return { api, db };
   } catch {
-    return 'down';
+    return { api: 'down', db: 'down' };
   }
 }
 
@@ -116,8 +139,8 @@ export function StatusBoard() {
       const apiTimer = setTimeout(() => apiCtrl.abort(), PROBE_TIMEOUT_MS);
       const webTimer = setTimeout(() => webCtrl.abort(), PROBE_TIMEOUT_MS);
 
-      const [apiStatus, webStatus] = await Promise.all([
-        probeApi(apiCtrl.signal),
+      const [apiResult, webStatus] = await Promise.all([
+        probeApiAndDb(apiCtrl.signal),
         probeWeb(webCtrl.signal),
       ]);
       clearTimeout(apiTimer);
@@ -126,11 +149,12 @@ export function StatusBoard() {
       if (cancelled) return;
       const now = Date.now();
       setState({
-        api: { status: apiStatus, lastCheckedAt: now },
+        api: { status: apiResult.api, lastCheckedAt: now },
         web: { status: webStatus, lastCheckedAt: now },
-        // DB liveness derives from API for now. When the API health
-        // endpoint adds an explicit DB ping, swap this to read it.
-        db: { status: apiStatus, lastCheckedAt: now },
+        // Wave-MVP follow-up — DB row reads the dedicated `db` field
+        // from /health (real `SELECT 1`), no longer inferred from the
+        // API liveness.
+        db: { status: apiResult.db, lastCheckedAt: now },
       });
     }
 

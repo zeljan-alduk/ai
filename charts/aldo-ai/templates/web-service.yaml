@@ -1,0 +1,20 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-web
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+  {{- with .Values.service.web.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.web.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.web.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "aldo-ai.componentSelectorLabels" (dict "root" . "component" "web") | nindent 4 }}

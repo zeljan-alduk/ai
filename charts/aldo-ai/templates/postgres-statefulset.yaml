@@ -1,0 +1,84 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+{{- if .Values.postgres.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-postgres
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "aldo-ai.fullname" . }}-postgres
+  selector:
+    matchLabels:
+      {{- include "aldo-ai.componentSelectorLabels" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aldo-ai.componentLabels" (dict "root" . "component" "postgres") | nindent 8 }}
+        # Postgres is the data-plane sink for sensitive workloads. Tagging
+        # it with the privacy-tier label keeps the NetworkPolicy egress
+        # exception minimal and scoped to this exact pod.
+        aldo.tech/data-plane: postgres
+    spec:
+      serviceAccountName: {{ include "aldo-ai.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999       # postgres uid in the official image
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aldo-ai.postgresPasswordSecretName" . }}
+                  key: {{ include "aldo-ai.postgresPasswordSecretKey" . }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.user | quote }}, "-d", {{ .Values.postgres.database | quote }}]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.user | quote }}, "-d", {{ .Values.postgres.database | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "aldo-ai.componentLabels" (dict "root" . "component" "postgres") | nindent 10 }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.postgres.storage.accessModes | nindent 10 }}
+        {{- if .Values.postgres.storage.storageClass }}
+        storageClassName: {{ .Values.postgres.storage.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage.size | quote }}
+{{- end }}

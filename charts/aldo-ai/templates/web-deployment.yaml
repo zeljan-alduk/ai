@@ -1,0 +1,93 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-web
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.web.enabled }}
+  replicas: {{ .Values.replicas.web }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "aldo-ai.componentSelectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "aldo-ai.componentLabels" (dict "root" . "component" "web") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "aldo-ai.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: web
+          image: {{ include "aldo-ai.webImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "aldo-ai.fullname" . }}-config
+            - secretRef:
+                name: {{ include "aldo-ai.appSecretName" . }}
+          env:
+            # The web app server-side fetches the API. In-cluster default
+            # uses the headless service address; override via
+            # config.apiPublicUrl when the web pod talks to a separately
+            # ingressed API.
+            - name: ALDO_API_INTERNAL_URL
+              value: "http://{{ include "aldo-ai.fullname" . }}-api:{{ .Values.service.api.port }}"
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources.web | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.web.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.web.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.web.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.web.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.web.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.web.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.web.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.web.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.web.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.web.readiness.failureThreshold }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

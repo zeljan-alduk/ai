@@ -1,7 +1,7 @@
 # ALDO AI — ROADMAP
 
 > Prioritized backlog. Ordered by **what unblocks the first paying customer**, not by code-architectural elegance.
-> **Last updated:** 2026-05-02 (Wave-MVP — 10-agent integration pass landed)
+> **Last updated:** 2026-05-02 (Wave-3 — 7-agent competitive-gap closing pass landed on top of Wave-MVP)
 > **Sibling:** [`STATUS.md`](./STATUS.md) (what's true today) · [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) (history)
 >
 > Read [`STATUS.md`](./STATUS.md) first. Effort estimates are mine, in elapsed engineering time. Items needing a non-engineering decision (legal, vendor account, customer signature) are flagged ⚠️.
@@ -10,11 +10,27 @@
 
 ## Path to MVP — status
 
-The Wave-MVP push (2026-05-02) shipped 10 parallel slices. Below is the
-honest "done vs awaits human" decomposition. Anything in the **awaits
-user** column is purely a credentials/ops blocker; the engineering is in.
+The Wave-MVP push (2026-05-02) shipped 10 parallel slices that cleared
+Tier 1 + the picker/termination/MCP slices of Tier 2. The Wave-3 push
+(same day, 7 parallel slices) closed the named competitive gaps the
+deep-scan called out and the half-shipped debt Wave-MVP left behind.
+Below is the honest "done vs awaits human" decomposition. Anything in
+the **awaits user** column is purely a credentials/ops blocker; the
+engineering is in.
 
-### Done — code is live in this branch
+### Wave-3 deliverables (2026-05-02, on top of Wave-MVP)
+
+- [x] Tier 2.9 — **Hosted MCP transport (HTTP/SSE)** — Streamable HTTP per the latest MCP spec, `aldo-mcp-http` bin, Dockerfile, per-tenant Bearer auth, curated CORS allowlist (chatgpt.com + *.aldo.tech). Stateless mode (no sticky sessions). 14 vitest cases. SDK 1.29 side-fix included. **Code live; deploy at `mcp.aldo.tech` is operator follow-up.**
+- [x] Tier 2.10 — **Leaf-only termination enforcement** — `LeafAgentRun` now consults an inlined `LeafTerminationController` (mirrors orchestrator's `TerminationController` payload shape so downstream `run.terminated_by` consumers don't branch on leaf vs composite). 6 vitest cases.
+- [x] Tier 2.11 — **Retention enforcement job** — migration 022 + `apps/api/src/jobs/{prune-runs,scheduler}.ts`; runs hourly at minute 17 UTC; `subscriptions.retention_days` per-tenant override (enterprise-only); `PATCH /v1/billing/subscription` customer-facing knob; manual trigger via `POST /v1/admin/jobs/prune-runs`; `RETENTION_DRY_RUN=1` for dry-run; multi-instance safe via `pg_try_advisory_lock(djb2(tenantId))`. 20 vitest cases.
+- [x] Tier 2.12 — **Status page DB ping** — `/api/health` actually `SELECT 1`s with a 1s timeout; `apps/web/components/status/status-board.tsx` reads the dedicated `db` field. 1 vitest case. Endpoint never 5xxs on DB failure (preserves uptime success-rate semantics for partial degradation).
+- [x] Tier 3.1 — **Eval scorer playground** — `/eval/playground` Braintrust-style three-pane: picker bar (evaluator + dataset + sample-size slider) → results table with row detail → aggregate panel (pass-rate, p50/p95, histogram, mean latency, total cost). Live updates via 1.5s polling (mirrors `/eval/sweeps`). Re-uses existing `runStoredEvaluator` — no scoring duplication. In-process per-tenant store with 30-min TTL. 13 vitest + 1 e2e cases. **Closes Braintrust playground gap.**
+- [x] Tier 3.3 — **Self-host Helm chart + Terraform** — `charts/aldo-ai/` (24 files: Chart, NetworkPolicy backstop for the privacy-tier router, BYO-or-bundled postgres, BYO secret toggle, NOTES.txt, helpers, prod + minikube example values, README) + `terraform/{aws-eks,gcp-gke,azure-aks}/` (13 files each cloud — cluster + IRSA/WI scaffolds + helm_release wrapping). New `.github/workflows/helm-chart.yml` runs helm lint + template + kubeconform on every chart/terraform change. Marketing pricing page now names the artifacts directly. **Closes LangSmith Self-Hosted v0.13 gap; OCI publish + real-cluster CI are operator follow-ups.**
+- [x] Tier 3.5 — **Git integration (read-only sync first)** — migration 023 + `apps/api/src/integrations/git/` (GitHub + GitLab clients, sync that diffs by YAML byte-equality, HMAC-SHA256 verified webhooks, SecretStore-backed PAT storage), 7 routes, `/integrations/git` connect UI, /agents empty state shows "Connect a repo" CTA, sidebar entry, lib/api-admin client. 23 vitest cases. **Net-new wedge — nobody else ships this. PAT-only today; OAuth-app installations are follow-up.**
+- [x] Tier 3.6 — **Per-template fork on `/gallery`** — `POST /v1/gallery/fork` + per-card `ForkButton` client island (with cross-project picker dropdown). Auto-suffixes `-2`/`-3` on slug collision; explicit `name` override skips rotation. Reuses `RegisteredAgentStore.register` (no raw SQL). 15 vitest + 1 e2e cases. **Closes AutoGen-Studio Gallery + CrewAI templates gap.**
+- [x] Tier 4.1 — **Per-model `effectiveContextTokens` lookup** — new `platform/local-discovery/src/model-context.ts` RegExp table covering Llama 3/3.1/3.2/3.3/4 (8k vs 128k), Mistral, Mixtral 8x7B-22B, Qwen 2/2.5/3, DeepSeek V2/V3/coder/r1, Phi 3/4, Gemma 2/3, Codellama. `normaliseModelId()` handles Ollama `:tag`, HF `org/` prefix, .gguf/.safetensors suffixes. Server-reported context (Ollama `details.context_length`, vLLM `max_model_len`, llama.cpp `n_ctx`, LM Studio `loaded_context_length`) wins over the table; unknown models fall back to the historical 8192. 19 lookup tests + 6 probe integration tests.
+
+### Done — code is live in this branch (Wave-MVP)
 
 - [x] Tier 1.1 — License contradiction resolved (`LICENSE` is canonical FSL-1.1-ALv2; 7 manifests aligned; LICENSING.md changelog).
 - [x] Tier 1.5 — `/status` page ships in-house (server component + client polling, ISR-backed incident timeline).
@@ -80,10 +96,10 @@ Each was started in an earlier wave; finishing them prevents bit-rot.
 | 2.6 | ~~**Termination conditions runtime**~~ ✅ done at supervisor level — leaf-only enforcement is a follow-up (see Known issues) | ~3 days | |
 | 2.7 | **Per-project sandbox profiles** — `project_sandbox_profiles` table + `/settings/projects/[slug]/sandbox` UI | ~5 days | Depends on 2.1. |
 | 2.8 | ~~**MCP client schema introspection in engine**~~ ✅ done — engine reads real JSON Schema from each MCP server's `list_tools`, per-run cache | ~3 days | |
-| 2.9 | **Hosted MCP transport at `mcp.aldo.tech`** (SSE / HTTP) — currently stdio-only | ~5 days | ChatGPT connectors need this. |
-| 2.10 | **Leaf-only termination enforcement** (follow-up from 2.6) — single-agent runs with their own `termination` block aren't honoured by `LeafAgentRun` | ~1 day | Orchestrator already owns the controller; engine needs to consult it. |
-| 2.11 | **Retention enforcement job** — `docs/data-retention.md` documents the policy; `apps/api/src/jobs/prune-*` doesn't exist | ~2 days | |
-| 2.12 | **Status page DB ping** — `apps/web/components/status/status-board.tsx` infers DB liveness from API liveness; rewire `apps/api/src/routes/health.ts` to actually `SELECT 1` | ~half day | One-line change in the API + assertion in the status board. |
+| 2.9 | ~~**Hosted MCP transport at `mcp.aldo.tech`** (SSE / HTTP)~~ ✅ code + container live (Wave-3) — `aldo-mcp-http` bin, Streamable HTTP, per-tenant Bearer auth, curated CORS, 14 tests; `mcp.aldo.tech` deploy is operator follow-up | ~5 days | ChatGPT connectors and OpenAI Agents SDK remote-mode unblocked once deploy lands. |
+| 2.10 | ~~**Leaf-only termination enforcement**~~ ✅ done (Wave-3) — `LeafAgentRun` consults inlined `LeafTerminationController`; same `{reason,detail}` payload shape as orchestrator's controller; 6 tests | ~1 day | |
+| 2.11 | ~~**Retention enforcement job**~~ ✅ done (Wave-3) — migration 022 + `prune-runs.ts` + scheduler; runs hourly minute 17 UTC; per-tenant override via `PATCH /v1/billing/subscription` (enterprise-only); manual trigger via `/v1/admin/jobs/prune-runs`; `RETENTION_DRY_RUN=1` for dry-run | ~2 days | |
+| 2.12 | ~~**Status page DB ping**~~ ✅ done (Wave-3) — `/api/health` actually `SELECT 1`s with 1s timeout; status-board reads dedicated `db` field | ~half day | |
 
 ## Tier 3 — close named competitive gaps
 
@@ -91,13 +107,13 @@ Each of these matches a gap our own `/vs/*` pages or the deep scan called out.
 
 | # | Item | Effort | Closes |
 |---|---|---|---|
-| 3.1 | **Eval scorer playground** — bulk-eval a scorer against a dataset of examples in one panel | ~5 days | Braintrust playground; LangSmith evaluators-as-product |
-| 3.2 | **Long-tail observability exporters** — Datadog, Grafana, OpenTelemetry, Slack alerts | ~10 days | LangSmith integrations breadth |
-| 3.3 | **Self-host Helm chart + Terraform** | ~10 days | LangSmith Self-Hosted v0.13; the published artifact behind our "Enterprise — packaged build" claim |
-| 3.4 | **EU data residency** — second-region deploy + tenant routing | ~quarter-scale | LangSmith EU; Braintrust data-plane region selection |
-| 3.5 | **Git integration** (read-only sync first) — connect a customer GitHub/GitLab repo to a project; agent specs sync from `aldo/agents/*.yaml` | ~12 days | Nobody else ships this; net-new wedge |
-| 3.6 | **Per-template fork on `/gallery`** — currently the page is hand-curated content with one "Use the default agency" button. Add a registry-side import endpoint so a customer can fork a single agent. | ~3 days | AutoGen-Studio Gallery, CrewAI templates |
-| 3.7 | **Drag-drop visual team builder** — one-way export to YAML; YAML stays the source of truth | ~10 days | AutoGen-Studio team builder; lowers the bar for non-coders |
+| 3.1 | ~~**Eval scorer playground**~~ ✅ done (Wave-3) — `/eval/playground` Braintrust-style three-pane (picker + per-row results + aggregate); 1.5s polling; in-process per-tenant store with 30-min TTL; 13 tests | ~5 days | Closed Braintrust playground; "Save as suite" + multi-evaluator chains are follow-ups. |
+| 3.2 | **Long-tail observability exporters** — Datadog, Grafana, OpenTelemetry, Slack alerts | ~10 days | LangSmith integrations breadth. **Deferred** — ship one or two only when a customer names what they want. |
+| 3.3 | ~~**Self-host Helm chart + Terraform**~~ ✅ done (Wave-3) — `charts/aldo-ai/` + `terraform/{aws-eks,gcp-gke,azure-aks}/`; new `helm-chart.yml` CI workflow; pricing copy refreshed | ~10 days | Closed LangSmith Self-Hosted v0.13. OCI publish + real-cluster e2e are operator follow-ups. |
+| 3.4 | **EU data residency** — second-region deploy + tenant routing | ~quarter-scale | LangSmith EU; Braintrust data-plane region selection. **Deferred** — only worth it for a confirmed EU customer. |
+| 3.5 | ~~**Git integration**~~ ✅ done (Wave-3) — migration 023 + GitHub/GitLab clients + HMAC webhooks + 7 routes + connect UI + 23 tests | ~12 days | **Net-new wedge — nobody else ships this.** PAT-only today; OAuth-app installs + bidirectional sync are follow-ups. |
+| 3.6 | ~~**Per-template fork on `/gallery`**~~ ✅ done (Wave-3) — `POST /v1/gallery/fork` + per-card `ForkButton` + cross-project picker + slug-collision auto-rotation; 15 tests | ~3 days | Closed AutoGen-Studio Gallery + CrewAI templates. |
+| 3.7 | **Drag-drop visual team builder** — one-way export to YAML; YAML stays the source of truth | ~10 days | AutoGen-Studio team builder. **Deferred** — high effort, our wedge is YAML-as-data. |
 
 ## Tier 4 — known TODOs flagged in the code
 
@@ -105,7 +121,7 @@ These have explicit markers in source. Not blocking anything; clearing them is h
 
 | # | Item | Where | Effort |
 |---|---|---|---|
-| 4.1 | Per-model `effectiveContextTokens` lookup (currently 8192 for all local models) | `platform/local-discovery/src/probes/*` | 1 day |
+| 4.1 | ~~Per-model `effectiveContextTokens` lookup~~ ✅ done (Wave-3) — RegExp lookup table covers Llama/Mistral/Qwen/DeepSeek/Phi/Gemma/Codellama; server-reported context wins; unknown → 8192 fallback | `platform/local-discovery/src/{model-context,probes/*}.ts` | 1 day |
 | 4.2 | `eval-store.ts` `TODO(integrate)` comments | `apps/api/src/eval-store.ts` | 2 days |
 | 4.3 | Demo-loop Scene 1 (code editor) — leave the typing reveal but smooth out the mid-line cursor flicker | `apps/web/components/marketing/platform-demo-loop.tsx` | half day |
 | 4.4 | `/design-partner` page disposition — orphaned (unlinked from public marketing). Decide: delete, or keep for internal use | full repo | half day |
@@ -124,21 +140,23 @@ These have explicit markers in source. Not blocking anything; clearing them is h
 
 ---
 
-## Recommended sequence (post Wave-MVP)
+## Recommended sequence (post Wave-3)
 
-The Wave-MVP push (2026-05-02) cleared most of Tier 1 + the picker/termination/MCP slices of Tier 2. Sequence going forward:
+Wave-MVP cleared Tier 1 + the picker/termination/MCP-stdio slices of
+Tier 2. Wave-3 cleared Tier 2.9 / 2.10 / 2.11 / 2.12 / 3.1 / 3.3 / 3.5
+/ 3.6 / 4.1. Remaining sequence:
 
 1. **Hour 1.** Push the 5 Stripe secrets, the PyPI / npm / VSCE tokens; flip the 4 publish workflows. (See "Path to MVP — status" above for the precise actions.) This closes Tier 1.2 / 1.6 / 1.7 / 1.8 with no engineering work.
-2. **Days 1–2.** Tier 2.10 (leaf-only termination), 2.12 (status page DB ping). Both are sub-day fixes against well-defined lines of code; clears the last "shipped-but-partial" debt from Wave-MVP.
-3. **Days 3–6.** Tier 2.3 / 2.4 (datasets + tail entities `project_id` retrofit). Pattern is settled by 020/021 — this is mechanical.
-4. **Days 7–9.** Tier 2.11 (retention enforcement job) — make `docs/data-retention.md` true.
-5. **Days 10–14.** SSO/SAML kickoff (1.3) — multi-week effort, start scoping. SOC 2 paperwork in parallel (1.4).
+2. **Hour 2.** Operator deploy — `mcp.aldo.tech` DNS A record + edge nginx route + TLS cert (the Streamable HTTP container is built and tested; this is purely the cutover). Run the OCI Helm chart publish workflow (chart is ready; needs a `oci://ghcr.io/aldo-tech-labs/charts/aldo-ai` push). Both are 1-hour follow-ups that turn shipped code into installable artifacts.
+3. **Days 1–4.** Tier 2.3 / 2.4 (datasets + tail entities `project_id` retrofit). Pattern is settled by 020/021 — this is mechanical.
+4. **Days 5–9.** Tier 1.3 SSO/SAML kickoff — multi-week effort, start scoping. SOC 2 paperwork in parallel (1.4).
+5. **As-needed.** Git integration follow-ups (OAuth apps when a customer asks for it; bidirectional sync once read-only sync proves out). Real-cluster Helm CI (kind-in-CI smoke + per-cloud nightly) the first time we see a chart regression escape kubeconform.
 
 ## What I'd defer indefinitely until a customer asks
 
-- 3.2 (long-tail observability exporters) — ship one or two integrations only when a customer names what they want. Don't pre-build the catalog.
-- 3.4 (EU residency) — quarter-scale build; only worth it for a confirmed EU customer.
-- 3.7 (drag-drop visual builder) — high effort, our wedge is YAML-as-data.
+- 3.2 (long-tail observability exporters) — ship one or two integrations only when a customer names what they want. Don't pre-build the catalog. (Reaffirmed in Wave-3 — engineering not done by design.)
+- 3.4 (EU residency) — quarter-scale build; only worth it for a confirmed EU customer. (Reaffirmed in Wave-3.)
+- 3.7 (drag-drop visual builder) — high effort, our wedge is YAML-as-data. (Reaffirmed in Wave-3.)
 
 ## Strategic decisions still open
 

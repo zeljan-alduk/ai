@@ -103,8 +103,7 @@ export default function RedocPage() {
         <h2>Spec unavailable</h2>
         <p>
           The Redoc bundle could not be loaded, or the API spec at <code>{url}</code> is not
-          reachable. Fetch directly with{' '}
-          <code>curl {url}</code>.
+          reachable. Fetch directly with <code>curl {url}</code>.
         </p>
       </div>
       <script src={REDOC_JS} async />

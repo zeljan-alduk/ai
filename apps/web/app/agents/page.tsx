@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { boundedAll, getAgent, listAgents, listProjects, listRuns } from '@/lib/api';
 import type { AgentSummary, PrivacyTier, RunStatus } from '@aldo-ai/api-contract';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
@@ -181,13 +182,18 @@ export default async function AgentsPage({
       ) : null}
       {listed.agents.length === 0 ? (
         <EmptyState
-          title="No agents in this tenant yet"
-          description="Seed the default agency template to get the principal -> architect -> tech-lead -> reviewer mesh and start exploring."
+          title="No agents yet"
+          description="Two ways to populate the registry: seed the default agency template, or connect a GitHub/GitLab repo to sync your specs in."
           illustration={<EmptyAgentsIllustration />}
           action={
-            <form action={seedDefaultAgencyAction}>
-              <Button type="submit">Use the default agency template</Button>
-            </form>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <form action={seedDefaultAgencyAction}>
+                <Button type="submit">Use the default agency template</Button>
+              </form>
+              <Link href="/integrations/git/connect">
+                <Button variant="secondary">Connect a repo</Button>
+              </Link>
+            </div>
           }
         />
       ) : (

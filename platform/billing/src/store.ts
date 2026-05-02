@@ -74,6 +74,21 @@ export interface SubscriptionStore {
     status: SubscriptionStatus,
     opts?: { readonly cancelledAt?: string | null },
   ): Promise<Subscription | null>;
+
+  /**
+   * Wave 3 (mig 022) — set the per-tenant retention override. Pass
+   * `null` to clear (revert to plan default / infinite for enterprise).
+   * Returns the post-update row, or null if the tenant had no
+   * subscription row (the API handler 404s in that case).
+   */
+  setRetentionDays(tenantId: string, retentionDays: number | null): Promise<Subscription | null>;
+
+  /**
+   * Wave 3 (mig 022) — bookkeeping write by the scheduled prune job.
+   * Stamps `last_pruned_at = now()` for the tenant. Returns the
+   * post-update row.
+   */
+  markPruned(tenantId: string, now?: Date): Promise<Subscription | null>;
 }
 
 // ───────────────────────────────────────────────── InMemorySubscriptionStore
@@ -106,6 +121,8 @@ export class InMemorySubscriptionStore implements SubscriptionStore {
       currentPeriodEnd: null,
       cancelledAt: null,
       metadata: {},
+      retentionDays: null,
+      lastPrunedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -126,6 +143,12 @@ export class InMemorySubscriptionStore implements SubscriptionStore {
       currentPeriodEnd: input.currentPeriodEnd,
       cancelledAt: input.cancelledAt,
       metadata: input.metadata ?? {},
+      // Stripe webhooks NEVER touch retention_days / last_pruned_at —
+      // those columns are operator-managed (mig 022). Preserve the
+      // existing values across an upsert so a Stripe push doesn't
+      // reset an enterprise customer's negotiated retention window.
+      retentionDays: existing?.retentionDays ?? null,
+      lastPrunedAt: existing?.lastPrunedAt ?? null,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -149,6 +172,34 @@ export class InMemorySubscriptionStore implements SubscriptionStore {
     this.rows.set(tenantId, next);
     return next;
   }
+
+  async setRetentionDays(
+    tenantId: string,
+    retentionDays: number | null,
+  ): Promise<Subscription | null> {
+    const existing = this.rows.get(tenantId);
+    if (existing === undefined) return null;
+    const next: Subscription = {
+      ...existing,
+      retentionDays,
+      updatedAt: new Date().toISOString(),
+    };
+    this.rows.set(tenantId, next);
+    return next;
+  }
+
+  async markPruned(tenantId: string, now?: Date): Promise<Subscription | null> {
+    const existing = this.rows.get(tenantId);
+    if (existing === undefined) return null;
+    const stamp = (now ?? new Date()).toISOString();
+    const next: Subscription = {
+      ...existing,
+      lastPrunedAt: stamp,
+      updatedAt: stamp,
+    };
+    this.rows.set(tenantId, next);
+    return next;
+  }
 }
 
 // ───────────────────────────────────────────────── PostgresSubscriptionStore
@@ -163,6 +214,10 @@ interface SubRow {
   readonly current_period_end: string | Date | null;
   readonly cancelled_at: string | Date | null;
   readonly metadata: unknown;
+  /** Wave 3 (mig 022) — nullable per-tenant retention override. */
+  readonly retention_days: number | string | null;
+  /** Wave 3 (mig 022) — last successful prune timestamp. */
+  readonly last_pruned_at: string | Date | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
   readonly [k: string]: unknown;
@@ -178,7 +233,7 @@ export class PostgresSubscriptionStore implements SubscriptionStore {
     const res = await this.db.query<SubRow>(
       `SELECT tenant_id, stripe_customer_id, stripe_subscription_id,
               plan, status, trial_end, current_period_end, cancelled_at,
-              metadata, created_at, updated_at
+              metadata, retention_days, last_pruned_at, created_at, updated_at
          FROM subscriptions
         WHERE tenant_id = $1`,
       [tenantId],
@@ -273,6 +328,37 @@ export class PostgresSubscriptionStore implements SubscriptionStore {
     }
     return this.getByTenantId(tenantId);
   }
+
+  async setRetentionDays(
+    tenantId: string,
+    retentionDays: number | null,
+  ): Promise<Subscription | null> {
+    // No-op when the row doesn't exist — matches `setStatus` semantics.
+    // We rely on UPDATE returning 0 rows; a follow-up SELECT then
+    // returns null and the API handler 404s.
+    await this.db.query(
+      `UPDATE subscriptions
+          SET retention_days = $2, updated_at = now()
+        WHERE tenant_id = $1`,
+      [tenantId, retentionDays],
+    );
+    return this.getByTenantId(tenantId);
+  }
+
+  async markPruned(tenantId: string, now?: Date): Promise<Subscription | null> {
+    const stamp = (now ?? new Date()).toISOString();
+    // Don't bump `updated_at` — that column tracks Stripe writes;
+    // last_pruned_at is the operator-facing bookkeeping. Decoupling
+    // them keeps the rate-limit middleware (which reads updated_at)
+    // ignorant of the prune cycle.
+    await this.db.query(
+      `UPDATE subscriptions
+          SET last_pruned_at = $2::timestamptz
+        WHERE tenant_id = $1`,
+      [tenantId, stamp],
+    );
+    return this.getByTenantId(tenantId);
+  }
 }
 
 // ───────────────────────────────────────────────── helpers
@@ -294,6 +380,15 @@ function rowToSub(row: SubRow): Subscription {
   } else if (row.metadata !== null && typeof row.metadata === 'object') {
     metadata = row.metadata as Readonly<Record<string, unknown>>;
   }
+  // Wave 3 — `retention_days` is INTEGER on the wire; some drivers
+  // (Neon HTTP) round-trip it as a string. Coerce to number while
+  // preserving the null sentinel.
+  let retentionDays: number | null = null;
+  const rd = row.retention_days;
+  if (rd !== null && rd !== undefined) {
+    const n = typeof rd === 'string' ? Number.parseInt(rd, 10) : rd;
+    if (typeof n === 'number' && Number.isFinite(n)) retentionDays = n;
+  }
   return {
     tenantId: row.tenant_id,
     plan: row.plan as Plan,
@@ -304,6 +399,8 @@ function rowToSub(row: SubRow): Subscription {
     currentPeriodEnd: toIsoOrNull(row.current_period_end),
     cancelledAt: toIsoOrNull(row.cancelled_at),
     metadata,
+    retentionDays,
+    lastPrunedAt: toIsoOrNull(row.last_pruned_at),
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   };

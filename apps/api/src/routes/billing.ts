@@ -34,6 +34,8 @@ import {
   GetSubscriptionResponse,
   PortalRequest,
   PortalResponse,
+  UpdateSubscriptionRequest,
+  UpdateSubscriptionResponse,
   type Subscription as WireSubscription,
 } from '@aldo-ai/api-contract';
 import {
@@ -44,6 +46,7 @@ import {
   WebhookSignatureError,
   createCheckoutSession,
   createPortalSession,
+  effectiveRetentionDays,
   handleEvent,
   trialDaysRemaining,
   verifyAndParse,
@@ -261,7 +264,114 @@ export function billingRoutes(deps: Deps): Hono {
     return c.json(body);
   });
 
+  // ─── PATCH /v1/billing/subscription ──────────────────────────────
+  //
+  // Wave 3 — customer-facing retention override. The policy doc
+  // states that only enterprise plans can set a finite
+  // `retentionDays`; solo and team are pinned to the 90-day plan
+  // default. This handler enforces that — solo/team get a 403 with a
+  // friendly error rather than silently no-op, so the UI can render
+  // an explanatory banner instead of "saved" lying to the user.
+  //
+  // The trial plan is treated like solo/team here (you don't get a
+  // bigger window than your plan paid for); a trial customer who
+  // wants longer retention should upgrade to enterprise.
+  app.patch('/v1/billing/subscription', async (c) => {
+    const auth = getAuth(c);
+    const raw = await safeJson(c.req.raw);
+    const parsed = UpdateSubscriptionRequest.safeParse(raw);
+    if (!parsed.success) {
+      throw validationError('invalid subscription patch', parsed.error.issues);
+    }
+    const sub = await deps.subscriptionStore.getByTenantId(auth.tenantId);
+    if (sub === null) {
+      throw new HttpError(
+        404,
+        'subscription_not_found',
+        'no subscription row exists for this tenant; complete signup first',
+      );
+    }
+    if (parsed.data.retentionDays !== undefined) {
+      if (sub.plan !== 'enterprise') {
+        // Same 403 we use for the admin gate. The error message tells
+        // the user *why* the field was refused so they can act on it
+        // (upgrade) without filing a support ticket.
+        throw new HttpError(
+          403,
+          'retention_override_not_allowed',
+          `retentionDays can only be set on the enterprise plan; your plan is "${sub.plan}". Upgrade to enterprise to configure a custom window.`,
+          { plan: sub.plan },
+        );
+      }
+      const updated = await deps.subscriptionStore.setRetentionDays(
+        auth.tenantId,
+        parsed.data.retentionDays,
+      );
+      if (updated === null) {
+        // Race — the row vanished between the read and the write. We
+        // return the same shape as the not-found read so the client
+        // surfaces the same banner.
+        throw new HttpError(404, 'subscription_not_found', 'subscription row vanished mid-update');
+      }
+      const wire = subscriptionToWire(updated);
+      const body = UpdateSubscriptionResponse.parse({ subscription: wire });
+      return c.json(body);
+    }
+    // No-op patch (the request schema currently allows only
+    // `retentionDays`; future fields land here). Echo current state.
+    const body = UpdateSubscriptionResponse.parse({ subscription: subscriptionToWire(sub) });
+    return c.json(body);
+  });
+
+  // ─── POST /v1/admin/jobs/prune-runs ──────────────────────────────
+  //
+  // Wave 3 — manual operator trigger for the retention prune job. The
+  // scheduled cron (apps/api/src/jobs/scheduler.ts) runs hourly at
+  // minute 17; this endpoint lets an operator force a pass without
+  // waiting (e.g. while validating a customer's negotiated retention
+  // window has flushed).
+  //
+  // Admin-only: same `requireAdmin` policy used by
+  // `/v1/admin/design-partner-applications/*` (tenant role = owner
+  // AND tenant slug ∈ ADMIN_TENANT_SLUGS).
+  //
+  // Returns the prune metrics so the operator gets immediate feedback.
+  app.post('/v1/admin/jobs/prune-runs', async (c) => {
+    requireAdminInline(c);
+    const { pruneRunsForAllTenants } = await import('../jobs/prune-runs.js');
+    const result = await pruneRunsForAllTenants(deps.db, {
+      subscriptionStore: deps.subscriptionStore,
+      dryRun: deps.env.RETENTION_DRY_RUN === '1',
+    });
+    return c.json({
+      ok: true,
+      dryRun: result.dryRun,
+      tenantsPruned: result.tenantsPruned,
+      runsPruned: result.runsPruned,
+      msElapsed: result.msElapsed,
+    });
+  });
+
   return app;
+}
+
+/**
+ * Inline admin gate. Mirrors the policy in `routes/design-partners.ts`
+ * (tenant owner + tenant slug ∈ {default, aldo-tech-labs}). Inlined
+ * here rather than imported so this route file stays standalone if
+ * the design-partners route is ever removed; the policy is small
+ * enough that duplication is cheaper than coupling.
+ *
+ * When proper RBAC lands (a `permissions` table or a global
+ * "platform admin" role), both call sites switch to the same
+ * dedicated middleware.
+ */
+function requireAdminInline(c: import('hono').Context): void {
+  const auth = getAuth(c);
+  const ADMIN_TENANT_SLUGS = new Set(['default', 'aldo-tech-labs']);
+  if (auth.role !== 'owner' || !ADMIN_TENANT_SLUGS.has(auth.tenantSlug)) {
+    throw new HttpError(403, 'forbidden', 'this endpoint is restricted to platform admins');
+  }
 }
 
 // ─────────────────────────────────────────────── helpers
@@ -279,6 +389,14 @@ function subscriptionToWire(sub: Subscription): WireSubscription {
     currentPeriodEnd: sub.currentPeriodEnd,
     cancelledAt: sub.cancelledAt,
     trialDaysRemaining: trialDaysRemaining(sub),
+    // Wave 3 — retention surface. The web /billing page renders
+    // `effectiveRetentionDays` (which already collapses NULL to the
+    // plan default for non-enterprise rows); the raw override is
+    // exposed too so the "Change" form on enterprise can show the
+    // exact field value.
+    retentionDays: sub.retentionDays,
+    effectiveRetentionDays: effectiveRetentionDays(sub),
+    lastPrunedAt: sub.lastPrunedAt,
   };
 }
 
@@ -290,6 +408,10 @@ function syntheticTrialWire(): WireSubscription {
     currentPeriodEnd: null,
     cancelledAt: null,
     trialDaysRemaining: null,
+    retentionDays: null,
+    // Synthetic row -> trial plan default = 30 days.
+    effectiveRetentionDays: 30,
+    lastPrunedAt: null,
   };
 }
 

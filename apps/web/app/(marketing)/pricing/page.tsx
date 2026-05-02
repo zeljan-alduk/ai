@@ -79,7 +79,7 @@ const PLANS: ReadonlyArray<Plan> = [
       'Unlimited users and runs',
       'SSO / SAML',
       'Dedicated support',
-      'On-prem / self-host option',
+      'Self-host via Helm chart + Terraform module',
       'Custom MSA',
       'Everything in Team',
     ],
@@ -101,7 +101,7 @@ const FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: 'Can I self-host?',
-    a: 'Self-host is part of Enterprise. We ship a packaged build to your infrastructure with a commercial agreement, dedicated support, and an SLA. Email info@aldo.tech to start the conversation.',
+    a: 'Yes. The repo ships a Helm chart (`charts/aldo-ai`) and per-cloud Terraform modules (`terraform/aws-eks`, `gcp-gke`, `azure-aks`) so you can run the stack in your own VPC. Enterprise wraps that with a commercial agreement, dedicated support, and an SLA. Email info@aldo.tech to start the conversation.',
   },
 ];
 

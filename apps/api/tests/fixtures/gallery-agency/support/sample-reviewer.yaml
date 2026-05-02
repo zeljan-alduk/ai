@@ -1,0 +1,41 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+identity:
+  name: sample-reviewer
+  version: 0.2.0
+  description: Test fixture reviewer for the gallery fork endpoint.
+  owner: support@gallery-test
+  tags: [fixture, support]
+role:
+  team: support
+  pattern: worker
+model_policy:
+  capability_requirements: [reasoning]
+  privacy_tier: sensitive
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.25
+  decoding:
+    mode: free
+prompt:
+  system_file: prompts/sample.md
+tools:
+  mcp: []
+  native: []
+  permissions:
+    network: none
+    filesystem: none
+memory:
+  read: []
+  write: []
+  retention: {}
+spawn:
+  allowed: []
+escalation: []
+subscriptions: []
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: false

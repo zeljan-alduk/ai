@@ -53,7 +53,16 @@ export interface TestEnv {
   teardown(): Promise<void>;
 }
 
-export async function setupTestEnv(envOverrides: Env = {}): Promise<TestEnv> {
+/** Optional per-test-suite overrides for `Deps` fields not derived from `Env`. */
+export interface SetupTestEnvOptions {
+  /** Wave-3 — point the gallery fork endpoint at a fixture template tree. */
+  readonly agencyDir?: string;
+}
+
+export async function setupTestEnv(
+  envOverrides: Env = {},
+  opts: SetupTestEnvOptions = {},
+): Promise<TestEnv> {
   // /v1/models keeps a module-scoped discovery cache; reset between
   // harness instances so back-to-back setups don't share state.
   resetDiscoveryCache();
@@ -92,7 +101,13 @@ export async function setupTestEnv(envOverrides: Env = {}): Promise<TestEnv> {
   // deps are built. Production uses a 32-byte env var; here we
   // synthesise one in-memory.
   const signingKey = new Uint8Array(randomBytes(32));
-  const deps = await createDeps(env, { db, registry, secrets, signingKey });
+  const deps = await createDeps(env, {
+    db,
+    registry,
+    secrets,
+    signingKey,
+    ...(opts.agencyDir !== undefined ? { agencyDir: opts.agencyDir } : {}),
+  });
   const app = buildApp(deps, { log: false });
   // Mint a default token for the canonical SEED tenant. Migration 006
   // already inserted the tenant row; we additionally seed a `users`

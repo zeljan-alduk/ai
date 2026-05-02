@@ -15,10 +15,17 @@ import { migrate } from '@aldo-ai/storage';
 import { serve } from '@hono/node-server';
 import { buildApp } from './app.js';
 import { SEED_TENANT_UUID, createDeps } from './deps.js';
+import { type SchedulerHandle, startScheduler } from './jobs/scheduler.js';
 import { runAlertsTick } from './routes/alerts.js';
 
 async function main(): Promise<void> {
-  const deps = await createDeps(process.env);
+  // Wave-3 — resolve the agency directory BEFORE `createDeps` so we
+  // can thread it through `Deps.agencyDir` and the wave-3
+  // `/v1/gallery/fork` route can find the template files at request
+  // time. Resolution rules are unchanged from the wave-7.5 boot seeder.
+  const agencyDir = resolveAgencyDir();
+  const depsOpts: Parameters<typeof createDeps>[1] = agencyDir !== null ? { agencyDir } : {};
+  const deps = await createDeps(process.env, depsOpts);
 
   // Apply pending migrations on boot. Idempotent — safe across restarts.
   // Skipped silently if the migrations directory is missing (e.g. shipping
@@ -37,7 +44,6 @@ async function main(): Promise<void> {
   // packaged API at `/app/agency`. When running from source, the
   // monorepo root is two levels above `apps/api/src`.
   try {
-    const agencyDir = resolveAgencyDir();
     if (agencyDir !== null) {
       const result = await seedDefaultTenantFromAgency(deps.agentStore, {
         defaultTenantId: SEED_TENANT_UUID,
@@ -83,9 +89,22 @@ async function main(): Promise<void> {
   // but `unref()` keeps a fast `kill -9` recovery clean.
   alertsTimer.unref();
 
+  // Wave 3 — background-job scheduler. Today this only runs the
+  // retention prune (hourly at minute 17 UTC). Disabled by setting
+  // `JOBS_ENABLED=false`; the test harness in tests/_setup.ts
+  // doesn't reach this file at all so jobs never start there.
+  let scheduler: SchedulerHandle | null = null;
+  const jobsEnabled = (process.env.JOBS_ENABLED ?? 'true').toLowerCase() !== 'false';
+  if (jobsEnabled) {
+    scheduler = startScheduler(deps);
+  } else {
+    console.log('[api] JOBS_ENABLED=false — background scheduler disabled');
+  }
+
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`[api] received ${signal}, shutting down`);
     try {
+      scheduler?.stop();
       await deps.close();
     } finally {
       process.exit(0);

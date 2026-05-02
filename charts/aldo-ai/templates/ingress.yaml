@@ -1,0 +1,43 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}
+  labels:
+    {{- include "aldo-ai.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.hosts.web | quote }}
+        - {{ .Values.ingress.hosts.api | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.hosts.web | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "aldo-ai.fullname" . }}-web
+                port:
+                  number: {{ .Values.service.web.port }}
+    - host: {{ .Values.ingress.hosts.api | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "aldo-ai.fullname" . }}-api
+                port:
+                  number: {{ .Values.service.api.port }}
+{{- end }}

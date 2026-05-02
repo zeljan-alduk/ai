@@ -1,51 +1,65 @@
 #!/usr/bin/env node
 /**
- * aldo-mcp-platform — entry point.
+ * aldo-mcp-platform — multiplexed entry point.
  *
- * Bolts a stdio transport onto the platform MCP server. The server
- * itself is transport-agnostic (see `server.ts`); a follow-up wave
- * adds an SSE/HTTP transport so the same surface can run as a hosted
- * `mcp.aldo.tech` endpoint per the MCP HTTP transport draft.
+ * Dispatches to one of two transports:
+ *   - stdio (default)  — local MCP clients (Claude Desktop/Code,
+ *                         Cursor, Codex, VS Code, Windsurf, Zed, …)
+ *   - http             — hosted endpoint (ChatGPT connectors, OpenAI
+ *                         Agents SDK in remote mode, anything that
+ *                         can't spawn a subprocess)
  *
- * No cross-invocation state. The server resolves the API key + base
- * URL once, builds the REST client, registers tools, and waits for
- * stdin to close.
+ * Selection (first match wins):
+ *   1. CLI: `--transport=http` or `--transport http`
+ *   2. Env: `ALDO_MCP_TRANSPORT=http`
+ *   3. Default: `stdio`
+ *
+ * The `aldo-mcp-platform` bin entry continues to default to stdio
+ * (backward-compatible with every installed client). The
+ * `aldo-mcp-http` bin entry hard-codes HTTP so deploys don't have to
+ * pass a flag through their entrypoint.
  */
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { RestClient } from './client.js';
-import { ConfigError, resolveConfig } from './config.js';
-import { createAldoPlatformServer } from './server.js';
-
-export async function main(argv = process.argv.slice(2)): Promise<void> {
-  let config: ReturnType<typeof resolveConfig>;
-  try {
-    config = resolveConfig({ argv });
-  } catch (err) {
-    fatal(err);
+function detectTransport(argv: ReadonlyArray<string>, env: NodeJS.ProcessEnv): 'stdio' | 'http' {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === undefined) continue;
+    if (a.startsWith('--transport=')) {
+      const val = a.slice('--transport='.length);
+      return normaliseTransport(val);
+    }
+    if (a === '--transport') {
+      const next = argv[i + 1];
+      if (typeof next === 'string') return normaliseTransport(next);
+    }
   }
-  const client = new RestClient({ baseUrl: config.baseUrl, apiKey: config.apiKey });
-  const server = createAldoPlatformServer({ client });
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  // Stay alive until the parent (the MCP host) closes stdin.
-  await new Promise<void>((resolve) => {
-    transport.onclose = () => resolve();
-  });
+  if (typeof env.ALDO_MCP_TRANSPORT === 'string' && env.ALDO_MCP_TRANSPORT.length > 0) {
+    return normaliseTransport(env.ALDO_MCP_TRANSPORT);
+  }
+  return 'stdio';
 }
 
-function fatal(err: unknown): never {
-  if (err instanceof ConfigError) {
-    process.stderr.write(`aldo-mcp-platform: ${err.code} ${err.message}\n`);
-  } else if (err instanceof Error) {
-    process.stderr.write(`aldo-mcp-platform: ${err.message}\n`);
+function normaliseTransport(raw: string): 'stdio' | 'http' {
+  const v = raw.trim().toLowerCase();
+  if (v === 'http' || v === 'sse' || v === 'streamable-http') return 'http';
+  return 'stdio';
+}
+
+async function dispatch(): Promise<void> {
+  const transport = detectTransport(process.argv.slice(2), process.env);
+  if (transport === 'http') {
+    const mod = await import('./server-http.js');
+    await mod.main();
   } else {
-    process.stderr.write(`aldo-mcp-platform: ${String(err)}\n`);
+    const mod = await import('./server-stdio.js');
+    await mod.main();
   }
-  process.exit(1);
 }
 
 const isEntry = import.meta.url === `file://${process.argv[1]}`;
 if (isEntry) {
-  main().catch((err) => fatal(err));
+  dispatch().catch((err) => {
+    process.stderr.write(`aldo-mcp-platform: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(1);
+  });
 }

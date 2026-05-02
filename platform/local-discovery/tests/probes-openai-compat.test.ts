@@ -104,6 +104,54 @@ describe.each(CASES)('probe($source)', ({ source, fn, defaultBase }) => {
     expect(fetchMock).toHaveBeenCalledWith('http://10.0.0.5:9999/v1/models', expect.any(Object));
   });
 
+  it('Tier 4.1 — Llama 3.1 70B reports effectiveContextTokens=131072', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        data: [{ id: 'meta-llama/Meta-Llama-3.1-70B-Instruct', object: 'model' }],
+      }),
+    );
+    const out = (await fn({ fetch: fetchMock })) as ReadonlyArray<{
+      effectiveContextTokens: number;
+    }>;
+    expect(out).toHaveLength(1);
+    expect(out[0]?.effectiveContextTokens).toBe(131_072);
+  });
+
+  it('Tier 4.1 — unknown model id falls back to 8192', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ data: [{ id: 'wholly-unknown-experimental-7b', object: 'model' }] }),
+    );
+    const out = (await fn({ fetch: fetchMock })) as ReadonlyArray<{
+      effectiveContextTokens: number;
+    }>;
+    expect(out).toHaveLength(1);
+    expect(out[0]?.effectiveContextTokens).toBe(8_192);
+  });
+
+  it('Tier 4.1 — vLLM/llama.cpp/LM Studio server-reported context wins', async () => {
+    // Each probe reads its own field name; we send all three fields
+    // and let each probe pick the one it knows about. The table value
+    // for Llama 3.1 70B is 131072 — server reports 16384 here.
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        data: [
+          {
+            id: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+            object: 'model',
+            max_model_len: 16_384, // vLLM
+            n_ctx: 16_384, // llama.cpp
+            loaded_context_length: 16_384, // LM Studio
+          },
+        ],
+      }),
+    );
+    const out = (await fn({ fetch: fetchMock })) as ReadonlyArray<{
+      effectiveContextTokens: number;
+    }>;
+    expect(out).toHaveLength(1);
+    expect(out[0]?.effectiveContextTokens).toBe(16_384);
+  });
+
   it('returns [] when the timeout fires', async () => {
     const fetchMock: typeof fetch = vi.fn(async (_url, init) => {
       return await new Promise<Response>((_resolve, reject) => {

@@ -334,6 +334,106 @@ export function deleteDomain(hostname: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Wave-18 (Tier 3.5) — Git integration. Read-only sync of agent specs
+// from a customer GitHub/GitLab repo into the registry.
+// ---------------------------------------------------------------------------
+
+export type GitProvider = 'github' | 'gitlab';
+export type GitSyncStatus = 'ok' | 'failed' | 'pending';
+
+export interface GitRepoEntry {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  provider: GitProvider;
+  repoOwner: string;
+  repoName: string;
+  defaultBranch: string;
+  specPath: string;
+  hasAccessToken: boolean;
+  lastSyncedAt: string | null;
+  lastSyncStatus: GitSyncStatus;
+  lastSyncError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GitConnectRequest {
+  project: string;
+  provider: GitProvider;
+  repoOwner: string;
+  repoName: string;
+  defaultBranch?: string;
+  specPath?: string;
+  accessToken?: string;
+}
+
+export interface GitConnectResponse {
+  repo: GitRepoEntry;
+  webhookSecret: string;
+  webhookUrl: string;
+}
+
+export interface GitSyncEntry {
+  id: string;
+  projectRepoId: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: GitSyncStatus;
+  agentsAdded: number;
+  agentsUpdated: number;
+  agentsRemoved: number;
+  error: string | null;
+}
+
+export interface GitSyncResultEnvelope {
+  status: 'ok' | 'failed';
+  added: string[];
+  updated: string[];
+  removed: string[];
+  failures: { path: string; error: string }[];
+  error: string | null;
+  syncedAt: string;
+}
+
+export function listGitRepos(args: { project?: string } = {}): Promise<{ repos: GitRepoEntry[] }> {
+  const query: Record<string, string | undefined> = {};
+  if (args.project !== undefined) query.project = args.project;
+  return jsonFetch('/v1/integrations/git/repos', { query });
+}
+
+export function getGitRepo(id: string): Promise<{ repo: GitRepoEntry }> {
+  return jsonFetch(`/v1/integrations/git/repos/${encodeURIComponent(id)}`);
+}
+
+export function listGitRepoSyncs(id: string): Promise<{ syncs: GitSyncEntry[] }> {
+  return jsonFetch(`/v1/integrations/git/repos/${encodeURIComponent(id)}/syncs`);
+}
+
+export function connectGitRepo(req: GitConnectRequest): Promise<GitConnectResponse> {
+  return jsonFetch('/v1/integrations/git/repos', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function disconnectGitRepo(id: string): Promise<void> {
+  return jsonFetch(`/v1/integrations/git/repos/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function syncGitRepo(
+  id: string,
+  args: { prune?: boolean } = {},
+): Promise<GitSyncResultEnvelope> {
+  return jsonFetch(`/v1/integrations/git/repos/${encodeURIComponent(id)}/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Re-export the wire types so consumers don't need a second import.
 // ---------------------------------------------------------------------------
 export type { ApiKey, AuditLogEntry, Invitation, IntegrationContract, Role };

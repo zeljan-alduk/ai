@@ -25,7 +25,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApiClientError, getBillingUsage, getSubscription } from '@/lib/api';
 import type { BillingUsagePeriod, BillingUsageResponse, Subscription } from '@aldo-ai/api-contract';
-import { manageSubscriptionAction, upgradeAction } from './actions';
+import { manageSubscriptionAction, updateRetentionAction, upgradeAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,6 +90,12 @@ export default async function BillingPage({
 
       {notConfigured ? <NotConfiguredBanner /> : null}
       {notice === 'needs_checkout' ? <NeedsCheckoutBanner /> : null}
+      {notice === 'retention_saved' ? (
+        <SuccessBanner message="Retention window updated. The next prune pass will honour the new value." />
+      ) : null}
+      {notice === 'retention_blocked' ? (
+        <ErrorBanner message="Custom retention windows are an enterprise-plan feature. Upgrade to enterprise to configure your own window." />
+      ) : null}
       {fetchError !== null ? <ErrorBanner message={fetchError} /> : null}
 
       {/* Trial countdown card (top of fold) */}
@@ -128,6 +134,11 @@ export default async function BillingPage({
           </CardContent>
         </Card>
       ) : null}
+
+      {/* Retention card — wave 3. The window the prune job actually
+          enforces; for non-enterprise plans the value is a read-only
+          badge sourced from the plan default, with an Upgrade CTA. */}
+      {subscription !== null ? <RetentionCard subscription={subscription} /> : null}
 
       {/* Usage analytics */}
       <section className="mt-6">
@@ -416,6 +427,93 @@ function PlanCard({
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function RetentionCard({ subscription }: { subscription: Subscription }) {
+  const isEnterprise = subscription.plan === 'enterprise';
+  const effective = subscription.effectiveRetentionDays;
+  const override = subscription.retentionDays;
+  const lastPruned = subscription.lastPrunedAt;
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Retention window</CardTitle>
+        <CardDescription>
+          How long run history (messages, events, checkpoints) is kept before the scheduled prune
+          deletes it. See{' '}
+          <a href="/docs/data-retention" className="underline">
+            data-retention.md
+          </a>{' '}
+          for the full policy.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-baseline gap-3">
+          <span className="font-mono text-2xl font-semibold tabular-nums text-slate-900">
+            {effective === null ? '∞' : `${effective}d`}
+          </span>
+          {override !== null && override !== effective ? (
+            <span className="text-xs text-slate-500">
+              (override on {subscription.plan} plan: {override}d)
+            </span>
+          ) : null}
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider ${
+              isEnterprise ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700'
+            }`}
+          >
+            {isEnterprise ? 'Configurable' : 'Plan default'}
+          </span>
+        </div>
+        {lastPruned !== null ? (
+          <p className="mt-2 text-xs text-slate-500">Last prune pass: {formatDate(lastPruned)}.</p>
+        ) : (
+          <p className="mt-2 text-xs text-slate-500">
+            The prune job hasn&apos;t run for this tenant yet — first pass within the hour.
+          </p>
+        )}
+        {isEnterprise ? (
+          <form action={updateRetentionAction} className="mt-3 flex items-center gap-2">
+            <label htmlFor="retentionDays" className="sr-only">
+              Retention days
+            </label>
+            <input
+              id="retentionDays"
+              type="number"
+              name="retentionDays"
+              min={0}
+              defaultValue={override ?? ''}
+              placeholder="e.g. 365"
+              className="w-32 rounded border border-slate-300 px-2 py-1 text-sm font-mono tabular-nums"
+            />
+            <button
+              type="submit"
+              className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Change
+            </button>
+            <span className="text-xs text-slate-500">days (blank = ∞)</span>
+          </form>
+        ) : (
+          <p className="mt-3 text-xs text-slate-500">
+            Custom retention windows require the enterprise plan.{' '}
+            <a href="/pricing" className="underline">
+              See pricing
+            </a>
+            .
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SuccessBanner({ message }: { message: string }) {
+  return (
+    <div className="mt-4 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3">
+      <p className="text-sm text-emerald-900">{message}</p>
+    </div>
   );
 }
 

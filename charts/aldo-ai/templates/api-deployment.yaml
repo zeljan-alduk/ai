@@ -1,0 +1,98 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-api
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "api") | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.api.enabled }}
+  replicas: {{ .Values.replicas.api }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "aldo-ai.componentSelectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Force a rollout when the ConfigMap changes — keeps env in sync.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "aldo-ai.componentLabels" (dict "root" . "component" "api") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "aldo-ai.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "aldo-ai.apiImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "aldo-ai.fullname" . }}-config
+            - secretRef:
+                name: {{ include "aldo-ai.appSecretName" . }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aldo-ai.postgresPasswordSecretName" . }}
+                  key: {{ include "aldo-ai.postgresPasswordSecretKey" . }}
+            # DATABASE_URL is materialised here so the API doesn't have to
+            # template it from POSTGRES_* on boot. Kept consistent with
+            # apps/api/src/index.ts which reads `process.env.DATABASE_URL`.
+            - name: DATABASE_URL
+              value: "postgres://{{ include "aldo-ai.postgresUser" . }}:$(POSTGRES_PASSWORD)@{{ include "aldo-ai.postgresHost" . }}:{{ include "aldo-ai.postgresPort" . }}/{{ include "aldo-ai.postgresDatabase" . }}"
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources.api | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.api.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.api.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.api.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.api.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.api.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.api.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.api.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.api.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.api.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.api.readiness.failureThreshold }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

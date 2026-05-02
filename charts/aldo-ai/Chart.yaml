@@ -1,0 +1,45 @@
+# Licensed under FSL-1.1-ALv2
+apiVersion: v2
+name: aldo-ai
+description: |
+  ALDO AI — LLM-agnostic AI sub-agent orchestrator.
+  Self-hostable Helm chart for the api + web + Postgres stack.
+  Privacy-tier router enforcement is wired at the network layer
+  via the included NetworkPolicy.
+
+# `application` chart — shipped as a deployable workload.
+type: application
+
+# Chart version is independent of the platform appVersion. Bump on any
+# template change; bump appVersion when the upstream platform image moves.
+version: 0.1.0
+
+# Tracks the platform's repo-root package.json `version`. The repo
+# currently ships under a 0.0.0 placeholder while pre-revenue; flip to a
+# real semver once the first published image leaves ghcr.
+appVersion: "0.0.0"
+
+kubeVersion: ">=1.27.0-0"
+
+home: https://ai.aldo.tech
+sources:
+  - https://github.com/aldo-tech-labs/aldo-ai
+
+keywords:
+  - ai
+  - agent
+  - orchestrator
+  - llm
+  - mcp
+  - ollama
+  - vllm
+  - self-hosted
+
+maintainers:
+  - name: ALDO TECH LABS
+    email: info@aldo.tech
+    url: https://ai.aldo.tech
+
+annotations:
+  category: AI
+  licenses: FSL-1.1-ALv2

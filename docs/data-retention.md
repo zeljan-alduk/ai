@@ -36,14 +36,17 @@ the full secrets-at-rest writeup.
 
 ## 2. Retention defaults
 
-These are the **stated defaults**. As of 2026-05-02 the platform does
-not yet run a scheduled retention sweep — no `apps/api/src/jobs`-style
-prune job exists. The defaults below describe the policy we will
-enforce; the job that enforces them is on the roadmap as part of the
-billing tier work and lands in a follow-up wave. Until then, we do not
-delete run history except on explicit customer request (§4); customers
-who require enforced retention today should ask for it as part of their
-contract.
+These are the defaults the platform enforces. **Enforcement is
+deployed** as of 2026-05-02 (Wave 3): the
+`apps/api/src/jobs/prune-runs.ts` job runs hourly at minute 17 UTC,
+walks every tenant, computes the cutoff from the table below, and
+deletes eligible runs (with their events, breakpoints, checkpoints,
+span events, and usage records). Operators can trigger an immediate
+pass with `POST /v1/admin/jobs/prune-runs` (admin-only); the
+`RETENTION_DRY_RUN=1` env var puts the job in count-only mode for
+validation. The job stamps `subscriptions.last_pruned_at` after each
+successful pass — operators read that column to confirm the job is
+healthy.
 
 | Tier | Run history (runs + run events + checkpoints) | Datasets, evaluators, agent specs | Audit log |
 |---|---|---|---|
@@ -55,6 +58,17 @@ contract.
 A "run" includes the full message tree and tool-call payloads. After
 the retention window the run row and its events are deleted; the
 parent agent spec, dataset, and eval suite remain.
+
+**Configuring the window (enterprise only).** Enterprise customers
+can change the per-tenant window from the `/billing` page in the web
+console (the "Retention window" card with a "Change" button) or via
+`PATCH /v1/billing/subscription` with body `{ "retentionDays": <N> }`
+(or `null` for "infinite / contract-default"). The API enforces the
+plan check: solo / team / trial customers calling the same endpoint
+get back HTTP 403 with code `retention_override_not_allowed` and a
+short upgrade message — enforcement is at the platform layer, not
+the UI. Up to ~10,000 runs per tenant are deleted per hourly pass;
+larger backlogs drain over multiple passes (FIFO from oldest).
 
 The audit log retention is set by legal-hold rules (§4) and is **not**
 affected by deleting a run — we keep an audit-log entry that the run
@@ -203,3 +217,4 @@ full list.
 | Date | Change |
 |---|---|
 | 2026-05-02 | Initial version. |
+| 2026-05-02 | Wave 3 — retention enforcement deployed (hourly prune job, mig 022 adds `subscriptions.retention_days` + `last_pruned_at`, `PATCH /v1/billing/subscription` for the enterprise override, manual trigger via `POST /v1/admin/jobs/prune-runs`). |

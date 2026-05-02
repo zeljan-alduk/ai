@@ -60,6 +60,7 @@ import {
   DesignPartnerApplication,
   Evaluator,
   GetAgentResponse,
+  GetPlaygroundRunResponse,
   GetRunResponse,
   GetRunTreeResponse,
   GetSubscriptionResponse,
@@ -96,6 +97,8 @@ import {
   type SetSecretRequest,
   SetSecretResponse,
   type SignupRequest,
+  type StartPlaygroundRunRequest,
+  StartPlaygroundRunResponse,
   type SwitchTenantRequest,
   SwitchTenantResponse,
   type TestEvaluatorRequest,
@@ -683,6 +686,22 @@ export function createPortalSession(req: PortalRequest = {}) {
 }
 
 /**
+ * `PATCH /v1/billing/subscription` — update tenant-visible subscription
+ * fields. Wave 3 — only supports `retentionDays` today (and only on
+ * the enterprise plan; the API returns 403 with code
+ * `retention_override_not_allowed` for other plans, which the calling
+ * server action translates to a `?notice=retention_blocked` redirect).
+ */
+export async function updateSubscription(body: { retentionDays: number | null }) {
+  const { UpdateSubscriptionResponse } = await import('@aldo-ai/api-contract');
+  return request('/v1/billing/subscription', UpdateSubscriptionResponse, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * `POST /v1/auth/logout` — best-effort server-side invalidation.
  * Returns 204; the cookie is cleared regardless of whether this
  * succeeds (the server may already consider the JWT expired).
@@ -1142,4 +1161,27 @@ export function updateProject(slug: string, req: UpdateProjectRequest) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(req),
   });
+}
+
+/* ----------------------- Eval scorer playground ----------------------- */
+//
+// Wave-3 (Tier-3.1). Bulk-evaluate one evaluator against one dataset
+// in a Braintrust-style three-pane panel. Server returns a transient
+// run id; the page polls the detail endpoint every ~1.5s until the
+// status is terminal (mirrors `/eval/sweeps/[id]`'s polling shape).
+
+export function startPlaygroundRun(req: StartPlaygroundRunRequest) {
+  return request('/v1/eval/playground/run', StartPlaygroundRunResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function getPlaygroundRun(id: string, init?: { signal?: AbortSignal }) {
+  return request(
+    `/v1/eval/playground/runs/${encodeURIComponent(id)}`,
+    GetPlaygroundRunResponse,
+    init?.signal !== undefined ? { signal: init.signal } : {},
+  );
 }

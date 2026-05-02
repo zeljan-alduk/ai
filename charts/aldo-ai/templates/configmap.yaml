@@ -1,0 +1,27 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-config
+  labels:
+    {{- include "aldo-ai.labels" . | nindent 4 }}
+data:
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  HOST: "0.0.0.0"
+  PORT: "8080"
+  HOSTNAME: "0.0.0.0"
+  ALDO_DEFAULT_PRIVACY: {{ .Values.config.defaultPrivacy | quote }}
+  ALDO_RUN_USD_CAP: {{ .Values.config.runUsdCap | quote }}
+  POSTGRES_HOST: {{ include "aldo-ai.postgresHost" . | quote }}
+  POSTGRES_PORT: {{ include "aldo-ai.postgresPort" . | quote }}
+  POSTGRES_DB: {{ include "aldo-ai.postgresDatabase" . | quote }}
+  POSTGRES_USER: {{ include "aldo-ai.postgresUser" . | quote }}
+  {{- if .Values.config.apiPublicUrl }}
+  ALDO_API_PUBLIC_URL: {{ .Values.config.apiPublicUrl | quote }}
+  {{- end }}
+  {{- if .Values.config.webPublicUrl }}
+  ALDO_WEB_PUBLIC_URL: {{ .Values.config.webPublicUrl | quote }}
+  {{- end }}
+  # Privacy-tier enforcement is signalled via env so the runtime router can
+  # cross-check the platform invariant against the network policy state.
+  ALDO_PRIVACY_TIER_ENFORCED: {{ .Values.privacyTier.enforced | quote }}

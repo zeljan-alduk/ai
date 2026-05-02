@@ -15,6 +15,7 @@ import type {
   RunId,
   RunOverrides,
   TenantId,
+  TerminationConfig,
   ToolCallPart,
   ToolDescriptor,
   ToolHost,
@@ -23,6 +24,7 @@ import type {
   ToolResultPart,
   ToolSchema,
   Tracer,
+  UsageRecord,
 } from '@aldo-ai/types';
 import type { Checkpoint, Checkpointer } from './checkpointer/index.js';
 import type { Breakpoint, BreakpointKind, BreakpointStore } from './debugger/breakpoint-store.js';
@@ -207,6 +209,27 @@ export class LeafAgentRun implements InternalAgentRun {
   private toolSchemaCache?: readonly ToolSchema[];
 
   /**
+   * Wave-MVP follow-up — leaf-only declarative termination.
+   *
+   * Mirrors the orchestrator's `TerminationController`, scaled down to
+   * the leaf use case (a single agent run with no aliased subagents):
+   *
+   *   - `maxTurns`     — count of completed model-call turns
+   *   - `maxUsd`       — cumulative USD across this run's UsageRecords
+   *   - `textMention`  — case-insensitive substring on the assistant
+   *                      text emitted in any turn
+   *   - `successRoles` — N/A for a leaf run (no aliased children); the
+   *                      tracker still parses it for shape parity but
+   *                      never fires it.
+   *
+   * Defaults: when `spec.termination` is undefined or empty, this
+   * tracker is a no-op and the loop's pre-MVP behaviour is unchanged.
+   * The orchestrator continues to enforce composite-level termination
+   * separately on supervisor runs.
+   */
+  private readonly termination: LeafTerminationController;
+
+  /**
    * Tools we've already logged a fall-back warning for on this run.
    * Keyed by the public tool name (`server.tool` for MCP, `ref` for
    * native). Prevents the same "no schema, falling back to {type:object}"
@@ -227,6 +250,7 @@ export class LeafAgentRun implements InternalAgentRun {
     const seed = seedMessages(opts.spec, opts.inputs, opts.initialMessages);
     this.messages = [...seed];
     this.toolResultsRecord = { ...(opts.replayToolResults ?? {}) };
+    this.termination = new LeafTerminationController(opts.spec.termination);
 
     let resolve!: (v: { ok: boolean; output: unknown }) => void;
     let reject!: (e: Error) => void;
@@ -504,6 +528,40 @@ export class LeafAgentRun implements InternalAgentRun {
           state: {},
           ...(this.overrides !== undefined ? { overrides: this.overrides } : {}),
         });
+
+        // Wave-MVP follow-up — leaf-only declarative termination.
+        //
+        // Check the controller after every completed model-call turn,
+        // BEFORE dispatching tool calls or evaluating finishReason. A
+        // fired rule short-circuits the loop and reports `ok: true`
+        // (these ceilings are operator-set, not failures). The
+        // orchestrator's supervisor-level controller is unaffected;
+        // the two layers compose without coordination.
+        if (this.termination.enabled) {
+          const decision = this.termination.recordTurn({
+            usage: endUsage,
+            text: textAccum,
+          });
+          if (decision !== null) {
+            this.emit({
+              type: 'run.terminated_by',
+              at: now(),
+              payload: decision,
+            });
+            this.emit({
+              type: 'run.completed',
+              at: now(),
+              payload: {
+                output: textAccum,
+                finishReason,
+                terminatedBy: decision.reason,
+              },
+            });
+            this.closeEvents();
+            this.doneDeferred.resolve({ ok: true, output: textAccum });
+            return;
+          }
+        }
 
         // Dispatch any tool calls.
         if (toolCalls.length > 0) {
@@ -1132,6 +1190,117 @@ function pickDescription(desc: unknown): string | undefined {
   if (desc === undefined || desc === null) return undefined;
   const d = (desc as { description?: unknown }).description;
   return typeof d === 'string' && d.length > 0 ? d : undefined;
+}
+
+// ─────────────────────────────────────────────── leaf termination
+
+/**
+ * Wave-MVP follow-up — leaf-side mirror of the orchestrator's
+ * `TerminationController` (platform/orchestrator/src/termination.ts).
+ *
+ * The composite controller scans completed `ChildRunSummary` payloads
+ * and tracks aliased subagent roles; a leaf run has neither, so this
+ * tracker scales the rule set down to:
+ *
+ *   - `maxTurns`     — increment per completed model-call turn
+ *   - `maxUsd`       — accumulate the per-turn UsageRecord.usd
+ *   - `textMention`  — case-insensitive substring on the assistant
+ *                      text emitted in the turn (uses the same flatten
+ *                      helper shape as the composite controller)
+ *   - `successRoles` — never fires for a leaf (no aliased subagents);
+ *                      tolerated in the config for spec-shape parity
+ *
+ * Inlined rather than imported from `@aldo-ai/orchestrator` because
+ * the orchestrator already depends on `@aldo-ai/engine` and reversing
+ * that direction would create a cycle. The semantics + decision
+ * payload shape mirror `TerminationController.recordChild` so a
+ * downstream consumer reading `run.terminated_by` events doesn't have
+ * to branch on whether the run was a leaf or a composite.
+ *
+ * Defaults: a controller built with `undefined` (or an empty object)
+ * is a no-op — `recordTurn` always returns `null` and `enabled` is
+ * `false`. Pre-MVP runs without a `termination:` block keep their
+ * original behaviour exactly.
+ */
+type LeafTerminationReason = 'maxTurns' | 'maxUsd' | 'textMention' | 'successRoles';
+
+interface LeafTerminationDecision {
+  readonly reason: LeafTerminationReason;
+  readonly detail: Readonly<Record<string, unknown>>;
+}
+
+interface LeafTurnObservation {
+  readonly usage: UsageRecord | undefined;
+  readonly text: string;
+}
+
+class LeafTerminationController {
+  private readonly cfg: TerminationConfig | undefined;
+  private turns = 0;
+  private cumulativeUsd = 0;
+  private fired = false;
+
+  constructor(cfg: TerminationConfig | undefined) {
+    this.cfg = cfg;
+  }
+
+  /** True iff the spec declared at least one rule. */
+  get enabled(): boolean {
+    return this.cfg !== undefined && Object.keys(this.cfg).length > 0;
+  }
+
+  /**
+   * Record a completed model-call turn and return a decision iff a
+   * rule fires for the FIRST time. Subsequent calls after firing
+   * return `null` so a caller racing a tool dispatch can't double-emit.
+   *
+   * Order: maxTurns → maxUsd → textMention. Matches the composite
+   * controller's evaluation order so the test fixtures can assert on
+   * stable reasons when two thresholds cross at once.
+   */
+  recordTurn(obs: LeafTurnObservation): LeafTerminationDecision | null {
+    if (this.fired) return null;
+    this.turns += 1;
+    if (obs.usage !== undefined && typeof obs.usage.usd === 'number') {
+      this.cumulativeUsd += obs.usage.usd;
+    }
+    if (this.cfg === undefined) return null;
+
+    if (this.cfg.maxTurns !== undefined && this.turns >= this.cfg.maxTurns) {
+      return this.fire({
+        reason: 'maxTurns',
+        detail: { turns: this.turns, limit: this.cfg.maxTurns },
+      });
+    }
+
+    if (this.cfg.maxUsd !== undefined && this.cumulativeUsd >= this.cfg.maxUsd) {
+      return this.fire({
+        reason: 'maxUsd',
+        detail: { usd: this.cumulativeUsd, cap: this.cfg.maxUsd },
+      });
+    }
+
+    if (this.cfg.textMention !== undefined && obs.text.length > 0) {
+      const needle = this.cfg.textMention.toLowerCase();
+      if (obs.text.toLowerCase().includes(needle)) {
+        return this.fire({
+          reason: 'textMention',
+          detail: { trigger: this.cfg.textMention },
+        });
+      }
+    }
+
+    // `successRoles` is a composite-only concept (alias of a completed
+    // subagent) and is intentionally never fired here. Specs may still
+    // carry it for portability across leaf↔composite promotion.
+
+    return null;
+  }
+
+  private fire(d: LeafTerminationDecision): LeafTerminationDecision {
+    this.fired = true;
+    return d;
+  }
 }
 
 function resolveToolRef(spec: AgentSpec, toolName: string): ToolRef {

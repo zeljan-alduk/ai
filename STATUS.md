@@ -1,7 +1,7 @@
 # ALDO AI — STATUS
 
 > Snapshot of what's live, what's wired, and what's known-broken.
-> **Last updated:** 2026-05-02 (Wave-MVP — 10-agent integration pass landed)
+> **Last updated:** 2026-05-02 (Wave-3 — 7-agent competitive-gap closing pass landed on top of Wave-MVP)
 > **Source of truth for history:** [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt)
 > **Source of truth for next steps:** [`ROADMAP.md`](./ROADMAP.md)
 
@@ -34,10 +34,12 @@
 - `/runs/[id]/debug` — interactive debugger with breakpoints, edit-and-resume, swap-model fork
 - `/runs/compare?a=&b=` — event/output/cost diff with fork-lineage banner
 - `/agents`, `/agents/[name]` — registry, spec viewer, composite diagram, termination conditions card, eval analytics, recent runs, promote flow
-- `/gallery` — eight curated agency templates with "Use the default agency" CTA
+- `/gallery` — eight curated agency templates with "Use the default agency" CTA AND per-card **Fork** button (project-targetable, slug-collision auto-rotates `-2`, `-3`, …)
+- `/integrations/git` — connect a GitHub or GitLab repo to a project; agent specs sync from `aldo/agents/*.yaml`; webhook + manual sync; per-attempt history. Net-new wedge — nobody else ships this.
+- `/billing` — subscription panel with retention-window card (enterprise can `PATCH /v1/billing/subscription` to set custom days; lower tiers see read-only "90-day standard")
 - `/projects`, `/projects/[slug]` — Wave-17 entity (foundation only; agents/runs/datasets are still flat-tenant)
 - `/datasets`, `/datasets/[id]` — gallery, examples table, "Save run as eval row" dialog from `/runs/[id]`
-- `/eval`, `/eval/sweeps`, `/evaluators` — suites, sweep history, evaluator authoring + test panel
+- `/eval`, `/eval/sweeps`, `/evaluators`, `/eval/playground` — suites, sweep history, evaluator authoring + test panel, **per-row scorer playground** (pick evaluator + dataset + sample-size, see per-row scores stream alongside aggregate stats — pass-rate, p50/p95/min/max, score histogram)
 - `/observability`, `/dashboards`, `/activity`, `/notifications`
 - `/playground`, `/models`
 - `/settings/*` — members, roles, alerts, api-keys, audit, cache, domains, integrations, quotas
@@ -57,7 +59,7 @@
 | `sdks/typescript` (`@aldo-ai/sdk`) | v0.1.0, 6 vitest tests, `pnpm publish --dry-run` packs 39 files / 15.0 kB, hardened workflow | ❌ awaits `NPM_PUBLISH_TOKEN` |
 | `extensions/vscode` (`aldo-ai-vscode`) | v0.1.0, 25 vitest, vsce package green → 10-file 14.42 kB .vsix, hardened workflow | ❌ awaits `VSCE_PAT` + publisher account |
 | `mcp-servers/aldo-fs` (`@aldo-ai/mcp-fs`) | Real MCP server, 522 lines using `@modelcontextprotocol/sdk` | ❌ npm |
-| `mcp-servers/aldo-platform` (`@aldo-ai/mcp-platform`) | Wave-17, 8 tools, stdio transport | ❌ npm |
+| `mcp-servers/aldo-platform` (`@aldo-ai/mcp-platform`) | Wave-17 + Wave-3 — 8 tools, **stdio + Streamable HTTP/SSE** transports, Dockerfile + per-tenant Bearer auth + curated CORS allowlist (chatgpt.com, *.aldo.tech) | ❌ npm; ❌ deploy at `mcp.aldo.tech` (DNS + nginx — code + container ready) |
 
 ## CI / quality gates
 
@@ -75,11 +77,10 @@
 | **No SSO / SAML** | Email + password only | Mid-market+ blocker |
 | **No SOC 2 / HIPAA** | Marketing claims privacy enforcement; no certs | Regulated buyers blocked |
 | **No EU data residency** | Single-region deploy | LangSmith and Braintrust ship this; we don't |
-| **Effective context tokens hardcoded** | Local-discovery probes return 8192 for every model | Inaccurate for 70b+ Llama vs 7b |
-| **No published Helm chart** | "Enterprise tier — packaged build" is marketing copy without an artifact | Self-host claim has no actual deliverable |
-| **Leaf-only termination not enforced** | Wave-MVP wired termination at the supervisor layer; single-agent runs with their own `termination` block ignore it (engine `LeafAgentRun` doesn't consult `TerminationController`) | A solo-agent author who declares `maxTurns:5` still sees 6+ turns. Composite runs are unaffected. |
-| **Retention enforcement job missing** | `docs/data-retention.md` states 30/90/configurable retention by tier; no `apps/api/src/jobs/prune-*` exists today | Stated policy ≠ deployed implementation. Current store grows monotonically. |
-| **Status page DB ping inferred, not measured** | `apps/web/components/status/status-board.tsx` infers DB liveness from `/api/health`; that endpoint doesn't actually ping Postgres yet | A DB-down + API-up degradation is not visible on `/status` until the rewire lands (one-line fix in `apps/api/src/routes/health.ts`). |
+| **Helm chart not OCI-published** | `charts/aldo-ai/` is in-repo (helm lint + template + kubeconform clean) but no `helm install oci://ghcr.io/aldo-tech-labs/charts/aldo-ai` yet | Customers self-hosting must clone the repo today; install ergonomics improve once the OCI publish workflow lands |
+| **Helm chart not real-cluster validated** | `helm template` + `kubeconform -strict` clean against k8s 1.31 schemas; no kind-in-CI smoke or per-cloud nightly | Possible to ship a regression that lints but breaks on `helm install`; mitigated by the offline kubeconform gate, not eliminated |
+| **MCP Streamable HTTP not deployed** | Code + Dockerfile + 14 tests are in repo (`@aldo-ai/mcp-platform` has both `aldo-mcp-platform` stdio bin and `aldo-mcp-http` HTTP bin); container runs locally, /healthz green | ChatGPT custom GPT connectors and OpenAI Agents SDK remote-mode users can self-host today; hosted `mcp.aldo.tech` (DNS + edge nginx route + TLS) is operator follow-up |
+| **Git integration is PAT-only** | `apps/api/src/integrations/git/` ships GitHub + GitLab clients + HMAC-verified webhooks + per-tenant SecretStore-backed token storage, but no OAuth-app installation flow | Customer must mint a PAT (GitHub `repo:read` / GitLab Project Access Token `read_repository`) and paste it into the connect form; first-class OAuth is a follow-up |
 
 ## Customers + revenue
 

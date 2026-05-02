@@ -1,0 +1,19 @@
+{{/* Licensed under FSL-1.1-ALv2 */}}
+{{- if .Values.postgres.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aldo-ai.fullname" . }}-postgres
+  labels:
+    {{- include "aldo-ai.componentLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None    # headless — required by the StatefulSet
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.service.port }}
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    {{- include "aldo-ai.componentSelectorLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+{{- end }}

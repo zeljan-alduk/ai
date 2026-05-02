@@ -196,6 +196,16 @@ export interface Deps {
    * platform `ModelGateway`.
    */
   readonly judge?: JudgeGateway;
+  /**
+   * Wave-3 — root directory the gallery fork endpoint walks for
+   * template YAMLs. Same path the boot-time seeder uses. Resolved by
+   * `index.ts` and threaded through deps so tests can point at a
+   * fixture directory without poking process state. Optional: a
+   * missing value makes `/v1/gallery/fork` 503 `gallery_unavailable`,
+   * matching the wave-7.5 contract for routes whose backing surface
+   * isn't wired (the same way `/v1/secrets` 500s without a store).
+   */
+  readonly agencyDir?: string;
   /** Release the underlying SQL client. */
   close(): Promise<void>;
 }
@@ -255,6 +265,12 @@ export interface CreateDepsOptions {
    * call. Production leaves this unset and gets `undefined`.
    */
   readonly judge?: JudgeGateway;
+  /**
+   * Wave-3 — point the gallery fork endpoint at an alternate template
+   * directory. Tests pass a fixture path so they aren't coupled to the
+   * shape of the live `agency/` tree.
+   */
+  readonly agencyDir?: string;
 }
 
 export async function createDeps(
@@ -369,6 +385,7 @@ export async function createDeps(
     ...(opts.engineDebugger !== undefined ? { engineDebugger: opts.engineDebugger } : {}),
     ...(opts.evalDeps !== undefined ? { evalDeps: opts.evalDeps } : {}),
     ...(opts.judge !== undefined ? { judge: opts.judge } : {}),
+    ...(opts.agencyDir !== undefined ? { agencyDir: opts.agencyDir } : {}),
     async close() {
       // If the caller supplied the db, they own its lifecycle.
       if (opts.db === undefined) await db.close();

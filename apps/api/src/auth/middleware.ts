@@ -81,7 +81,13 @@ const PUBLIC_PATH_EXACT = new Set<string>([
  * `findShareBySlug` helper rejects revoked / expired / unknown slugs
  * so a missing-token visitor sees a clean 404.
  */
-const PUBLIC_PATH_PREFIX: readonly string[] = ['/v1/public/share/'];
+const PUBLIC_PATH_PREFIX: readonly string[] = [
+  '/v1/public/share/',
+  // Wave-18 (Tier 3.5) — Git push webhooks. Anonymous from the
+  // provider's side; the route handler verifies the per-repo HMAC
+  // (GitHub) or token (GitLab) BEFORE touching state.
+  '/v1/webhooks/git/',
+];
 
 /** True iff this request can pass without a bearer token. */
 export function isPublicPath(method: string, path: string): boolean {

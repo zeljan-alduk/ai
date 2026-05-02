@@ -31,6 +31,16 @@ export { probe as probeVllm } from './probes/vllm.js';
 export { probe as probeLlamacpp } from './probes/llamacpp.js';
 export { probe as probeLmstudio } from './probes/lmstudio.js';
 
+// Tier 4.1 — model→context lookup table (consumed by every probe;
+// re-exported so eval harnesses + downstream callers can resolve a
+// model's context window without re-implementing the table).
+export {
+  DEFAULT_CONTEXT_TOKENS,
+  lookupContextTokens,
+  normaliseModelId,
+  resolveContextTokens,
+} from './model-context.js';
+
 export type {
   DiscoveredModel,
   DiscoveryMetadata,

@@ -1,15 +1,20 @@
 /**
  * /gallery — discoverability surface for agent templates.
  *
- * Lists the curated agency templates an operator can adopt with one
- * click. v0 source is the dogfood agency under `agency/*` in this
- * repo; the seed-default action atomically inserts ALL of them into
- * the caller's tenant, mirroring the welcome page's "Start from the
- * default agency" path. Per-template fork ships in a later wave (it
- * needs a registry-side import endpoint).
+ * Lists the curated agency templates an operator can adopt. Two
+ * adoption paths now coexist on the page:
  *
- * Closes the AutoGen-Studio "Gallery" parallel — every modern agent
- * platform ships a discoverability surface; we did not.
+ *   1. **Page-level "Use the default agency"** — fork-the-whole-org;
+ *      atomically inserts ALL templates into the caller's tenant via
+ *      `POST /v1/tenants/me/seed-default`. Same flow as `/welcome`.
+ *   2. **Per-card "Fork into project"** (wave-3) — fork-one-template;
+ *      hits `POST /v1/gallery/fork` and registers a single spec under
+ *      the operator's chosen project. Slug collisions auto-rotate to
+ *      `<name>-2`, `-3`, … so re-clicking is non-destructive.
+ *
+ * Closes the AutoGen-Studio Gallery + CrewAI templates parallel —
+ * every modern agent platform ships fork-this-one-template; until
+ * wave-3 we only had fork-the-whole-org.
  *
  * LLM-agnostic: every template is described by capability + privacy
  * tier; no provider names appear here.
@@ -21,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Library, ShieldCheck, Users } from 'lucide-react';
 import Link from 'next/link';
+import { ForkButton } from './fork-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,7 +124,7 @@ export default function GalleryPage() {
     <>
       <PageHeader
         title="Template gallery"
-        description="The reference agent organization we dogfood internally — every new tenant can adopt it in one click. Per-template fork lands in a later wave."
+        description="The reference agent organization we dogfood internally — fork the whole agency in one click, or pick individual templates per card and drop them into any project."
         actions={<SeedAgencyButton />}
       />
 
@@ -165,7 +171,8 @@ export default function GalleryPage() {
                   ) : null}
                 </div>
                 <p className="text-sm leading-relaxed text-fg-muted">{entry.description}</p>
-                <div className="mt-auto pt-2">
+                <div className="mt-auto flex flex-col gap-3 pt-2">
+                  <ForkButton templateId={entry.name} />
                   <Link
                     href={`/agents/${encodeURIComponent(entry.name)}`}
                     className="text-xs font-medium text-accent hover:text-accent-hover"

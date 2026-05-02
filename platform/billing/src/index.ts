@@ -27,6 +27,7 @@ export type {
   TrialGateVerdict,
   UpgradeUrlInput,
 } from './types.js';
+export { effectiveRetentionDays, planRetentionDays } from './types.js';
 
 // ─────────── Config ───────────
 export {

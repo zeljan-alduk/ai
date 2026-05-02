@@ -15,13 +15,15 @@
  *
  * What we monitor (three components):
  *
- *   1. API   — `/health` on the canonical origin. Returns `{ ok, version }`
- *              at the moment; status is derived from HTTP 200 + ok=true.
+ *   1. API   — `/health` on the canonical origin. Returns
+ *              `{ ok, status, api, db, version, timestamp }`; status
+ *              is derived from HTTP 200 + ok=true.
  *   2. Web   — homepage 200 check.
- *   3. DB    — inferred from API. The current `/health` route does not
- *              run a DB ping (see `apps/api/src/routes/health.ts`); when
- *              that lands, the DB row will read its dedicated field. The
- *              row's subtitle calls this out so visitors aren't misled.
+ *   3. DB    — read from the SAME /health response's `db` field
+ *              (`'ok' | 'down'`), sourced from a real `SELECT 1`
+ *              against Postgres. Wave-MVP follow-up: previously this
+ *              row was inferred from API liveness; the dedicated DB
+ *              ping now drives it directly.
  *
  * LLM-agnostic: nothing on this page names a model provider.
  */
