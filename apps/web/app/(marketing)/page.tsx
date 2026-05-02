@@ -136,9 +136,20 @@ function Architecture() {
             before a token leaves your tenant boundary.
           </p>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-border bg-bg p-4 sm:p-6">
+        {/* The container can scroll horizontally on narrow viewports
+            because the SVG has a fixed 700-unit viewBox. axe-core's
+            `scrollable-region-focusable` rule (WCAG 2.1.1 keyboard)
+            requires any scrollable region to be reachable by keyboard
+            and to expose its purpose to assistive tech — hence the
+            tabIndex, role, aria-label, and visible focus ring. */}
+        <section
+          className="overflow-x-auto rounded-xl border border-border bg-bg p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:p-6"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-reachable per WCAG 2.1.1 (axe-core scrollable-region-focusable). The tabIndex IS the fix.
+          tabIndex={0}
+          aria-label="ALDO AI platform architecture diagram"
+        >
           <ArchitectureDiagram />
-        </div>
+        </section>
         <p className="mt-3 text-[11px] text-fg-faint">
           Cloud-vs-local is decided by the agent&rsquo;s declared capability class and privacy tier.
           No code path names a provider.

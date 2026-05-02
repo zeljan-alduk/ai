@@ -198,9 +198,17 @@ export class PostgresBreakpointStore implements BreakpointStore {
   async create(input: CreateBreakpointInput): Promise<Breakpoint> {
     const id = randomUUID();
     const enabled = input.enabled ?? true;
+    // Wave-10: tenant_id is NOT NULL on `breakpoints` (migration 006).
+    // Wave-17: project_id rides alongside it (migration 021). Both
+    // are inherited from the parent run via INSERT ... SELECT FROM
+    // runs WHERE id = $2 — same shape as PostgresRunStore.appendEvent.
+    // The FK is satisfied because the breakpoint can only be set
+    // against a run row that already exists.
     await this.client.query(
-      `INSERT INTO breakpoints (id, run_id, kind, match, enabled, hit_count)
-       VALUES ($1, $2, $3, $4, $5, 0)`,
+      `INSERT INTO breakpoints (id, run_id, tenant_id, project_id, kind, match, enabled, hit_count)
+       SELECT $1, $2, r.tenant_id, r.project_id, $3, $4, $5, 0
+         FROM runs r
+        WHERE r.id = $2`,
       [id, input.runId, input.kind, input.match, enabled],
     );
     return {

@@ -2,18 +2,30 @@
  * Pricing — `/pricing`.
  *
  * Three plans. Honest framing — no fake social proof, no fabricated
- * statistics. Each "Start free trial" CTA links to /signup?plan=<slug>
- * so the signup form can pre-select the plan when Engineer Q's
- * Stripe Checkout lands.
+ * statistics. The Solo + Team CTAs post a server action that:
  *
- * Billing-not-configured banner: Engineer Q is wiring Stripe in this
- * same wave. Until the secret keys are set in the API environment,
- * the checkout endpoint returns `not_configured`; we render a small
- * inline notice instead of breaking the page. The check is a simple
- * env probe — no network round-trip needed for SSG/ISR.
+ *   1. If the visitor already has a session, mints a Stripe Checkout
+ *      session for their tenant and redirects to the Stripe-hosted
+ *      payment page.
+ *   2. Otherwise, sends them to `/signup?plan=<slug>&next=/billing/checkout?plan=<slug>`
+ *      so the same plan is preselected after signup and they land back
+ *      in the checkout handoff page that auto-mints a Stripe URL with
+ *      their freshly-issued session token.
+ *
+ * The Enterprise CTA is a `mailto:` — no checkout flow, the buyer
+ * needs an MSA conversation first.
+ *
+ * Billing-not-configured: when the host has no `STRIPE_SECRET_KEY` set,
+ * the pricing page still renders. The Solo + Team CTAs disable with a
+ * "Billing setup pending" tooltip so we don't promise a checkout the
+ * platform can't deliver. The /v1/billing/checkout endpoint also
+ * surfaces the typed `not_configured` envelope as a backstop.
+ *
+ * LLM-agnostic by construction.
  */
 
 import Link from 'next/link';
+import { startCheckoutAction } from './actions';
 
 interface Plan {
   readonly slug: 'solo' | 'team' | 'enterprise';
@@ -21,7 +33,6 @@ interface Plan {
   readonly price: string;
   readonly priceSuffix: string;
   readonly tagline: string;
-  readonly cta: { label: string; href: string };
   readonly features: ReadonlyArray<string>;
   readonly highlight?: boolean;
 }
@@ -33,7 +44,6 @@ const PLANS: ReadonlyArray<Plan> = [
     price: '$29',
     priceSuffix: '/mo',
     tagline: 'For one builder running their own agency.',
-    cta: { label: 'Start free trial', href: '/signup?plan=solo' },
     features: [
       '1 user, 1 tenant',
       '100 runs / month',
@@ -49,7 +59,6 @@ const PLANS: ReadonlyArray<Plan> = [
     price: '$99',
     priceSuffix: '/mo',
     tagline: 'For a small team running a real agency.',
-    cta: { label: 'Start free trial', href: '/signup?plan=team' },
     highlight: true,
     features: [
       '5 users, 1 tenant',
@@ -66,10 +75,6 @@ const PLANS: ReadonlyArray<Plan> = [
     price: 'Contact',
     priceSuffix: '',
     tagline: 'For organisations with compliance, SSO, or self-host needs.',
-    cta: {
-      label: 'Contact sales',
-      href: 'mailto:info@aldo.tech?subject=ALDO%20AI%20%E2%80%94%20Enterprise%20inquiry',
-    },
     features: [
       'Unlimited users and runs',
       'SSO / SAML',
@@ -103,8 +108,8 @@ const FAQ: ReadonlyArray<{ q: string; a: string }> = [
 /**
  * Detect whether Stripe is wired up in this environment. We treat the
  * presence of `STRIPE_SECRET_KEY` as the configured signal — the API
- * needs it to mint Checkout Sessions, so its absence is what Engineer
- * Q's `/v1/billing/checkout` endpoint returns `not_configured` on.
+ * needs it to mint Checkout Sessions, so its absence is what the
+ * `/v1/billing/checkout` endpoint returns `not_configured` on.
  *
  * This is a server-only read; the value never reaches the client bundle.
  */
@@ -112,8 +117,16 @@ function isBillingConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
-export default function PricingPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ notice?: string }>;
+}) {
   const billingReady = isBillingConfigured();
+  const sp = (await searchParams) ?? {};
+  const showNotConfiguredNotice = sp.notice === 'not_configured' || !billingReady;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
@@ -127,13 +140,7 @@ export default function PricingPage() {
         </p>
       </header>
 
-      {!billingReady ? (
-        <output className="mx-auto mt-8 block max-w-3xl rounded-md border border-warning/40 bg-warning/10 p-4 text-sm text-fg">
-          <strong className="font-semibold">Billing enables next sprint.</strong> Sign up for the
-          trial today; we will email you before any charge. Stripe Checkout is being wired in this
-          wave — your trial is real, the credit-card step is not yet.
-        </output>
-      ) : null}
+      {showNotConfiguredNotice ? <BillingSetupPendingNotice /> : null}
 
       <ul className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {PLANS.map((plan) => (
@@ -167,16 +174,7 @@ export default function PricingPage() {
               ))}
             </ul>
             <div className="mt-6 flex-1" />
-            <Link
-              href={plan.cta.href}
-              className={`mt-2 inline-flex w-full items-center justify-center rounded px-4 py-2.5 text-sm font-medium transition-colors ${
-                plan.highlight
-                  ? 'bg-accent text-accent-fg hover:bg-accent-hover'
-                  : 'border border-border bg-bg-elevated text-fg hover:bg-bg-subtle'
-              }`}
-            >
-              {plan.cta.label}
-            </Link>
+            <PlanCta plan={plan} billingReady={billingReady} />
           </li>
         ))}
       </ul>
@@ -193,5 +191,72 @@ export default function PricingPage() {
         </dl>
       </section>
     </div>
+  );
+}
+
+/**
+ * Per-plan CTA. Enterprise stays a `mailto:` link; Solo + Team are a
+ * server-action form that branches on auth state inside the action.
+ *
+ * In `not_configured` mode, the priced-plan buttons render disabled
+ * with a `title=` tooltip explaining why instead of pretending to work
+ * and 503ing on submit.
+ */
+function PlanCta({ plan, billingReady }: { plan: Plan; billingReady: boolean }) {
+  if (plan.slug === 'enterprise') {
+    return (
+      <Link
+        href="mailto:info@aldo.tech?subject=ALDO%20AI%20%E2%80%94%20Enterprise%20inquiry"
+        className="mt-2 inline-flex w-full items-center justify-center rounded border border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle"
+      >
+        Contact sales
+      </Link>
+    );
+  }
+
+  const buttonLabel = `Start free trial — ${plan.name}`;
+  const buttonClass = `mt-2 inline-flex w-full items-center justify-center rounded px-4 py-2.5 text-sm font-medium transition-colors ${
+    plan.highlight
+      ? 'bg-accent text-accent-fg hover:bg-accent-hover'
+      : 'border border-border bg-bg-elevated text-fg hover:bg-bg-subtle'
+  } disabled:cursor-not-allowed disabled:opacity-60`;
+
+  if (!billingReady) {
+    return (
+      <button
+        type="button"
+        disabled
+        title="Billing setup pending — Stripe keys are not configured in this environment."
+        aria-label={`${buttonLabel} (disabled — billing setup pending)`}
+        className={buttonClass}
+      >
+        Billing setup pending
+      </button>
+    );
+  }
+
+  return (
+    <form action={startCheckoutAction}>
+      <input type="hidden" name="plan" value={plan.slug} />
+      <button type="submit" className={buttonClass}>
+        {buttonLabel}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Replaces the pre-wave-18 "Billing enables next sprint" placeholder.
+ * The wording is now operationally honest: the trial works, the
+ * checkout buttons are intentionally disabled until Stripe credentials
+ * land in this environment.
+ */
+function BillingSetupPendingNotice() {
+  return (
+    <output className="mx-auto mt-8 block max-w-3xl rounded-md border border-warning/40 bg-warning/10 p-4 text-sm text-fg">
+      <strong className="font-semibold">Billing setup pending.</strong> The 14-day trial works today
+      — sign up and start building. The Solo and Team checkout buttons turn on once Stripe
+      credentials are wired in this deployment; no action needed on your side.
+    </output>
   );
 }

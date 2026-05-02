@@ -74,6 +74,14 @@ export interface SupervisorRuntimeAdapter {
     readonly tenant: TenantId;
     readonly privacy: PrivacyTier;
     readonly compositeStrategy?: 'sequential' | 'parallel' | 'debate' | 'iterative';
+    /**
+     * Wave-17: project this child run is scoped to. The orchestrator
+     * forwards the supervisor's projectId so children inherit the
+     * parent's project assignment via PostgresRunStore.recordRunStart.
+     * Optional at the boundary so a pre-17 caller (no project picker)
+     * keeps compiling.
+     */
+    readonly projectId?: string;
     readonly signal?: AbortSignal;
   }): Promise<SpawnedChildHandle>;
   loadSpec(ref: AgentRef): Promise<AgentSpec>;
@@ -141,6 +149,13 @@ export interface SpawnOpts {
   readonly rootRunId?: RunId;
   /** Strategy that spawned this run; persisted on the runs row. */
   readonly compositeStrategy?: 'sequential' | 'parallel' | 'debate' | 'iterative';
+  /**
+   * Wave-17: project this run is scoped to. The orchestrator adapter
+   * forwards the supervisor's projectId here; spawn() threads it
+   * into recordRunStart so the child's run row carries the same
+   * project assignment as its parent.
+   */
+  readonly projectId?: string;
 }
 
 /**
@@ -406,6 +421,13 @@ export class PlatformRuntime implements Runtime {
         ...(opts?.compositeStrategy !== undefined
           ? { compositeStrategy: opts.compositeStrategy }
           : {}),
+        // Wave-17: forward the project assignment supplied by the
+        // orchestrator adapter (composite-spawned children) or
+        // omitted otherwise (root single-agent runs — the API
+        // route's createRun pre-record carries the value, and the
+        // COALESCE-on-conflict in PostgresRunStore.recordRunStart
+        // preserves it across this idempotent insert).
+        ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
       });
     }
 
@@ -460,7 +482,7 @@ export class PlatformRuntime implements Runtime {
   async runAgent(
     ref: AgentRef,
     inputs: unknown,
-    opts?: { readonly parent?: RunId; readonly root?: RunId },
+    opts?: { readonly parent?: RunId; readonly root?: RunId; readonly projectId?: string },
   ): Promise<AgentRun> {
     const spec = await this.registry.load(ref);
     if (spec.composite !== undefined) {
@@ -481,6 +503,8 @@ export class PlatformRuntime implements Runtime {
           ...(opts?.parent !== undefined ? { parent: opts.parent } : {}),
           root: rootRunId,
           compositeStrategy: spec.composite.strategy,
+          // Wave-17: persist the supervisor's project assignment.
+          ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
         });
       }
       // Construct and dispatch — runComposite resolves with the
@@ -493,17 +517,26 @@ export class PlatformRuntime implements Runtime {
         rootRunId,
         depth: 0,
         privacy: spec.modelPolicy.privacyTier,
+        // Wave-17: cascade the project assignment into the
+        // RunContext so every spawnChild inherits it via the
+        // strategies/common.ts forwarder.
+        ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
       });
       const wrapped = new CompositeAgentRun(supervisorId, result, this.runStore);
       this.composites.set(supervisorId, wrapped);
       return wrapped;
     }
-    return this.spawn(
-      ref,
-      inputs,
-      opts?.parent,
-      opts?.root !== undefined ? { rootRunId: opts.root } : undefined,
-    );
+    // Single-agent path. Compose the SpawnOpts so the rootRunId
+    // and the wave-17 projectId are both forwarded when the caller
+    // supplied them.
+    const spawnOpts: SpawnOpts | undefined =
+      opts?.root !== undefined || opts?.projectId !== undefined
+        ? {
+            ...(opts.root !== undefined ? { rootRunId: opts.root } : {}),
+            ...(opts.projectId !== undefined ? { projectId: opts.projectId } : {}),
+          }
+        : undefined;
+    return this.spawn(ref, inputs, opts?.parent, spawnOpts);
   }
 
   /**
@@ -522,6 +555,11 @@ export class PlatformRuntime implements Runtime {
           ...(args.compositeStrategy !== undefined
             ? { compositeStrategy: args.compositeStrategy }
             : {}),
+          // Wave-17: forward the supervisor's project assignment so
+          // the spawned child's recordRunStart persists project_id
+          // alongside tenant_id. spawn() threads this through to
+          // PostgresRunStore.recordRunStart via SpawnOpts.
+          ...(args.projectId !== undefined ? { projectId: args.projectId } : {}),
         };
         const run = (await this.spawn(
           args.agent,

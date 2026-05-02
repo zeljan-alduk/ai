@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "Official Python SDK for the ALDO AI platform — LLM-agnostic agent orchestration."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "FSL-1.1-ALv2-pre-publish" }
+license = { text = "FSL-1.1-ALv2" }
+license-files = ["LICENSE"]
 authors = [{ name = "ALDO TECH LABS" }]
 keywords = ["aldo", "ai", "agents", "llm", "evaluation", "orchestration"]
 classifiers = [
@@ -55,6 +56,8 @@ include = [
   "src/aldo_ai",
   "README.md",
   "PUBLISHING.md",
+  "CHANGELOG.md",
+  "LICENSE",
   "pyproject.toml",
 ]
 

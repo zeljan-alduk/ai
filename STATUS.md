@@ -1,7 +1,7 @@
 # ALDO AI — STATUS
 
 > Snapshot of what's live, what's wired, and what's known-broken.
-> **Last updated:** 2026-04-28 (Wave-17 in flight)
+> **Last updated:** 2026-05-02 (Wave-MVP — 10-agent integration pass landed)
 > **Source of truth for history:** [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt)
 > **Source of truth for next steps:** [`ROADMAP.md`](./ROADMAP.md)
 
@@ -15,7 +15,7 @@
 | **Hosting** | Single VPS (`vps-77bcd56d`), Docker Compose, edge nginx via the slovenia-transit proxy |
 | **Deploy** | GitHub Actions on push → POST to `/_admin/deploy` webhook → `vps-deploy.sh` rebuilds + redeploys |
 | **DB** | Postgres 16 (containerised, named volume) |
-| **Status page** | none yet |
+| **Status page** | `/status` (in-house, polls API + web every 30s, ISR-backed incident timeline) |
 | **On-call** | none — single-operator |
 
 ## What's live (customer-facing)
@@ -53,9 +53,9 @@
 
 | Package | Status | Public registry |
 |---|---|---|
-| `sdks/python` (`aldo-ai`) | v0.1.0, 40+ tests, `release-python-sdk.yml` workflow_dispatch ready | ❌ pre-publish |
-| `sdks/typescript` (`@aldo-ai/sdk`) | v0.1.0, 6 vitest tests, `release-typescript-sdk.yml` ready | ❌ pre-publish |
-| `extensions/vscode` (`aldo-ai-vscode`) | v0.1.0, sidebar (agents, runs) | ❌ marketplace |
+| `sdks/python` (`aldo-ai`) | v0.1.0, 98 pytest, mypy + ruff clean, twine check OK on wheel + sdist, hardened workflow with dry-run + token-gate | ❌ awaits `PYPI_API_TOKEN` |
+| `sdks/typescript` (`@aldo-ai/sdk`) | v0.1.0, 6 vitest tests, `pnpm publish --dry-run` packs 39 files / 15.0 kB, hardened workflow | ❌ awaits `NPM_PUBLISH_TOKEN` |
+| `extensions/vscode` (`aldo-ai-vscode`) | v0.1.0, 25 vitest, vsce package green → 10-file 14.42 kB .vsix, hardened workflow | ❌ awaits `VSCE_PAT` + publisher account |
 | `mcp-servers/aldo-fs` (`@aldo-ai/mcp-fs`) | Real MCP server, 522 lines using `@modelcontextprotocol/sdk` | ❌ npm |
 | `mcp-servers/aldo-platform` (`@aldo-ai/mcp-platform`) | Wave-17, 8 tools, stdio transport | ❌ npm |
 
@@ -72,17 +72,14 @@
 
 | Issue | Where | Impact |
 |---|---|---|
-| **License contradiction** | `LICENSE` says proprietary, `LICENSING.md` says FSL-1.1-ALv2 | Procurement teams will flag day one |
-| **Stripe checkout incomplete** | `/pricing` shows the "Billing enables next sprint" banner | $29/$99 plans aren't actually purchasable |
-| **No projects retrofit** | Wave-17 entity ships; agents/runs/datasets/etc. still flat-tenant | Multi-team customers can't isolate work in the UI |
-| **Termination runtime not wired** | Wave-17 spec + UI shipped; orchestrator still uses implicit defaults | Declared `maxTurns` / `maxUsd` / `textMention` are not yet honoured |
-| **MCP schema introspection partial** | `platform/engine/src/agent-run.ts:933` — tools exposed as opaque names with `{type: 'object'}` placeholders | Marketing's "MCP-first" claim is server-side true, runtime side partial |
 | **No SSO / SAML** | Email + password only | Mid-market+ blocker |
 | **No SOC 2 / HIPAA** | Marketing claims privacy enforcement; no certs | Regulated buyers blocked |
 | **No EU data residency** | Single-region deploy | LangSmith and Braintrust ship this; we don't |
-| **A11y: scrollable-region-focusable** | Architecture-diagram SVG | axe-core flagged; tracked as a follow-up |
 | **Effective context tokens hardcoded** | Local-discovery probes return 8192 for every model | Inaccurate for 70b+ Llama vs 7b |
 | **No published Helm chart** | "Enterprise tier — packaged build" is marketing copy without an artifact | Self-host claim has no actual deliverable |
+| **Leaf-only termination not enforced** | Wave-MVP wired termination at the supervisor layer; single-agent runs with their own `termination` block ignore it (engine `LeafAgentRun` doesn't consult `TerminationController`) | A solo-agent author who declares `maxTurns:5` still sees 6+ turns. Composite runs are unaffected. |
+| **Retention enforcement job missing** | `docs/data-retention.md` states 30/90/configurable retention by tier; no `apps/api/src/jobs/prune-*` exists today | Stated policy ≠ deployed implementation. Current store grows monotonically. |
+| **Status page DB ping inferred, not measured** | `apps/web/components/status/status-board.tsx` infers DB liveness from `/api/health`; that endpoint doesn't actually ping Postgres yet | A DB-down + API-up degradation is not visible on `/status` until the rewire lands (one-line fix in `apps/api/src/routes/health.ts`). |
 
 ## Customers + revenue
 

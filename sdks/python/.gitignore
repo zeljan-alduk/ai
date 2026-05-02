@@ -1,0 +1,21 @@
+# Build / packaging artefacts
+dist/
+build/
+*.egg-info/
+
+# Test + tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Bytecode
+__pycache__/
+*.py[cod]
+*.pyo

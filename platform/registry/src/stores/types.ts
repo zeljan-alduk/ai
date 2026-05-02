@@ -24,6 +24,15 @@ import type { AgentSpec } from '@aldo-ai/types';
 /** A single registered agent version belonging to a tenant. */
 export interface RegisteredAgent {
   readonly tenantId: string;
+  /**
+   * Wave-17 project scoping. Nullable on the wire so pre-retrofit
+   * clients (and any in-flight insert from a code path that predates
+   * migration 020) round-trip cleanly. Application logic resolves a
+   * missing value to the tenant's Default project at write time; the
+   * field is therefore in practice always non-null on rows the new
+   * write paths produced.
+   */
+  readonly projectId: string | null;
   readonly name: string;
   readonly version: string;
   readonly spec: AgentSpec;
@@ -42,12 +51,44 @@ export interface RegisteredAgent {
  * (tenant, name)) with a `current_version` column that may be NULL
  * (soft-delete). `list()` filters out tenants whose pointer is NULL.
  */
+/**
+ * Wave-17 — optional project scoping for write paths.
+ *
+ * `register` / `upsertVersion` accept an optional `projectId`; the API
+ * route resolves it from the request (explicit body field or the
+ * tenant's Default project) before calling the store. The store
+ * persists whatever value it is handed and does NOT attempt to fall
+ * back to a default — that resolution is a tenant-aware concern that
+ * lives in the application layer (see apps/api/src/projects-store.ts
+ * `getDefaultProjectIdForTenant`). When `projectId` is omitted the
+ * store inserts SQL NULL; the wave-17 backfill (migration 020) is the
+ * only way a NULL row should ever surface in production.
+ */
+export interface RegisterOptions {
+  /** Optional project id. Null/undefined → SQL NULL. */
+  readonly projectId?: string | null;
+}
+
+/** Filter options for `list()`. */
+export interface ListOptions {
+  /**
+   * When set, restrict the result to agents whose `project_id` equals
+   * the given id. When unset, list every agent in the tenant
+   * (preserves the pre-wave-17 behaviour so pre-picker clients still
+   * work without code changes).
+   */
+  readonly projectId?: string;
+}
+
 export interface RegisteredAgentStore {
   /**
    * List the CURRENT version of every agent registered to `tenantId`.
    * Soft-deleted agents (pointer.current_version = NULL) are omitted.
+   * When `opts.projectId` is set, the result is further restricted to
+   * that project's agents only — a missing `opts` argument keeps the
+   * pre-wave-17 "all agents in tenant" behaviour.
    */
-  list(tenantId: string): Promise<readonly RegisteredAgent[]>;
+  list(tenantId: string, opts?: ListOptions): Promise<readonly RegisteredAgent[]>;
   /** List every version of one agent, newest-stored first. */
   listAllVersions(tenantId: string, name: string): Promise<readonly RegisteredAgent[]>;
   /** Return the current version of `name`, or null when missing/soft-deleted. */
@@ -63,13 +104,31 @@ export interface RegisteredAgentStore {
    *
    * Returns the row as persisted (with timestamps).
    */
-  register(tenantId: string, spec: AgentSpec, specYaml: string): Promise<RegisteredAgent>;
+  register(
+    tenantId: string,
+    spec: AgentSpec,
+    specYaml: string,
+    opts?: RegisterOptions,
+  ): Promise<RegisteredAgent>;
   /**
    * Insert (or update) the version row WITHOUT bumping the pointer.
    * Used by the eval gate to stage a candidate version before deciding
    * whether to promote.
    */
-  upsertVersion(tenantId: string, spec: AgentSpec, specYaml: string): Promise<RegisteredAgent>;
+  upsertVersion(
+    tenantId: string,
+    spec: AgentSpec,
+    specYaml: string,
+    opts?: RegisterOptions,
+  ): Promise<RegisteredAgent>;
+  /**
+   * Wave-17 — move every version of `name` (within `tenantId`) to a
+   * different project. Used by the `/v1/agents/:name` PATCH path so an
+   * operator can re-home an agent without re-registering it. No-op if
+   * the row doesn't exist; the route checks existence beforehand and
+   * returns 404.
+   */
+  moveToProject(tenantId: string, name: string, projectId: string): Promise<void>;
   /**
    * Bump the pointer to `version`. Throws when (tenant, name, version)
    * does not exist — never sets the pointer to a phantom version.

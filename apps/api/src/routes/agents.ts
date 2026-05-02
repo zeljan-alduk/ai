@@ -39,7 +39,9 @@ import {
   RegisterAgentJsonRequest,
   RegisterAgentResponse,
   SandboxConfigWire,
+  TerminationWire,
   ToolsGuardsWire,
+  UpdateAgentRequest,
 } from '@aldo-ai/api-contract';
 import {
   type RegisteredModel,
@@ -68,6 +70,7 @@ import { recordAudit } from '../auth/audit.js';
 import { getAuth, requireRole, requireScope } from '../auth/middleware.js';
 import type { Deps, Env } from '../deps.js';
 import { notFound, validationError } from '../middleware/error.js';
+import { getDefaultProjectIdForTenant, getProjectBySlug } from '../projects-store.js';
 import { loadModelCatalog } from './models.js';
 
 const AgentNameParam = z.object({ name: z.string().min(1) });
@@ -86,6 +89,12 @@ export function agentsRoutes(deps: Deps): Hono {
 
   // ------------------------------------------------------------------
   // List: current version of every agent for the request's tenant.
+  //
+  // Wave-17: when the client passes `?project=<slug>`, resolve the slug
+  // → project_id and forward it as a `list` filter. Unknown slug → 404
+  // (we never silently fall back to "all" — that would mask UI bugs).
+  // No `project` param → list every agent in the tenant (preserves the
+  // pre-picker client behaviour).
   // ------------------------------------------------------------------
   app.get('/v1/agents', async (c) => {
     const parsed = ListAgentsQuery.safeParse(
@@ -96,7 +105,18 @@ export function agentsRoutes(deps: Deps): Hono {
     }
     const q = parsed.data;
     const tenantId = getAuth(c).tenantId;
-    const all = await deps.agentStore.list(tenantId);
+    let projectIdFilter: string | undefined;
+    if (q.project !== undefined) {
+      const project = await getProjectBySlug(deps.db, { slug: q.project, tenantId });
+      if (project === null) {
+        throw notFound(`project not found: ${q.project}`);
+      }
+      projectIdFilter = project.id;
+    }
+    const all = await deps.agentStore.list(
+      tenantId,
+      projectIdFilter !== undefined ? { projectId: projectIdFilter } : undefined,
+    );
     const filtered = all.filter((a) => {
       if (q.team !== undefined && a.spec.role.team !== q.team) return false;
       if (q.owner !== undefined && a.spec.identity.owner !== q.owner) return false;
@@ -119,29 +139,50 @@ export function agentsRoutes(deps: Deps): Hono {
   // POST /v1/agents — register a new spec.
   //
   // Body is YAML when Content-Type is `application/yaml` or `text/yaml`,
-  // else JSON `{ specYaml: "..." }`. The shared registry parser owns
-  // validation; the route forwards the spec verbatim into the store.
+  // else JSON `{ specYaml: "...", project?: "<slug>" }`. The shared
+  // registry parser owns validation; the route forwards the spec
+  // verbatim into the store.
+  //
+  // Wave-17: optional `project` slug in the JSON body picks the
+  // destination project. Unknown slug → 404. When the field is omitted
+  // (and on the YAML content-type path, which has no envelope to carry
+  // it), the route resolves the tenant's Default project. The store
+  // persists project_id alongside the version row.
   // ------------------------------------------------------------------
   app.post('/v1/agents', async (c) => {
     // Wave-13: viewer is read-only; require member or higher.
     requireRole(c, 'member');
     requireScope(c, 'agents:write');
     const tenantId = getAuth(c).tenantId;
-    const yamlText = await readAgentBody(c.req);
-    if (yamlText === null) {
+    const parsedBody = await readAgentBody(c.req);
+    if (parsedBody === null) {
       throw validationError('expected YAML body or {specYaml: string}');
     }
+    const { specYaml: yamlText, project: projectSlug } = parsedBody;
     const res = parseYaml(yamlText);
     if (!res.ok || res.spec === undefined) {
       throw validationError('agent spec failed schema validation', res.errors);
     }
     const spec = res.spec;
-    const stored = await deps.agentStore.register(tenantId, spec, yamlText);
+    // Wave-17: resolve project_id. Explicit slug → look up + 404 on
+    // miss; absent → Default project. The store accepts a null
+    // projectId too; we only fall through to that case when the
+    // signup-time default-project seed somehow failed to insert
+    // (unusual; logged at boot).
+    let projectId: string | null = null;
+    if (projectSlug !== undefined) {
+      const proj = await getProjectBySlug(deps.db, { slug: projectSlug, tenantId });
+      if (proj === null) throw notFound(`project not found: ${projectSlug}`);
+      projectId = proj.id;
+    } else {
+      projectId = await getDefaultProjectIdForTenant(deps.db, tenantId);
+    }
+    const stored = await deps.agentStore.register(tenantId, spec, yamlText, { projectId });
     await recordAudit(deps.db, c, {
       verb: 'agent.register',
       objectKind: 'agent',
       objectId: stored.name,
-      metadata: { version: stored.version },
+      metadata: { version: stored.version, projectId: stored.projectId },
     });
     const body = RegisterAgentResponse.parse({
       agent: {
@@ -151,6 +192,61 @@ export function agentsRoutes(deps: Deps): Hono {
       },
     });
     return c.json(body, 201);
+  });
+
+  // ------------------------------------------------------------------
+  // PATCH /v1/agents/:name — wave-17 update path. Today supports a
+  // single field: `project` (slug). Setting it moves every version of
+  // the named agent into that project.
+  //
+  // Pre-wave-17 clients never sent this request; the route is purely
+  // additive. We don't expose a "rename" or "retag" today — those
+  // would require a spec-level YAML re-register through POST.
+  // ------------------------------------------------------------------
+  app.patch('/v1/agents/:name', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'agents:write');
+    const param = AgentNameParam.safeParse({ name: c.req.param('name') });
+    if (!param.success) {
+      throw validationError('invalid agent name', param.error.issues);
+    }
+    const json = await safeJson(c.req);
+    const parsed = UpdateAgentRequest.safeParse(json);
+    if (!parsed.success) {
+      throw validationError('invalid update-agent body', parsed.error.issues);
+    }
+    if (parsed.data.project === undefined) {
+      throw validationError('update-agent requires at least one field');
+    }
+    const tenantId = getAuth(c).tenantId;
+    const existing = await deps.agentStore.get(tenantId, param.data.name);
+    if (existing === null) {
+      throw notFound(`agent not found: ${param.data.name}`);
+    }
+    const proj = await getProjectBySlug(deps.db, {
+      slug: parsed.data.project,
+      tenantId,
+    });
+    if (proj === null) throw notFound(`project not found: ${parsed.data.project}`);
+    await deps.agentStore.moveToProject(tenantId, param.data.name, proj.id);
+    await recordAudit(deps.db, c, {
+      verb: 'agent.update',
+      objectKind: 'agent',
+      objectId: param.data.name,
+      metadata: { projectId: proj.id, projectSlug: proj.slug },
+    });
+    const moved = await deps.agentStore.get(tenantId, param.data.name);
+    if (moved === null) {
+      // Defensive: the soft-delete path nulls the pointer, but we
+      // verified `existing` above. A null here means a concurrent
+      // delete raced us; surface as 404 rather than 500.
+      throw notFound(`agent not found: ${param.data.name}`);
+    }
+    const versions = await deps.agentStore.listAllVersions(tenantId, param.data.name);
+    const body = GetAgentResponse.parse({
+      agent: buildAgentDetailBody(moved, moved.version, versions),
+    });
+    return c.json(body);
   });
 
   // ------------------------------------------------------------------
@@ -336,23 +432,33 @@ export function agentsRoutes(deps: Deps): Hono {
 // ---------------------------------------------------------------------------
 // Body parsing helpers.
 
+interface ParsedRegisterBody {
+  readonly specYaml: string;
+  /** Wave-17 — optional project SLUG to register the agent under. */
+  readonly project?: string;
+}
+
 async function readAgentBody(req: {
   header: (n: string) => string | undefined;
   text: () => Promise<string>;
   json: () => Promise<unknown>;
-}): Promise<string | null> {
+}): Promise<ParsedRegisterBody | null> {
   const ct = (req.header('content-type') ?? '').toLowerCase();
   if (ct.includes('yaml')) {
+    // Raw YAML body — no envelope, no project field. The route falls
+    // through to the tenant's Default project for these calls.
     const text = await req.text();
     if (text.length === 0) return null;
-    return text;
+    return { specYaml: text };
   }
-  // Default: JSON envelope `{specYaml: "..."}`.
+  // Default: JSON envelope `{specYaml: "...", project?: "<slug>"}`.
   try {
     const j = await req.json();
     const parsed = RegisterAgentJsonRequest.safeParse(j);
     if (!parsed.success) return null;
-    return parsed.data.specYaml;
+    return parsed.data.project !== undefined
+      ? { specYaml: parsed.data.specYaml, project: parsed.data.project }
+      : { specYaml: parsed.data.specYaml };
   } catch {
     return null;
   }
@@ -378,6 +484,7 @@ function toSummary(a: RegisteredAgent): {
   readonly privacyTier: PrivacyTier;
   readonly team: string;
   readonly tags: readonly string[];
+  readonly projectId: string | null;
 } {
   return {
     name: a.name,
@@ -391,6 +498,10 @@ function toSummary(a: RegisteredAgent): {
     privacyTier: a.spec.modelPolicy.privacyTier,
     team: a.spec.role.team,
     tags: [...a.spec.identity.tags],
+    // Wave-17 — surface the project assignment to the wire. Null when
+    // the row predates migration 020 AND no application write has
+    // touched it since (uncommon).
+    projectId: a.projectId,
   };
 }
 
@@ -408,6 +519,8 @@ function buildAgentDetailBody(
     privacyTier: resolved.spec.modelPolicy.privacyTier,
     team: resolved.spec.role.team,
     tags: [...resolved.spec.identity.tags],
+    // Wave-17 — project this agent is scoped to within the tenant.
+    projectId: resolved.projectId,
     versions: history
       .slice()
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
@@ -420,6 +533,7 @@ function buildAgentDetailBody(
     guards: projectGuards(resolved.spec),
     sandbox: projectSandbox(resolved.spec),
     composite: projectComposite(resolved.spec),
+    termination: projectTermination(resolved.spec),
   };
 }
 
@@ -444,6 +558,14 @@ function projectComposite(spec: unknown): z.infer<typeof CompositeWire> | null {
   const raw = (spec as Record<string, unknown>).composite;
   if (raw === undefined || raw === null) return null;
   const parsed = CompositeWire.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+function projectTermination(spec: unknown): z.infer<typeof TerminationWire> | null {
+  if (spec === null || typeof spec !== 'object') return null;
+  const raw = (spec as Record<string, unknown>).termination;
+  if (raw === undefined || raw === null) return null;
+  const parsed = TerminationWire.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }
 

@@ -36,6 +36,15 @@ export interface RunStartArgs {
    * unaffected and continue to write NULL).
    */
   readonly compositeStrategy?: 'sequential' | 'parallel' | 'debate' | 'iterative';
+  /**
+   * Wave-17: project this run is scoped to. Optional: when omitted
+   * (most pre-retrofit code paths still don't supply it), the column
+   * is inserted as NULL and migration 021's backfill / the API
+   * route's pre-record handles the assignment. The orchestrator
+   * passes this through so children inherit the parent supervisor's
+   * project assignment.
+   */
+  readonly projectId?: string;
 }
 
 export interface RunEndArgs {
@@ -154,16 +163,25 @@ export class PostgresRunStore implements RunStore {
     // INSERT until the operator runs `pnpm migrate`. Single-agent runs
     // default root_run_id = id (so `WHERE root_run_id = $1` resolves
     // every run in O(1) regardless of whether it's part of a tree).
+    //
+    // Wave-17: also persist project_id (migration 021). On conflict
+    // (the API route pre-recorded the row in the same logical create),
+    // we COALESCE so the existing project_id is preserved when the
+    // engine's later write doesn't supply one. Mirrors the
+    // agents-retrofit COALESCE pattern in migration 020 / the
+    // PostgresRegisteredAgentStore upsert path.
     const root = args.root ?? args.runId;
     await this.client.query(
       `INSERT INTO runs
-         (id, tenant_id, agent_name, agent_version,
+         (id, tenant_id, project_id, agent_name, agent_version,
           parent_run_id, root_run_id, composite_strategy, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'running')
-       ON CONFLICT (id) DO NOTHING`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'running')
+       ON CONFLICT (id) DO UPDATE
+         SET project_id = COALESCE(runs.project_id, EXCLUDED.project_id)`,
       [
         args.runId,
         args.tenant,
+        args.projectId ?? null,
         args.ref.name,
         args.ref.version ?? '0.0.0',
         args.parent ?? null,
@@ -189,11 +207,17 @@ export class PostgresRunStore implements RunStore {
     // canonical tenant for this run; the FK is satisfied because the
     // run row was written by `recordRunStart` before any event lands.
     //
+    // Wave-17: events also inherit `project_id` from the parent run.
+    // Same JOIN, same row — the engine never has to know what
+    // project a run is in to emit events; the column simply tags
+    // along. Migration 021 backfilled the historical rows; new
+    // events ride on the parent's value via this SELECT.
+    //
     // The `at` column has a server-side default; we still pass the engine's
     // ISO timestamp so ordering matches the in-memory event stream exactly.
     await this.client.query(
-      `INSERT INTO run_events (id, run_id, tenant_id, type, payload_jsonb, at)
-       SELECT $1, $2, r.tenant_id, $3, $4::jsonb, $5
+      `INSERT INTO run_events (id, run_id, tenant_id, project_id, type, payload_jsonb, at)
+       SELECT $1, $2, r.tenant_id, r.project_id, $3, $4::jsonb, $5
          FROM runs r
         WHERE r.id = $2`,
       [id, runId, event.type, JSON.stringify(event.payload ?? null), event.at],

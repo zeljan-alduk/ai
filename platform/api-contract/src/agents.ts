@@ -12,6 +12,15 @@ export const AgentSummary = z.object({
   privacyTier: PrivacyTier,
   team: z.string(),
   tags: z.array(z.string()),
+  /**
+   * Wave-17 — project this agent is scoped to within the tenant.
+   * Nullish so pre-retrofit clients (and any in-flight insert from
+   * code paths predating migration 020) round-trip cleanly. Server
+   * resolves a missing value to the tenant's Default project at
+   * write time; in practice this is always populated on rows the
+   * post-020 write path produced.
+   */
+  projectId: z.string().nullish(),
 });
 export type AgentSummary = z.infer<typeof AgentSummary>;
 
@@ -170,6 +179,13 @@ export type SandboxConfigWire = z.infer<typeof SandboxConfigWire>;
 export const ListAgentsQuery = PaginationQuery.extend({
   team: z.string().optional(),
   owner: z.string().optional(),
+  /**
+   * Wave-17 — filter to one project by SLUG. The server resolves
+   * slug → project_id and returns only agents in that project.
+   * Unknown slug → 404. Omit to keep the pre-wave-17 "all agents in
+   * tenant" behaviour.
+   */
+  project: z.string().min(1).optional(),
 });
 export type ListAgentsQuery = z.infer<typeof ListAgentsQuery>;
 
@@ -290,8 +306,28 @@ export type CheckAgentResponse = z.infer<typeof CheckAgentResponse>;
 export const RegisterAgentJsonRequest = z.object({
   /** Raw YAML text. The server runs it through @aldo-ai/registry. */
   specYaml: z.string().min(1),
+  /**
+   * Wave-17 — optional project SLUG the new agent should be created
+   * under. Server resolves slug → project_id (404 if unknown). When
+   * omitted, the agent is created under the tenant's Default
+   * project. Pre-wave-17 clients omit the field and get the legacy
+   * behaviour.
+   */
+  project: z.string().min(1).optional(),
 });
 export type RegisterAgentJsonRequest = z.infer<typeof RegisterAgentJsonRequest>;
+
+/**
+ * Wave-17 — update payload for `PATCH /v1/agents/:name`.
+ *
+ * Currently supports a single field: `project` (SLUG). Setting it
+ * moves every version of the named agent into that project. Future
+ * fields (rename, retag, etc.) extend this schema.
+ */
+export const UpdateAgentRequest = z.object({
+  project: z.string().min(1).optional(),
+});
+export type UpdateAgentRequest = z.infer<typeof UpdateAgentRequest>;
 
 export const RegisterAgentResponse = z.object({
   agent: z.object({

@@ -1,0 +1,140 @@
+name: Release VS Code Extension
+
+# Manual-trigger only — never publishes on plain pushes. Mirrors the
+# release-python-sdk.yml / release-typescript-sdk.yml pattern. The
+# maintainer bumps the version in `extensions/vscode/package.json`,
+# runs this workflow with `dry_run=false`, and the job publishes to
+# the VS Code Marketplace via vsce.
+#
+# `dry_run=true` (the default) builds + tests + packages a `.vsix`
+# and uploads it as a workflow artefact so the maintainer can sideload
+# it for hand-testing before flipping the bit.
+#
+# Real publish (`dry_run=false`) requires the `confirm` input to
+# equal the package version exactly — guards against accidental
+# flips of the dry_run dropdown.
+#
+# Required secret for real publish: `VSCE_PAT` — a Personal Access
+# Token from https://dev.azure.com with Marketplace > Manage scope,
+# scoped to the `aldo-tech-labs` publisher.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build + test + package .vsix only (does NOT push to Marketplace)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      confirm:
+        description: 'Must equal package.json version (e.g. 0.1.0) when dry_run=false. Leave blank for dry-runs.'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build, test, package, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: extensions/vscode
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install workspace deps
+        working-directory: ${{ github.workspace }}
+        run: pnpm install --frozen-lockfile
+
+      # Quality gate — typecheck + unit tests + esbuild bundle.
+      - name: typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: tests
+        run: pnpm exec vitest run
+
+      - name: build
+        run: pnpm run build
+
+      - name: Resolve version
+        id: ver
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          PUBLISHER=$(node -p "require('./package.json').publisher")
+          echo "version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "publisher=${PUBLISHER}" >> "$GITHUB_OUTPUT"
+          echo "${PUBLISHER}.aldo-ai-vscode version: ${PKG_VERSION}"
+
+      # `confirm` must equal the version string to allow a real publish.
+      - name: Guard real publish with confirm == version
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          if [ "${{ inputs.confirm }}" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::Real publish requires inputs.confirm to equal the package version."
+            echo "::error::Got confirm='${{ inputs.confirm }}', expected '${{ steps.ver.outputs.version }}'."
+            echo "::error::Re-run with confirm=${{ steps.ver.outputs.version }} to proceed, or flip dry_run back to true."
+            exit 1
+          fi
+          echo "Confirmed: publishing ${{ steps.ver.outputs.publisher }}.aldo-ai-vscode@${{ steps.ver.outputs.version }} to Marketplace."
+
+      - name: Package .vsix
+        run: pnpm exec vsce package --no-dependencies
+
+      - name: Upload .vsix artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aldo-ai-vscode-${{ steps.ver.outputs.version }}.vsix
+          path: extensions/vscode/aldo-ai-vscode-${{ steps.ver.outputs.version }}.vsix
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish summary
+        run: |
+          {
+            echo "## VS Code extension release dry-run"
+            echo ""
+            echo "- **Extension ID**: ${{ steps.ver.outputs.publisher }}.aldo-ai-vscode"
+            echo "- **Version**: ${{ steps.ver.outputs.version }}"
+            echo "- **License**: FSL-1.1-ALv2"
+            echo "- **Mode**: ${{ inputs.dry_run == 'true' && 'dry-run (.vsix only, uploaded as artefact)' || 'REAL (vsce publish to Marketplace)' }}"
+            echo "- **Target**: https://marketplace.visualstudio.com/"
+            echo ""
+            echo "### .vsix contents"
+            echo '```'
+            pnpm exec vsce ls --no-dependencies 2>&1 | head -30 || true
+            echo '```'
+            echo ""
+            echo "Sideload the .vsix locally with:"
+            echo '```sh'
+            echo "code --install-extension aldo-ai-vscode-${{ steps.ver.outputs.version }}.vsix"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish (real)
+        if: ${{ inputs.dry_run == 'false' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "${VSCE_PAT}" ]; then
+            echo "::error::VSCE_PAT secret is not configured on this repo."
+            echo "::error::Generate a PAT at https://dev.azure.com (Marketplace > Manage scope) and add it as VSCE_PAT."
+            exit 1
+          fi
+          pnpm exec vsce publish --no-dependencies --packagePath aldo-ai-vscode-${{ steps.ver.outputs.version }}.vsix

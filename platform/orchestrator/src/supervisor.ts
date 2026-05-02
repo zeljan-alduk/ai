@@ -6,6 +6,7 @@ import { runDebate } from './strategies/debate.js';
 import { runIterative } from './strategies/iterative.js';
 import { runParallel } from './strategies/parallel.js';
 import { runSequential } from './strategies/sequential.js';
+import { TerminationController } from './termination.js';
 import {
   CompositeDepthExceededError,
   CompositeSpecError,
@@ -104,6 +105,13 @@ export class Supervisor {
       invocations.push(inv);
     }
 
+    // Wave-17: declarative termination controller. The Supervisor owns
+    // the lifecycle so every strategy sees the same instance and the
+    // same emit hook. When the spec carries no `termination:` block we
+    // construct an empty controller — strategies then see `enabled=false`
+    // and skip their post-child checks (preserves pre-17 behaviour).
+    const termination = new TerminationController(spec.termination);
+
     const deps: SupervisorDeps = {
       runtime: this.runtime,
       emit: (type, payload) => {
@@ -111,6 +119,7 @@ export class Supervisor {
       },
       ctx,
       maxParallelChildren: cap,
+      termination,
     };
 
     let result: OrchestrationResult;

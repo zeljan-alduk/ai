@@ -33,9 +33,9 @@ import {
   updateProject,
 } from '../projects-store.js';
 
-async function readJsonBody(c: Parameters<Parameters<Hono['post']>[1]>[0]): Promise<unknown> {
+async function readJsonBody(c: { req: { raw: Request } }): Promise<unknown> {
   try {
-    return await c.req.json();
+    return await c.req.raw.json();
   } catch {
     throw new HttpError(400, 'invalid_json', 'request body is not valid JSON');
   }

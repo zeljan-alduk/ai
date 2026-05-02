@@ -71,6 +71,13 @@ export interface MockChildRecord {
   readonly tenant: TenantId;
   readonly privacy: PrivacyTier;
   readonly compositeStrategy?: 'sequential' | 'parallel' | 'debate' | 'iterative';
+  /**
+   * Wave-17 — project assignment forwarded by the supervisor. The
+   * mock records it so tests can assert children inherit the
+   * supervisor's project_id, but never branches on it (the engine
+   * adapter does the actual SQL persistence).
+   */
+  readonly projectId?: string;
 }
 
 export interface MockHandlerCtx {

@@ -183,6 +183,12 @@ export async function copyTenantAgents(
       await store.promote(opts.toTenantId, row.name, row.version);
       continue;
     }
+    // Wave-17: copying within the platform context — we don't carry
+    // the source's project_id across tenant boundaries (project ids
+    // are per-tenant). The destination project assignment is left to
+    // the application layer to decide; passing no opts inserts SQL
+    // NULL and the next read will resolve through the default-
+    // project helper if the API needs it.
     await store.register(opts.toTenantId, row.spec, row.specYaml);
     copied += 1;
   }

@@ -16,6 +16,7 @@ import type {
   RunOverrides,
   TenantId,
   ToolCallPart,
+  ToolDescriptor,
   ToolHost,
   ToolRef,
   ToolResult,
@@ -195,6 +196,24 @@ export class LeafAgentRun implements InternalAgentRun {
   private turnInFlight = false;
   private readonly pending: QueuedMessage[] = [];
 
+  /**
+   * Per-run cache for tool schemas. We introspect the ToolHost (which
+   * fans out to MCP servers' `list_tools`) once on the first turn and
+   * reuse the resolved ToolSchema[] across every subsequent turn — the
+   * spec is immutable for the life of a run and MCP server schemas
+   * don't change mid-run, so re-listing on every turn would be pure
+   * waste. Cleared only when the run is closed.
+   */
+  private toolSchemaCache?: readonly ToolSchema[];
+
+  /**
+   * Tools we've already logged a fall-back warning for on this run.
+   * Keyed by the public tool name (`server.tool` for MCP, `ref` for
+   * native). Prevents the same "no schema, falling back to {type:object}"
+   * warning from spamming the run-event log on every turn.
+   */
+  private readonly schemaFallbackWarned = new Set<string>();
+
   constructor(opts: AgentRunOptions, deps: AgentRunDeps) {
     this.id = opts.id;
     if (opts.parent !== undefined) this.parent = opts.parent;
@@ -350,7 +369,7 @@ export class LeafAgentRun implements InternalAgentRun {
         await this.maybePauseAt('before_model_call', this.ref.name, 'model_call', beforeCp);
         if (this.cancelled) return;
 
-        const tools = buildToolSchemas(this.spec);
+        const tools = await this.resolveToolSchemas();
         const req: CompletionRequest = {
           messages: [...this.messages],
           ...(tools.length > 0 ? { tools } : {}),
@@ -572,6 +591,127 @@ export class LeafAgentRun implements InternalAgentRun {
     } finally {
       this.turnInFlight = false;
     }
+  }
+
+  /**
+   * Build the per-turn ToolSchema[] handed to the model gateway.
+   *
+   * The agent spec lists tools as opaque names (`server.tool` for MCP,
+   * `ref` for native). Without an inputSchema the model has to guess
+   * argument shape — which it does, badly. So before the first turn we
+   * call `toolHost.listTools()` once per declared MCP server (and once
+   * for native), capture the JSON schema each MCP server returned via
+   * `list_tools`, and zip it back onto the spec's allow-list.
+   *
+   * Result is cached on the run for the remainder of its life — the
+   * spec is immutable, server schemas don't change mid-run.
+   *
+   * Defensive: if a server is unreachable, returns no descriptors, or
+   * a tool's schema is missing/invalid, we fall back to the v0
+   * placeholder (`{type: 'object'}`) and warn once per tool. Never
+   * crashes the run — a missing schema degrades gracefully to the
+   * pre-introspection behaviour.
+   *
+   * LLM-agnostic: the resolved schema is JSON Schema. The gateway maps
+   * it onto whatever the chosen provider expects.
+   */
+  private async resolveToolSchemas(): Promise<readonly ToolSchema[]> {
+    if (this.toolSchemaCache !== undefined) return this.toolSchemaCache;
+
+    // Group native tools and MCP servers up front. We always emit one
+    // entry per declared tool — even if the host's listTools comes back
+    // empty — so the model still sees the tool exists (it just has the
+    // {type:object} placeholder). This matches the pre-introspection
+    // contract and keeps the change purely additive.
+    const out: ToolSchema[] = [];
+
+    // Native tools — single listTools() call; the host implementation
+    // decides what counts as native. We index by descriptor.name so a
+    // descriptor with a richer schema overrides the placeholder.
+    let nativeIndex: Map<string, unknown> = new Map();
+    if (this.spec.tools.native.length > 0) {
+      try {
+        const descriptors = await this.deps.toolHost.listTools();
+        nativeIndex = indexNativeDescriptors(descriptors);
+      } catch (err) {
+        // Hosts are allowed to throw (e.g. no native introspection).
+        // Don't crash the run — fall back to placeholders below.
+        const e = err instanceof Error ? err : new Error(String(err));
+        this.emit({
+          type: 'tool.schema_introspection_failed',
+          at: now(),
+          payload: { source: 'native', message: e.message },
+        } as unknown as RunEvent);
+      }
+    }
+    for (const n of this.spec.tools.native) {
+      const schema = pickInputSchema(nativeIndex.get(n.ref));
+      if (schema === undefined) this.warnSchemaFallback(n.ref);
+      out.push({
+        name: n.ref,
+        description: `native tool ${n.ref}`,
+        inputSchema: schema ?? { type: 'object' },
+      });
+    }
+
+    // MCP tools — one listTools() call per declared server. We dedupe
+    // by server so two agents using the same server within a run don't
+    // pay the round-trip twice (the cache is per-run-per-server here;
+    // a per-process cache lives in whatever ToolHost impl wires the
+    // SDK client).
+    const seenServers = new Set<string>();
+    const serverIndex = new Map<string, Map<string, unknown>>();
+    for (const m of this.spec.tools.mcp) {
+      if (seenServers.has(m.server)) continue;
+      seenServers.add(m.server);
+      try {
+        const descriptors = await this.deps.toolHost.listTools(m.server);
+        serverIndex.set(m.server, indexMcpDescriptors(descriptors, m.server));
+      } catch (err) {
+        const e = err instanceof Error ? err : new Error(String(err));
+        this.emit({
+          type: 'tool.schema_introspection_failed',
+          at: now(),
+          payload: { source: 'mcp', server: m.server, message: e.message },
+        } as unknown as RunEvent);
+        serverIndex.set(m.server, new Map());
+      }
+    }
+    for (const m of this.spec.tools.mcp) {
+      const idx = serverIndex.get(m.server) ?? new Map<string, unknown>();
+      for (const tool of m.allow) {
+        const publicName = `${m.server}.${tool}`;
+        // MCP descriptors may use either the bare name (`fs.read`) or
+        // the qualified name we synthesise (`aldo-fs.fs.read`).
+        // Accept either; descriptor's own `name` is authoritative.
+        const desc = idx.get(tool) ?? idx.get(publicName);
+        const schema = pickInputSchema(desc);
+        const description = pickDescription(desc) ?? `mcp tool ${tool} on ${m.server}`;
+        if (schema === undefined) this.warnSchemaFallback(publicName);
+        out.push({
+          name: publicName,
+          description,
+          inputSchema: schema ?? { type: 'object' },
+        });
+      }
+    }
+
+    this.toolSchemaCache = out;
+    return out;
+  }
+
+  /** Emit a one-shot warning per tool when we fall back to {type:object}. */
+  private warnSchemaFallback(toolName: string): void {
+    if (this.schemaFallbackWarned.has(toolName)) return;
+    this.schemaFallbackWarned.add(toolName);
+    this.emit({
+      type: 'tool.schema_fallback',
+      at: now(),
+      payload: {
+        tool: toolName,
+        reason: 'no inputSchema returned by host; using {type:object} placeholder',
+      },
+    } as unknown as RunEvent);
   }
 
   private buildCallContext(): CallContext {
@@ -929,27 +1069,69 @@ function renderSystemPrompt(spec: AgentSpec): string {
   return base + varLine;
 }
 
-function buildToolSchemas(spec: AgentSpec): ToolSchema[] {
-  // v0: we don't actually introspect MCP servers; we expose declared native
-  // tools as opaque names. TODO(v1): resolve tool schemas via ToolHost.listTools.
-  const out: ToolSchema[] = [];
-  for (const n of spec.tools.native) {
-    out.push({
-      name: n.ref,
-      description: `native tool ${n.ref}`,
-      inputSchema: { type: 'object' },
-    });
+/**
+ * Build a name → descriptor index for native tools the host advertises.
+ * The descriptor's own `source: 'native'` filter is honored so a host
+ * that returns mixed native + MCP descriptors from a no-arg listTools()
+ * doesn't accidentally cross-pollinate the MCP lookup table.
+ */
+function indexNativeDescriptors(
+  descriptors: readonly ToolDescriptor[],
+): Map<string, ToolDescriptor> {
+  const idx = new Map<string, ToolDescriptor>();
+  for (const d of descriptors) {
+    if (d.source !== undefined && d.source !== 'native') continue;
+    idx.set(d.name, d);
   }
-  for (const m of spec.tools.mcp) {
-    for (const tool of m.allow) {
-      out.push({
-        name: `${m.server}.${tool}`,
-        description: `mcp tool ${tool} on ${m.server}`,
-        inputSchema: { type: 'object' },
-      });
+  return idx;
+}
+
+/**
+ * Build a name → descriptor index for MCP tools advertised by `server`.
+ * We accept both the bare tool name (`fs.read`) and the qualified form
+ * (`aldo-fs.fs.read`) — different host implementations strip or keep
+ * the server prefix and we don't want the lookup to depend on which
+ * convention this host happens to use.
+ */
+function indexMcpDescriptors(
+  descriptors: readonly ToolDescriptor[],
+  server: string,
+): Map<string, ToolDescriptor> {
+  const idx = new Map<string, ToolDescriptor>();
+  const prefix = `${server}.`;
+  for (const d of descriptors) {
+    if (d.source !== undefined && d.source !== 'mcp') continue;
+    if (d.mcpServer !== undefined && d.mcpServer !== server) continue;
+    idx.set(d.name, d);
+    if (d.name.startsWith(prefix)) {
+      idx.set(d.name.slice(prefix.length), d);
+    } else {
+      idx.set(`${prefix}${d.name}`, d);
     }
   }
-  return out;
+  return idx;
+}
+
+/**
+ * Pull a usable JSON Schema out of a descriptor. Accepts:
+ *   - `{type: 'object', ...}` returned by zod-to-json-schema and friends
+ *   - any object with at least one key (we don't validate JSON Schema
+ *     conformance — that's the gateway/provider's job)
+ * Returns `undefined` for missing/null/non-object values, which causes
+ * the caller to fall back to `{type: 'object'}` and warn once.
+ */
+function pickInputSchema(desc: unknown): unknown | undefined {
+  if (desc === undefined || desc === null) return undefined;
+  const schema = (desc as { inputSchema?: unknown }).inputSchema;
+  if (schema === undefined || schema === null) return undefined;
+  if (typeof schema !== 'object') return undefined;
+  return schema;
+}
+
+function pickDescription(desc: unknown): string | undefined {
+  if (desc === undefined || desc === null) return undefined;
+  const d = (desc as { description?: unknown }).description;
+  return typeof d === 'string' && d.length > 0 ? d : undefined;
 }
 
 function resolveToolRef(spec: AgentSpec, toolName: string): ToolRef {

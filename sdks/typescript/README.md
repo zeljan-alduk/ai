@@ -4,6 +4,11 @@ Official TypeScript / JavaScript SDK for the [ALDO AI](https://ai.aldo.tech)
 control plane. LLM-agnostic agent orchestration with replayable runs,
 eval-gated promotion, and platform-enforced privacy tiers.
 
+> **Status: 0.1.0.** Licensed under
+> [FSL-1.1-ALv2](https://github.com/aldo-tech-labs/aldo-ai/blob/main/LICENSE)
+> (Functional Source License, Apache-2.0 Future). Changelog:
+> [`CHANGELOG.md`](./CHANGELOG.md).
+
 ## Install
 
 ```bash
@@ -13,6 +18,12 @@ pnpm add @aldo-ai/sdk
 # or
 yarn add @aldo-ai/sdk
 ```
+
+> **Note.** The first `npm install @aldo-ai/sdk` lands once the
+> `release-typescript-sdk.yml` workflow runs with `dry_run=false` and
+> an `NPM_PUBLISH_TOKEN` secret configured. Until then, link the
+> in-repo workspace package or pull the dry-run tarball that the
+> workflow attaches.
 
 Requires Node 18+ (uses the global `fetch`). Works in browsers, Cloudflare Workers,
 Bun, Deno, and any other runtime with a Fetch implementation.
@@ -96,4 +107,4 @@ the platform API your key is already authorised for.
 
 ## License
 
-FSL-1.1-ALv2 (pre-publish — see top-level [LICENSING.md](https://github.com/aldo-tech-labs/aldo-ai/blob/main/LICENSING.md)).
+FSL-1.1-ALv2 — see top-level [LICENSING.md](https://github.com/aldo-tech-labs/aldo-ai/blob/main/LICENSING.md) for the plain-English summary, or [LICENSE](https://github.com/aldo-tech-labs/aldo-ai/blob/main/LICENSE) for the canonical text.

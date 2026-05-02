@@ -57,6 +57,12 @@ export { resolveChildPrivacy } from './privacy.js';
 
 export { evalTerminate, type JsonpathEvalResult } from './jsonpath.js';
 
+export {
+  TerminationController,
+  type TerminationDecision,
+  type TerminationReason,
+} from './termination.js';
+
 export { runSequential } from './strategies/sequential.js';
 export { runParallel } from './strategies/parallel.js';
 export { runDebate } from './strategies/debate.js';

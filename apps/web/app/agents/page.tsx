@@ -24,10 +24,11 @@ import {
 } from '@/components/agents/gallery-filters';
 import { GalleryFiltersUi } from '@/components/agents/gallery-filters-ui';
 import { ErrorView } from '@/components/error-boundary';
+import { ProjectFilterBanner } from '@/components/layout/project-filter-banner';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { boundedAll, getAgent, listAgents, listRuns } from '@/lib/api';
+import { boundedAll, getAgent, listAgents, listProjects, listRuns } from '@/lib/api';
 import type { AgentSummary, PrivacyTier, RunStatus } from '@aldo-ai/api-contract';
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,13 @@ interface SearchParams {
   composite?: string;
   q?: string;
   cursor?: string;
+  /**
+   * Wave-17 (Tier 2.5) — when present, server filters agents to one
+   * project. The slug is opaque on the client; the API resolves it to
+   * the row's `project_id`. Falls back to "all projects in this
+   * tenant" when omitted.
+   */
+  project?: string;
 }
 
 const PRIVACY_TIERS: ReadonlyArray<PrivacyTier> = ['public', 'internal', 'sensitive'];
@@ -63,13 +71,43 @@ export default async function AgentsPage({
 }) {
   const sp = await searchParams;
 
+  // Wave-17 — `?project=<slug>` scopes the registry list to a single
+  // project. Pre-retrofit clients (no project param) get the legacy
+  // tenant-wide list, unchanged.
+  const projectSlug = sp.project?.trim() ? sp.project.trim() : undefined;
+
   let listed: Awaited<ReturnType<typeof listAgents>> | null = null;
+  let projectName: string | undefined;
   let error: unknown = null;
   try {
-    listed = await listAgents({ limit: 200 });
+    const [agentsResp, projectsResp] = await Promise.all([
+      listAgents({
+        limit: 200,
+        ...(projectSlug !== undefined ? { project: projectSlug } : {}),
+      }),
+      // Best-effort — only used for the banner display name. A 4xx/5xx
+      // here just means the banner shows the slug instead of the name.
+      projectSlug !== undefined ? listProjects().catch(() => null) : Promise.resolve(null),
+    ]);
+    listed = agentsResp;
+    if (projectsResp && projectSlug !== undefined) {
+      projectName = projectsResp.projects.find((p) => p.slug === projectSlug)?.name;
+    }
   } catch (err) {
     error = err;
   }
+
+  // Build the "show all" link by stripping the project param while
+  // preserving every other filter the user set.
+  const clearHref = (() => {
+    const next = new URLSearchParams();
+    if (sp.team) next.set('team', sp.team);
+    if (sp.tier) next.set('tier', sp.tier);
+    if (sp.composite) next.set('composite', sp.composite);
+    if (sp.q) next.set('q', sp.q);
+    const qs = next.toString();
+    return qs.length === 0 ? '/agents' : `/agents?${qs}`;
+  })();
 
   if (error) {
     return (
@@ -133,6 +171,14 @@ export default async function AgentsPage({
         title="Agents"
         description="Versioned, eval-gated agent specs. Cards show team, privacy tier, recent runs, and composite affinity."
       />
+      {projectSlug !== undefined ? (
+        <ProjectFilterBanner
+          projectSlug={projectSlug}
+          projectName={projectName}
+          clearHref={clearHref}
+          entityNoun="agents"
+        />
+      ) : null}
       {listed.agents.length === 0 ? (
         <EmptyState
           title="No agents in this tenant yet"

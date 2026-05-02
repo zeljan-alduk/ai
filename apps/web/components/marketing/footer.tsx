@@ -32,6 +32,9 @@ export function MarketingFooter() {
           <Link className="transition-colors hover:text-fg" href="/changelog">
             Changelog
           </Link>
+          <Link className="transition-colors hover:text-fg" href="/status">
+            Status
+          </Link>
           <span className="text-fg-faint">© ALDO TECH LABS</span>
           <a className="transition-colors hover:text-fg" href={`mailto:${CONTACT_EMAIL}`}>
             Contact

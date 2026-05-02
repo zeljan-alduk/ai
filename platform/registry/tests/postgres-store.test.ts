@@ -57,6 +57,9 @@ const allTenantLabels = [
   'seed',
   'copy-src',
   'copy-dst',
+  // Wave-17 — project_id retrofit suite tenants.
+  'proj',
+  'proj-default-only',
 ];
 
 const clientP = (async () => {
@@ -66,11 +69,25 @@ const clientP = (async () => {
   // the canonical default tenant (00000000-…). Tenants(id) is TEXT so
   // these arbitrary string ids fit cleanly.
   for (const label of allTenantLabels) {
+    const tid = tenantId(label);
     await c.query(
       `INSERT INTO tenants (id, slug, name, created_at)
        VALUES ($1, $2, $2, now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantId(label), `test-${label}`],
+      [tid, `test-${label}`],
+    );
+    // Wave-17: migration 019 backfills a Default project for every
+    // tenant that EXISTED at migration time. Test tenants are
+    // inserted AFTER migrate(); we mirror the signup-time seeder
+    // here so register()/list() observe a real Default project. The
+    // project_id is randomly generated (matching apps/api signup),
+    // not the deterministic formula — tests should not rely on the
+    // formula for new tenants.
+    await c.query(
+      `INSERT INTO projects (id, tenant_id, slug, name, description)
+       VALUES ($1, $2, 'default', 'Default', 'Test default project')
+       ON CONFLICT DO NOTHING`,
+      [`proj-default-${tid}`, tid],
     );
   }
   return c;
@@ -375,5 +392,231 @@ describe('InMemoryRegisteredAgentStore — same surface as Postgres', () => {
     await store.register('t-X', parsed.spec, yaml);
     expect(await store.get('t-Y', parsed.spec.identity.name)).toBeNull();
     expect(await store.getVersion('t-Y', parsed.spec.identity.name, '1.4.0')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave-17 — project_id retrofit on registered_agents (migration 020).
+//
+// Coverage:
+//   * register without projectId → row persists with project_id NULL
+//     (the store does NOT auto-resolve a default; that's the API
+//     route's job via getDefaultProjectIdForTenant).
+//   * register with projectId → row persists with the supplied id and
+//     surfaces it on every read shape (list/get/getVersion).
+//   * list({projectId}) filters to one project; list() unfiltered
+//     returns every agent in the tenant (additive contract).
+//   * moveToProject() relocates every version of an agent.
+//   * In-memory store mirrors the same semantics so test code that
+//     swaps it in for a SQL round-trip behaves identically.
+// ---------------------------------------------------------------------------
+
+describe('PostgresRegisteredAgentStore — project_id retrofit (wave-17)', () => {
+  it('persists explicit projectId and surfaces it on every read', async () => {
+    const client = await clientP;
+    const store = new PostgresRegisteredAgentStore({ client });
+    const yaml = await reviewerYaml();
+    const parsed = parseYaml(yaml);
+    if (!parsed.ok || parsed.spec === undefined) throw new Error('parse failed');
+
+    const T = tenantId('proj');
+    const renamed = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'p-explicit' } };
+    const renamedYaml = yaml.replace(/^\s+name:\s*[^\n]+/m, '  name: p-explicit');
+    // Use a real project row so the FK doesn't fail.
+    const projectId = `proj-explicit-${T}`;
+    await client.query(
+      `INSERT INTO projects (id, tenant_id, slug, name, description)
+       VALUES ($1, $2, 'explicit', 'Explicit', '')
+       ON CONFLICT DO NOTHING`,
+      [projectId, T],
+    );
+
+    const reg = await store.register(T, renamed, renamedYaml, { projectId });
+    expect(reg.projectId).toBe(projectId);
+
+    const got = await store.get(T, 'p-explicit');
+    expect(got?.projectId).toBe(projectId);
+
+    const getV = await store.getVersion(T, 'p-explicit', renamed.identity.version);
+    expect(getV?.projectId).toBe(projectId);
+
+    const list = await store.list(T);
+    expect(list.find((a) => a.name === 'p-explicit')?.projectId).toBe(projectId);
+  });
+
+  it('register without projectId persists SQL NULL (no auto-default at the store layer)', async () => {
+    const client = await clientP;
+    const store = new PostgresRegisteredAgentStore({ client });
+    const yaml = await reviewerYaml();
+    const parsed = parseYaml(yaml);
+    if (!parsed.ok || parsed.spec === undefined) throw new Error('parse failed');
+
+    const T = tenantId('proj');
+    const renamed = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'p-nullopt' } };
+    const renamedYaml = yaml.replace(/^\s+name:\s*[^\n]+/m, '  name: p-nullopt');
+
+    const reg = await store.register(T, renamed, renamedYaml);
+    expect(reg.projectId).toBeNull();
+
+    // Confirm the SQL row literally carries NULL — not the formula
+    // default — when the caller didn't supply one.
+    const raw = await client.query<{ project_id: string | null }>(
+      'SELECT project_id FROM registered_agents WHERE tenant_id = $1 AND name = $2',
+      [T, 'p-nullopt'],
+    );
+    expect(raw.rows[0]?.project_id ?? null).toBeNull();
+  });
+
+  it('list({projectId}) filters; list() unfiltered returns every tenant agent', async () => {
+    const client = await clientP;
+    const store = new PostgresRegisteredAgentStore({ client });
+    const yaml = await reviewerYaml();
+    const parsed = parseYaml(yaml);
+    if (!parsed.ok || parsed.spec === undefined) throw new Error('parse failed');
+
+    const T = tenantId('proj-default-only');
+    // Seed a second project alongside the harness's Default.
+    const teamProjectId = `proj-team-${T}`;
+    await client.query(
+      `INSERT INTO projects (id, tenant_id, slug, name, description)
+       VALUES ($1, $2, 'team', 'Team', '')
+       ON CONFLICT DO NOTHING`,
+      [teamProjectId, T],
+    );
+    const defaultProjectId = `proj-default-${T}`;
+
+    const a = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'a-flt' } };
+    const b = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'b-flt' } };
+    const c = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'c-flt' } };
+    const aYaml = yaml.replace(/^\s+name:\s*[^\n]+/m, '  name: a-flt');
+    const bYaml = yaml.replace(/^\s+name:\s*[^\n]+/m, '  name: b-flt');
+    const cYaml = yaml.replace(/^\s+name:\s*[^\n]+/m, '  name: c-flt');
+    await store.register(T, a, aYaml, { projectId: defaultProjectId });
+    await store.register(T, b, bYaml, { projectId: teamProjectId });
+    await store.register(T, c, cYaml, { projectId: teamProjectId });
+
+    // Unfiltered: every agent in the tenant — preserves pre-wave-17 shape.
+    const all = await store.list(T);
+    const allNames = all.map((r) => r.name);
+    expect(allNames).toContain('a-flt');
+    expect(allNames).toContain('b-flt');
+    expect(allNames).toContain('c-flt');
+
+    // Filtered to Default: only `a`.
+    const inDefault = await store.list(T, { projectId: defaultProjectId });
+    expect(inDefault.map((r) => r.name)).toEqual(['a-flt']);
+
+    // Filtered to Team: `b` and `c`.
+    const inTeam = await store.list(T, { projectId: teamProjectId });
+    expect(inTeam.map((r) => r.name).sort()).toEqual(['b-flt', 'c-flt']);
+
+    // Filter by a project with no rows in this tenant → empty.
+    const inGhost = await store.list(T, { projectId: 'proj-does-not-exist' });
+    expect(inGhost).toHaveLength(0);
+  });
+
+  it('moveToProject() relocates every version of one agent', async () => {
+    const client = await clientP;
+    const store = new PostgresRegisteredAgentStore({ client });
+    const yaml = await reviewerYaml();
+    const parsed = parseYaml(yaml);
+    if (!parsed.ok || parsed.spec === undefined) throw new Error('parse failed');
+
+    const T = tenantId('proj');
+    const fromId = `proj-mv-from-${T}`;
+    const toId = `proj-mv-to-${T}`;
+    for (const id of [fromId, toId]) {
+      await client.query(
+        `INSERT INTO projects (id, tenant_id, slug, name, description)
+         VALUES ($1, $2, $3, $3, '')
+         ON CONFLICT DO NOTHING`,
+        [id, T, id],
+      );
+    }
+
+    const base = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'p-move' } };
+    const baseYaml = yaml.replace(/^\s+name:\s*[^\n]+/m, '  name: p-move');
+    await store.register(T, base, baseYaml, { projectId: fromId });
+    await store.upsertVersion(T, bump(base, '1.5.0'), bumpYaml(baseYaml, '1.5.0'), {
+      projectId: fromId,
+    });
+    expect((await store.get(T, 'p-move'))?.projectId).toBe(fromId);
+
+    await store.moveToProject(T, 'p-move', toId);
+
+    expect((await store.get(T, 'p-move'))?.projectId).toBe(toId);
+    // Every version row was relocated, not just the pointer-current one.
+    const allVersions = await store.listAllVersions(T, 'p-move');
+    for (const v of allVersions) {
+      expect(v.projectId).toBe(toId);
+    }
+  });
+
+  it('upsertVersion with null projectId preserves an existing project assignment (COALESCE)', async () => {
+    const client = await clientP;
+    const store = new PostgresRegisteredAgentStore({ client });
+    const yaml = await reviewerYaml();
+    const parsed = parseYaml(yaml);
+    if (!parsed.ok || parsed.spec === undefined) throw new Error('parse failed');
+
+    const T = tenantId('proj');
+    const projectId = `proj-coalesce-${T}`;
+    await client.query(
+      `INSERT INTO projects (id, tenant_id, slug, name, description)
+       VALUES ($1, $2, 'coalesce', 'Coalesce', '')
+       ON CONFLICT DO NOTHING`,
+      [projectId, T],
+    );
+
+    const base = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'p-coal' } };
+    const baseYaml = yaml.replace(/^\s+name:\s*[^\n]+/m, '  name: p-coal');
+    await store.register(T, base, baseYaml, { projectId });
+    expect((await store.get(T, 'p-coal'))?.projectId).toBe(projectId);
+
+    // Re-upsert WITHOUT projectId — the existing assignment must survive.
+    // Mirrors the eval-gate's stage-then-promote pattern, where the
+    // staging step doesn't know (or care) about projects.
+    await store.upsertVersion(T, base, baseYaml);
+    expect((await store.get(T, 'p-coal'))?.projectId).toBe(projectId);
+  });
+});
+
+describe('InMemoryRegisteredAgentStore — project_id retrofit parity', () => {
+  it('mirrors the postgres store shape: create with/without projectId, list filtered, move', async () => {
+    const store = new InMemoryRegisteredAgentStore();
+    const yaml = await reviewerYaml();
+    const parsed = parseYaml(yaml);
+    if (!parsed.ok || parsed.spec === undefined) throw new Error('parse failed');
+
+    const T = 't-mem-proj';
+    const a = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'a-mem' } };
+    const b = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'b-mem' } };
+    const c = { ...parsed.spec, identity: { ...parsed.spec.identity, name: 'c-mem' } };
+
+    // Create with explicit project.
+    const regA = await store.register(T, a, yaml, { projectId: 'proj-1' });
+    expect(regA.projectId).toBe('proj-1');
+
+    // Create without project → null.
+    const regB = await store.register(T, b, yaml);
+    expect(regB.projectId).toBeNull();
+
+    // Another row in proj-1.
+    await store.register(T, c, yaml, { projectId: 'proj-1' });
+
+    // Unfiltered: all three.
+    expect((await store.list(T)).map((r) => r.name).sort()).toEqual(['a-mem', 'b-mem', 'c-mem']);
+
+    // Filtered to proj-1: a and c.
+    const inProj1 = await store.list(T, { projectId: 'proj-1' });
+    expect(inProj1.map((r) => r.name).sort()).toEqual(['a-mem', 'c-mem']);
+
+    // Move b into proj-2.
+    await store.moveToProject(T, 'b-mem', 'proj-2');
+    expect((await store.get(T, 'b-mem'))?.projectId).toBe('proj-2');
+
+    // Re-upsert b WITHOUT projectId preserves the assignment.
+    await store.upsertVersion(T, b, yaml);
+    expect((await store.get(T, 'b-mem'))?.projectId).toBe('proj-2');
   });
 });

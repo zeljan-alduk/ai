@@ -46,7 +46,22 @@ export interface RunEvent {
     | 'composite.child_completed'
     | 'composite.child_failed'
     | 'composite.usage_rollup'
-    | 'composite.iteration';
+    | 'composite.iteration'
+    /**
+     * Wave-17 declarative termination. Emitted by the orchestrator
+     * (in `@aldo-ai/orchestrator`) on the SUPERVISOR run's event
+     * stream when a `termination:` block trigger fires and the run
+     * is being short-circuited. Payload:
+     *
+     *   {
+     *     reason: 'maxTurns' | 'maxUsd' | 'textMention' | 'successRoles',
+     *     detail: { ... }   // rule-specific (e.g. { turns, limit }, { usd, cap })
+     *   }
+     *
+     * The terminal `run.completed` / `run.cancelled` event still
+     * follows; this one explains *why* the run ended where it did.
+     */
+    | 'run.terminated_by';
   readonly at: string;
   readonly payload: unknown;
 }

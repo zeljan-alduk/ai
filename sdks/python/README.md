@@ -5,9 +5,11 @@ platform. LLM-agnostic by construction: the SDK never references a
 provider name. You declare a capability class + privacy tier; the
 platform's gateway picks a model.
 
-> **Status: 0.1.0 — pre-publish.** The wire format mirrors
-> `@aldo-ai/api-contract` exactly. Same release cadence as the
-> control plane.
+> **Status: 0.1.0.** The wire format mirrors `@aldo-ai/api-contract`
+> exactly. Same release cadence as the control plane. Licensed under
+> [FSL-1.1-ALv2](https://github.com/aldo-tech-labs/aldo-ai/blob/main/LICENSE)
+> (Functional Source License, Apache-2.0 Future). Changelog:
+> [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## Install
 
@@ -15,8 +17,13 @@ platform's gateway picks a model.
 pip install aldo-ai
 ```
 
-> **Pre-publish.** Until the package lands on PyPI, install from a
-> local checkout: `pip install -e sdks/python` from the repo root.
+> **Note.** The first `pip install aldo-ai` lands once the
+> `release-python-sdk.yml` workflow runs with `dry_run=false` and a
+> `PYPI_API_TOKEN` secret configured. Until then, install from a local
+> checkout: `pip install -e sdks/python` from the repo root, or
+> install the TestPyPI build the dry-run workflow uploads:
+> `pip install --index-url https://test.pypi.org/simple/ \
+>     --extra-index-url https://pypi.org/simple/ aldo-ai`.
 
 ## 2-minute quickstart
 

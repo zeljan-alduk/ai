@@ -6,7 +6,12 @@
  * right one for their environment.
  */
 
-export type { RegisteredAgent, RegisteredAgentStore } from './types.js';
+export type {
+  ListOptions,
+  RegisterOptions,
+  RegisteredAgent,
+  RegisteredAgentStore,
+} from './types.js';
 export {
   InMemoryRegisteredAgentStore,
   RegisteredAgentNotFoundError,

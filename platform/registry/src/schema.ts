@@ -349,6 +349,22 @@ const compositeSchema = z
     }
   });
 
+/**
+ * Wave-17 declarative termination block. All four fields are
+ * optional; an empty `termination:` block (or omitting it) keeps the
+ * pre-17 implicit-termination behaviour. Snake-case at the YAML
+ * layer (`max_turns`, `max_usd`, `text_mention`, `success_roles`)
+ * with the loader translating to the camelCase runtime shape.
+ */
+const terminationSchema = z
+  .object({
+    max_turns: z.number().int().positive().optional(),
+    max_usd: z.number().nonnegative().optional(),
+    text_mention: z.string().min(1).optional(),
+    success_roles: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
 // --- top-level -------------------------------------------------------------
 
 export const agentV1YamlSchema = z
@@ -371,6 +387,8 @@ export const agentV1YamlSchema = z
     sandbox: sandboxSchema.optional(),
     /** Wave-9: optional, additive composite (multi-agent) specification. */
     composite: compositeSchema.optional(),
+    /** Wave-17: optional, additive declarative termination block. */
+    termination: terminationSchema.optional(),
   })
   .strict();
 

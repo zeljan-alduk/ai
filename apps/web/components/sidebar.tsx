@@ -1,6 +1,7 @@
 'use client';
 
 import { logoutAction } from '@/app/(auth)/actions';
+import { ProjectPicker } from '@/components/layout/project-picker';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { switchTenantAction } from '@/components/sidebar-actions';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -172,6 +173,11 @@ function SidebarBody({
         </div>
         {user ? <NotificationBell /> : null}
       </div>
+      {user ? (
+        <div className="border-b border-border px-3 py-2">
+          <ProjectPicker onPicked={onNavigate} />
+        </div>
+      ) : null}
       <nav aria-label="Primary" className="flex flex-col gap-0.5 p-2">
         {NAV.map((item) => {
           const active = item.match(pathname);

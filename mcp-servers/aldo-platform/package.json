@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "ALDO AI platform MCP server: expose agents, runs, datasets, and the run debugger to any MCP-compatible client.",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "FSL-1.1-ALv2",
   "main": "./src/index.ts",
   "bin": {
     "aldo-mcp-platform": "./dist/index.js"

@@ -113,6 +113,14 @@ function DocsSidebarReference() {
             Changelog
           </Link>
         </li>
+        <li>
+          <Link
+            href="/status"
+            className="block rounded px-2 py-1 text-fg-muted transition-colors hover:bg-bg-subtle/50 hover:text-fg"
+          >
+            System status
+          </Link>
+        </li>
       </ul>
     </div>
   );

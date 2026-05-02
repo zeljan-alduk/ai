@@ -28,6 +28,10 @@ interface ProjectRow {
   readonly archived_at: Date | string | null;
   readonly created_at: Date | string;
   readonly updated_at: Date | string;
+  // SqlRow constraint — pg's row shape is open at runtime, but we
+  // only consume the named columns above. The index signature lets
+  // ProjectRow satisfy `R extends SqlRow` on `db.query<ProjectRow>`.
+  readonly [k: string]: unknown;
 }
 
 export class ProjectSlugConflictError extends Error {
@@ -89,6 +93,35 @@ export async function getProjectById(
   );
   const row = res.rows[0];
   return row === undefined ? null : toWire(row);
+}
+
+/**
+ * Resolve the tenant's "Default" project id — the destination for any
+ * resource (agent, run, dataset, …) that's created without an explicit
+ * project_id. Wave-17 retrofit helper.
+ *
+ * Resolution path:
+ *   1. Slug lookup `WHERE tenant_id = $1 AND slug = 'default'`. Cheap
+ *      (covered by the unique index from migration 019). This catches
+ *      both the migration-time seed (formula-derived id) and signups
+ *      after the migration (random-UUID id from auth/routes.ts).
+ *   2. Returns null when the tenant has no Default project. Callers
+ *      MAY treat null as "skip the project_id assignment" (the column
+ *      is nullable in 020 specifically to keep this path
+ *      non-fatal). The migration backfilled every existing tenant's
+ *      agents to the Default project, so this only matters for
+ *      brand-new tenants in the unlikely event signup's
+ *      best-effort default-project seed failed.
+ */
+export async function getDefaultProjectIdForTenant(
+  db: SqlClient,
+  tenantId: string,
+): Promise<string | null> {
+  const res = await db.query<{ id: string }>(
+    "SELECT id FROM projects WHERE tenant_id = $1 AND slug = 'default' LIMIT 1",
+    [tenantId],
+  );
+  return res.rows[0]?.id ?? null;
 }
 
 export async function getProjectBySlug(

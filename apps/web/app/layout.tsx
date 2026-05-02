@@ -59,6 +59,7 @@ const MARKETING_PATHS: ReadonlyArray<string> = [
   '/changelog',
   '/sales',
   '/vs',
+  '/status',
 ];
 
 function isMarketingPath(pathname: string): boolean {

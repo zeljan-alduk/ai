@@ -36,6 +36,7 @@ import { getAuth, requireRole, requireScope } from '../auth/middleware.js';
 import {
   DEPTH_OVERFLOW_ID,
   bulkRunAction,
+  createRun,
   decodeCursor,
   getRun,
   listRunSubtree,
@@ -47,6 +48,7 @@ import {
 import type { Deps } from '../deps.js';
 import { HttpError, notFound, validationError } from '../middleware/error.js';
 import { emitActivity } from '../notifications.js';
+import { getDefaultProjectIdForTenant, getProjectBySlug } from '../projects-store.js';
 // Wave-16 — per-tenant monthly run quota. enforceMonthlyQuota throws
 // HTTP 402 `quota_exceeded` if the tenant is over their plan cap.
 import { enforceMonthlyQuota } from '../quotas.js';
@@ -150,6 +152,42 @@ export function runsRoutes(deps: Deps): Hono {
     }
     const id = `run_${randomUUID()}`;
     const startedAt = new Date().toISOString();
+
+    // Wave-17 — resolve the run's project_id BEFORE persistence.
+    // Explicit slug → look up + 404 on miss; absent → tenant's
+    // Default project. The store accepts a null projectId too; we
+    // only fall through to that case when the signup-time
+    // default-project seed somehow failed to insert (unusual; a
+    // boot-log warning fires when it does). Mirrors the agents
+    // retrofit shape in /v1/agents.
+    let projectId: string | null = null;
+    if (parsed.data.project !== undefined) {
+      const proj = await getProjectBySlug(deps.db, { slug: parsed.data.project, tenantId });
+      if (proj === null) throw notFound(`project not found: ${parsed.data.project}`);
+      projectId = proj.id;
+    } else {
+      projectId = await getDefaultProjectIdForTenant(deps.db, tenantId);
+    }
+
+    // Wave-17 — persist the run row with project_id. Pre-17 the
+    // route returned a queued envelope without writing to `runs`
+    // (the engine's recordRunStart was the first writer). We now
+    // pre-record the row so /v1/runs filtered by project surfaces
+    // it immediately, and so the engine's later upsert (which
+    // doesn't carry projectId) leaves the value alone via the
+    // COALESCE-on-conflict in createRun. Best-effort: a write
+    // failure here is logged but never blocks the 202 response —
+    // the engine's recordRunStart is still the source of truth.
+    await createRun(deps.db, {
+      id,
+      tenantId,
+      agentName: spec.identity.name,
+      agentVersion: spec.identity.version,
+      status: 'queued',
+      startedAt,
+      projectId,
+    }).catch((err) => console.error('[runs] createRun pre-record failed', err));
+
     // Wave-13 — activity feed entry. Best-effort; a failure here must
     // never block the run from being created. The engine's
     // NotificationSink takes over for terminal lifecycle events.
@@ -163,6 +201,7 @@ export function runsRoutes(deps: Deps): Hono {
         agentName: spec.identity.name,
         agentVersion: spec.identity.version,
         runId: id,
+        ...(projectId !== null ? { projectId } : {}),
       },
     }).catch((err) => console.error('[notifications] emitActivity failed', err));
     const body = CreateRunResponse.parse({
@@ -190,10 +229,24 @@ export function runsRoutes(deps: Deps): Hono {
     if (q.cursor !== undefined && cursor === null) {
       throw validationError('invalid cursor');
     }
+    // Wave-17: when the client passes `?project=<slug>`, resolve
+    // slug → project_id and forward as a list filter. Unknown slug
+    // → 404 (we never silently fall back to "all" — that would
+    // mask UI bugs). No `project` param → list every run in the
+    // tenant (preserves the pre-picker client behaviour).
+    let projectIdFilter: string | undefined;
+    if (q.project !== undefined) {
+      const project = await getProjectBySlug(deps.db, { slug: q.project, tenantId });
+      if (project === null) {
+        throw notFound(`project not found: ${q.project}`);
+      }
+      projectIdFilter = project.id;
+    }
     const result = await listRuns(deps.db, {
       tenantId,
       ...(q.agentName !== undefined ? { agentName: q.agentName } : {}),
       ...(q.status !== undefined ? { status: q.status } : {}),
+      ...(projectIdFilter !== undefined ? { projectId: projectIdFilter } : {}),
       limit: q.limit,
       ...(cursor !== undefined && cursor !== null ? { cursor } : {}),
     });
@@ -243,8 +296,22 @@ export function runsRoutes(deps: Deps): Hono {
     if (parsed.data.cursor !== undefined && cursor === null) {
       throw validationError('invalid cursor');
     }
+    // Wave-17 project filter mirrors the list route: slug → project_id;
+    // unknown slug → 404 (don't silently mask UI bugs).
+    let projectIdFilter: string | undefined;
+    if (parsed.data.project !== undefined) {
+      const project = await getProjectBySlug(deps.db, {
+        slug: parsed.data.project,
+        tenantId,
+      });
+      if (project === null) {
+        throw notFound(`project not found: ${parsed.data.project}`);
+      }
+      projectIdFilter = project.id;
+    }
     const result = await searchRuns(deps.db, {
       tenantId,
+      ...(projectIdFilter !== undefined ? { projectId: projectIdFilter } : {}),
       ...(parsed.data.q !== undefined ? { q: parsed.data.q } : {}),
       ...(parsed.data.status !== undefined ? { statuses: parsed.data.status } : {}),
       ...(parsed.data.agent !== undefined ? { agents: parsed.data.agent } : {}),

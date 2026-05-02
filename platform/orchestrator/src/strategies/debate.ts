@@ -60,6 +60,26 @@ export async function runDebate(
     };
   }
 
+  // Wave-17: feed every party summary through the termination
+  // controller in declaration order. If any rule fires, skip the
+  // aggregator phase and return the parties' outputs as a partial
+  // success — debate's contract (collect + judge) is broken when an
+  // operator-set ceiling kicks in, so we surface what we have.
+  for (const s of summaries) {
+    if (s === undefined) continue;
+    const decision = deps.termination.recordChild(s);
+    if (decision !== null) {
+      deps.emit('run.terminated_by', decision);
+      return {
+        ok: true,
+        output: summaries.filter(Boolean).map((c) => c.output),
+        children: summaries.filter(Boolean),
+        strategy: 'debate',
+        totalUsage: sumUsage(summaries.filter(Boolean).map((c) => c.usage)),
+      };
+    }
+  }
+
   const firstFailure = summaries.find((s) => !s.ok);
   if (firstFailure !== undefined) {
     throw toCompositeError(firstFailure);
@@ -86,6 +106,15 @@ export async function runDebate(
   summaries.push(aggSummary);
   if (!aggSummary.ok) {
     throw toCompositeError(aggSummary);
+  }
+
+  // Wave-17: the aggregator is itself a child run — feed it through
+  // the controller so successRoles=['aggregator'] (or a textMention
+  // sentinel emitted by the judge) closes the run with an explicit
+  // termination event.
+  const aggDecision = deps.termination.recordChild(aggSummary);
+  if (aggDecision !== null) {
+    deps.emit('run.terminated_by', aggDecision);
   }
 
   return {

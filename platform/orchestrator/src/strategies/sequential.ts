@@ -45,6 +45,22 @@ export async function runSequential(
       throw toCompositeError(summary);
     }
     cursor = summary.output;
+
+    // Wave-17 declarative termination — check after each completed
+    // child. A fired rule short-circuits the remaining subagents and
+    // the run reports ok=true (these are operator-set ceilings, not
+    // child failures).
+    const decision = deps.termination.recordChild(summary);
+    if (decision !== null) {
+      deps.emit('run.terminated_by', decision);
+      return {
+        ok: true,
+        output: cursor,
+        children: summaries,
+        strategy: 'sequential',
+        totalUsage: sumUsage(summaries.map((c) => c.usage)),
+      };
+    }
   }
 
   return {

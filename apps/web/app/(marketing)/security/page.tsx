@@ -128,6 +128,42 @@ export default function SecurityPage() {
       </section>
 
       <section className="mt-12 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900">Related docs</h2>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          The operational and customer-facing docs that complement this page:
+        </p>
+        <ul className="mt-3 flex flex-col gap-2 text-sm text-slate-600">
+          <li>
+            <a
+              className="font-medium text-slate-900 hover:underline"
+              href="https://github.com/zeljan-alduk/ai/blob/main/docs/data-retention.md"
+            >
+              Data retention policy
+            </a>{' '}
+            — what we store, how long for, sub-processors, deletion workflow.
+          </li>
+          <li>
+            <a
+              className="font-medium text-slate-900 hover:underline"
+              href="https://github.com/zeljan-alduk/ai/blob/main/docs/support-intake.md"
+            >
+              Support intake + SLAs
+            </a>{' '}
+            — how to reach us, severity matrix, response times per plan.
+          </li>
+          <li>
+            <a
+              className="font-medium text-slate-900 hover:underline"
+              href="https://github.com/zeljan-alduk/ai/blob/main/docs/runbook.md"
+            >
+              Operations runbook
+            </a>{' '}
+            — incident triage and recovery procedures (SRE-facing, public for transparency).
+          </li>
+        </ul>
+      </section>
+
+      <section className="mt-12 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold tracking-tight text-slate-900">
           Responsible disclosure
         </h2>

@@ -2,7 +2,7 @@
   "name": "@aldo-ai/sdk",
   "version": "0.1.0",
   "description": "Official TypeScript / JavaScript SDK for the ALDO AI control plane — LLM-agnostic agent orchestration.",
-  "license": "FSL-1.1-ALv2-pre-publish",
+  "license": "FSL-1.1-ALv2",
   "author": "ALDO TECH LABS",
   "homepage": "https://ai.aldo.tech",
   "repository": {

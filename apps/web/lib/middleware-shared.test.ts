@@ -52,6 +52,9 @@ describe('isPublicPath', () => {
       expect(isPublicPath('/design-partner')).toBe(true);
       expect(isPublicPath('/docs')).toBe(true);
     });
+    it('treats /status as public', () => {
+      expect(isPublicPath('/status')).toBe(true);
+    });
     it('treats query strings on marketing routes as public (e.g. /pricing?plan=team)', () => {
       expect(isPublicPath('/pricing?plan=team')).toBe(true);
       expect(isPublicPath('/design-partner?ref=hn')).toBe(true);

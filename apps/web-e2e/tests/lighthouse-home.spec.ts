@@ -97,17 +97,17 @@ test.describe('lighthouse · marketing surface', () => {
 /**
  * Known-failures tolerance list. The recent design-token migration
  * (semantic tokens for dark-mode support) introduced color-contrast
- * regressions on the marketing pages, plus a `scrollable-region-
- * focusable` issue on the architecture diagram (an SVG without a
- * keyboard-focus affordance). Those are real and tracked as a
- * follow-up a11y-pass task; the e2e gate ignores them but fails
- * loudly on anything new — so a *new* a11y regression still trips
- * CI, but an existing one doesn't keep blocking deploys.
+ * regressions on the marketing pages. That's tracked as a follow-up
+ * a11y-pass task; the e2e gate ignores it but fails loudly on
+ * anything new — so a *new* a11y regression still trips CI, but an
+ * existing one doesn't keep blocking deploys.
+ *
+ * Removed in this wave: `scrollable-region-focusable`. The
+ * architecture-diagram SVG container now exposes tabindex=0,
+ * role=region, and an aria-label, so axe-core no longer flags it.
+ * If a regression brings the rule back, the gate should fail.
  */
-const ACKNOWLEDGED_VIOLATION_IDS: ReadonlySet<string> = new Set([
-  'color-contrast',
-  'scrollable-region-focusable',
-]);
+const ACKNOWLEDGED_VIOLATION_IDS: ReadonlySet<string> = new Set(['color-contrast']);
 
 test.describe('axe-core · marketing surface', () => {
   for (const r of AXE_ROUTES) {

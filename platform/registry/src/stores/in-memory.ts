@@ -12,13 +12,25 @@
  */
 
 import type { AgentSpec } from '@aldo-ai/types';
-import type { RegisteredAgent, RegisteredAgentStore } from './types.js';
+import type {
+  ListOptions,
+  RegisterOptions,
+  RegisteredAgent,
+  RegisteredAgentStore,
+} from './types.js';
 
 interface VersionRecord {
   readonly spec: AgentSpec;
   readonly specYaml: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /**
+   * Wave-17 — mirrors the `project_id` column on registered_agents.
+   * Null when the caller didn't supply one (matches the SQL default
+   * post-020 backfill, where pre-retrofit rows surface as NULL until
+   * the application resolves them to the Default project).
+   */
+  readonly projectId: string | null;
 }
 
 export class InMemoryRegisteredAgentStore implements RegisteredAgentStore {
@@ -29,7 +41,7 @@ export class InMemoryRegisteredAgentStore implements RegisteredAgentStore {
 
   constructor(private readonly now: () => Date = () => new Date()) {}
 
-  async list(tenantId: string): Promise<readonly RegisteredAgent[]> {
+  async list(tenantId: string, opts: ListOptions = {}): Promise<readonly RegisteredAgent[]> {
     const tenantPtrs = this.pointers.get(tenantId);
     if (tenantPtrs === undefined) return [];
     const out: RegisteredAgent[] = [];
@@ -40,6 +52,9 @@ export class InMemoryRegisteredAgentStore implements RegisteredAgentStore {
       if (v === null || v === undefined) continue;
       const rec = this.rows.get(tenantId)?.get(name)?.get(v);
       if (rec === undefined) continue;
+      // Wave-17: when projectId filter is set, drop rows that don't
+      // match. Unset filter keeps the pre-wave-17 "all agents" shape.
+      if (opts.projectId !== undefined && rec.projectId !== opts.projectId) continue;
       out.push(toRegisteredAgent(tenantId, name, v, rec));
     }
     return out;
@@ -78,8 +93,13 @@ export class InMemoryRegisteredAgentStore implements RegisteredAgentStore {
     return toRegisteredAgent(tenantId, name, version, rec);
   }
 
-  async register(tenantId: string, spec: AgentSpec, specYaml: string): Promise<RegisteredAgent> {
-    const rec = this.upsertVersionSync(tenantId, spec, specYaml);
+  async register(
+    tenantId: string,
+    spec: AgentSpec,
+    specYaml: string,
+    opts: RegisterOptions = {},
+  ): Promise<RegisteredAgent> {
+    const rec = this.upsertVersionSync(tenantId, spec, specYaml, opts.projectId ?? null);
     this.setPointer(tenantId, spec.identity.name, spec.identity.version);
     return toRegisteredAgent(tenantId, spec.identity.name, spec.identity.version, rec);
   }
@@ -88,9 +108,21 @@ export class InMemoryRegisteredAgentStore implements RegisteredAgentStore {
     tenantId: string,
     spec: AgentSpec,
     specYaml: string,
+    opts: RegisterOptions = {},
   ): Promise<RegisteredAgent> {
-    const rec = this.upsertVersionSync(tenantId, spec, specYaml);
+    const rec = this.upsertVersionSync(tenantId, spec, specYaml, opts.projectId ?? null);
     return toRegisteredAgent(tenantId, spec.identity.name, spec.identity.version, rec);
+  }
+
+  async moveToProject(tenantId: string, name: string, projectId: string): Promise<void> {
+    // Wave-17: rehome every version of `name` (within `tenantId`).
+    // Mirrors the postgres store's UPDATE without a WHERE-version clause.
+    const versions = this.rows.get(tenantId)?.get(name);
+    if (versions === undefined) return;
+    const nowIso = this.now().toISOString();
+    for (const [version, rec] of versions.entries()) {
+      versions.set(version, { ...rec, projectId, updatedAt: nowIso });
+    }
   }
 
   async promote(tenantId: string, name: string, version: string): Promise<void> {
@@ -110,7 +142,12 @@ export class InMemoryRegisteredAgentStore implements RegisteredAgentStore {
 
   // --- internals ----------------------------------------------------------
 
-  private upsertVersionSync(tenantId: string, spec: AgentSpec, specYaml: string): VersionRecord {
+  private upsertVersionSync(
+    tenantId: string,
+    spec: AgentSpec,
+    specYaml: string,
+    projectId: string | null,
+  ): VersionRecord {
     const { name, version } = spec.identity;
     let tenantRows = this.rows.get(tenantId);
     if (tenantRows === undefined) {
@@ -124,11 +161,15 @@ export class InMemoryRegisteredAgentStore implements RegisteredAgentStore {
     }
     const nowIso = this.now().toISOString();
     const existing = nameRows.get(version);
+    // Mirror the postgres COALESCE behaviour: a null projectId on
+    // re-upsert preserves any existing value.
+    const resolvedProjectId = projectId !== null ? projectId : (existing?.projectId ?? null);
     const rec: VersionRecord = {
       spec,
       specYaml,
       createdAt: existing?.createdAt ?? nowIso,
       updatedAt: nowIso,
+      projectId: resolvedProjectId,
     };
     nameRows.set(version, rec);
     return rec;
@@ -152,6 +193,7 @@ function toRegisteredAgent(
 ): RegisteredAgent {
   return {
     tenantId,
+    projectId: rec.projectId,
     name,
     version,
     spec: rec.spec,

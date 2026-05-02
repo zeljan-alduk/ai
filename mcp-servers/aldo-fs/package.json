@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "ALDO AI first-party MCP server: sandboxed filesystem with per-agent path ACLs.",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "FSL-1.1-ALv2",
   "main": "./src/index.ts",
   "bin": {
     "aldo-mcp-fs": "./dist/index.js"

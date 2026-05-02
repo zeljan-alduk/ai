@@ -37,15 +37,26 @@ export async function runParallel(
   }));
 
   let cursor = 0;
+  let terminationFired = false;
   async function worker(): Promise<void> {
     while (true) {
       const idx = cursor++;
       if (idx >= invocations.length) return;
       if (deps.ctx.signal?.aborted) return;
+      // Wave-17: stop pulling new work once a termination rule fires.
+      // Inflight children continue to completion (they're already in
+      // the runtime) so the cost roll-up + child event log stay
+      // coherent — we just refuse to spawn any more.
+      if (terminationFired) return;
       const inv = invocations[idx] as SubagentInvocation;
       const handle: SpawnedChildHandle = await spawnChild(inv, 'parallel', deps);
       const summary = await awaitChild(handle, inv, deps);
       summaries[idx] = summary;
+      const decision = deps.termination.recordChild(summary);
+      if (decision !== null) {
+        terminationFired = true;
+        deps.emit('run.terminated_by', decision);
+      }
     }
   }
 
@@ -60,6 +71,20 @@ export async function runParallel(
       children: summaries.filter(Boolean),
       strategy: 'parallel',
       totalUsage: sumUsage(summaries.filter(Boolean).map((c) => c.usage)),
+    };
+  }
+
+  // Wave-17: when termination short-circuited the fan-out, return
+  // the partial collection successfully (operator-set ceilings are
+  // not failures) and skip the failure-surfacing step.
+  if (terminationFired) {
+    const partial = summaries.filter(Boolean);
+    return {
+      ok: true,
+      output: partial.map((s) => s.output),
+      children: partial,
+      strategy: 'parallel',
+      totalUsage: sumUsage(partial.map((c) => c.usage)),
     };
   }
 

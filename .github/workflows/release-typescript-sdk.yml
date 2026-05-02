@@ -6,8 +6,12 @@ name: Release TypeScript SDK
 # `dry_run=false`, and the job publishes to npm.
 #
 # `dry_run=true` (the default) builds + tests + does a `--dry-run`
-# `npm publish` so we can see exactly what would have been uploaded
+# `pnpm publish` so we can see exactly what would have been uploaded
 # without flipping the bit. Use it before the real release.
+#
+# Real publish (`dry_run=false`) requires the `confirm` input to
+# equal the package version exactly — guards against accidental
+# flips of the dry_run dropdown.
 
 on:
   workflow_dispatch:
@@ -20,6 +24,11 @@ on:
         options:
           - 'true'
           - 'false'
+      confirm:
+        description: 'Must equal package.json version (e.g. 0.1.0) when dry_run=false. Leave blank for dry-runs.'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -69,12 +78,53 @@ jobs:
       - name: build
         run: pnpm exec tsc -p tsconfig.json
 
-      - name: Show version
-        run: node -e "console.log('@aldo-ai/sdk', require('./package.json').version)"
+      - name: Resolve version
+        id: ver
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "@aldo-ai/sdk version: ${PKG_VERSION}"
+
+      # `confirm` must equal the version string to allow a real publish.
+      # Dry-runs ignore `confirm` entirely.
+      - name: Guard real publish with confirm == version
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          if [ "${{ inputs.confirm }}" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::Real publish requires inputs.confirm to equal the package version."
+            echo "::error::Got confirm='${{ inputs.confirm }}', expected '${{ steps.ver.outputs.version }}'."
+            echo "::error::Re-run with confirm=${{ steps.ver.outputs.version }} to proceed, or flip dry_run back to true."
+            exit 1
+          fi
+          echo "Confirmed: publishing @aldo-ai/sdk@${{ steps.ver.outputs.version }} to real npm."
 
       - name: Publish (dry-run)
         if: ${{ inputs.dry_run == 'true' }}
         run: pnpm publish --access public --no-git-checks --dry-run
+
+      # Snapshot what's in the artefact so the workflow log is a
+      # complete paper trail even when no token is configured.
+      - name: Publish summary
+        run: |
+          {
+            echo "## TypeScript SDK release dry-run"
+            echo ""
+            echo "- **Package**: @aldo-ai/sdk"
+            echo "- **Version**: ${{ steps.ver.outputs.version }}"
+            echo "- **License**: FSL-1.1-ALv2"
+            echo "- **Mode**: ${{ inputs.dry_run == 'true' && 'dry-run (npm registry, --dry-run)' || 'REAL (npm publish)' }}"
+            echo "- **Target**: https://registry.npmjs.org/"
+            echo ""
+            echo "### Build artefacts"
+            echo '```'
+            ls -lh dist/ | head -25
+            echo '```'
+            echo ""
+            echo "### Pack contents (pnpm pack --dry)"
+            echo '```'
+            pnpm pack --pack-destination /tmp 2>&1 | tail -45 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish (real)
         if: ${{ inputs.dry_run == 'false' }}

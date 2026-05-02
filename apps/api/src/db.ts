@@ -81,6 +81,14 @@ interface RunListRow {
   readonly last_model: string | null;
   /** True iff at least one row in `runs` has parent_run_id = this.id. */
   readonly has_children?: boolean | null;
+  /**
+   * Wave-17 (migration 021). Nullable on the wire AND in storage —
+   * the column was added without NOT NULL so any in-flight insert
+   * from a pre-021 code path doesn't crash. The application write
+   * path resolves a missing value to the tenant's Default project
+   * before reaching this layer.
+   */
+  readonly project_id?: string | null;
   readonly [k: string]: unknown;
 }
 
@@ -88,6 +96,14 @@ export interface ListRunsOptions {
   readonly tenantId: string;
   readonly agentName?: string | undefined;
   readonly status?: string | undefined;
+  /**
+   * Wave-17 — restrict results to one project. When undefined, the
+   * legacy "all runs in tenant" semantics are preserved. The route
+   * resolves a `?project=<slug>` param to a project_id before
+   * calling here; the slug→id lookup is the route's job, not the
+   * db helper's.
+   */
+  readonly projectId?: string | undefined;
   readonly limit: number;
   readonly cursor?: RowCursor | undefined;
 }
@@ -121,6 +137,13 @@ export async function listRuns(db: SqlClient, opts: ListRunsOptions): Promise<Li
     params.push(opts.status);
     where.push(`r.status = $${params.length}`);
   }
+  // Wave-17: optional project filter. Hits the (tenant_id, project_id)
+  // compound index from migration 021 — tenant filter above + this
+  // predicate together prefix-match the index.
+  if (opts.projectId !== undefined) {
+    params.push(opts.projectId);
+    where.push(`r.project_id = $${params.length}`);
+  }
   if (opts.cursor !== undefined) {
     params.push(opts.cursor.at);
     const atIdx = params.length;
@@ -145,6 +168,7 @@ export async function listRuns(db: SqlClient, opts: ListRunsOptions): Promise<Li
       r.ended_at,
       r.tags,
       r.archived_at,
+      r.project_id,
       COALESCE(SUM(u.usd), 0)::text AS total_usd,
       (SELECT u2.provider FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,
@@ -195,6 +219,14 @@ function rowToRunSummary(r: RunListRow): RunSummary {
         ? undefined
         : null
       : toIso(archivedAtRaw);
+  // Wave-17: project_id surfaces as `projectId`. Optional on the wire
+  // (additive); a pre-021 row missing the column simply omits the
+  // field. A row with the column explicitly set to NULL passes
+  // through as null so clients can distinguish "no project assignment
+  // yet" from "field not present in this server build".
+  const projectIdRaw = (r as { project_id?: unknown }).project_id;
+  const projectId =
+    projectIdRaw === undefined ? undefined : projectIdRaw === null ? null : String(projectIdRaw);
   return {
     id: r.id,
     agentName: r.agent_name,
@@ -212,10 +244,64 @@ function rowToRunSummary(r: RunListRow): RunSummary {
       : {}),
     ...(tags !== undefined ? { tags } : {}),
     ...(archivedAt !== undefined ? { archivedAt } : {}),
+    ...(projectId !== undefined ? { projectId } : {}),
   };
 }
 
 type RunDetailRow = RunListRow;
+
+// --- wave-17 createRun ----------------------------------------------------
+
+export interface CreateRunOptions {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly agentName: string;
+  readonly agentVersion: string;
+  readonly status: string;
+  readonly startedAt: string;
+  readonly parentRunId?: string | undefined;
+  /**
+   * Wave-17 — project the run is scoped to. Optional at the helper
+   * boundary so a caller that doesn't yet pass it (or whose tenant
+   * has no Default project resolved) doesn't crash; the underlying
+   * column is nullable on disk for the same reason. Application
+   * write paths SHOULD always resolve a value via
+   * getDefaultProjectIdForTenant before reaching here.
+   */
+  readonly projectId?: string | null | undefined;
+}
+
+/**
+ * Insert a new row into `runs`. Idempotent under `ON CONFLICT (id) DO
+ * NOTHING` so a retry of the same logical create from the API route
+ * doesn't double-insert when the engine's `recordRunStart` lands a
+ * fraction later for the same run id.
+ *
+ * Wave-17: persists `project_id`. On a re-insert the existing row's
+ * project_id is preserved (the conflict path is a no-op), so an in-
+ * flight write from a code path that didn't supply a projectId never
+ * clobbers a previously-set one. Mirrors the agents-retrofit
+ * COALESCE-on-conflict pattern from migration 020.
+ */
+export async function createRun(db: SqlClient, opts: CreateRunOptions): Promise<void> {
+  await db.query(
+    `INSERT INTO runs
+       (id, tenant_id, project_id, agent_name, agent_version, parent_run_id, status, started_at, root_run_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $1)
+     ON CONFLICT (id) DO UPDATE
+       SET project_id = COALESCE(runs.project_id, EXCLUDED.project_id)`,
+    [
+      opts.id,
+      opts.tenantId,
+      opts.projectId ?? null,
+      opts.agentName,
+      opts.agentVersion,
+      opts.parentRunId ?? null,
+      opts.status,
+      opts.startedAt,
+    ],
+  );
+}
 
 // --- wave-13 run search ----------------------------------------------------
 
@@ -235,6 +321,12 @@ export interface SearchRunsOptions {
   readonly hasChildren?: boolean | undefined;
   readonly hasFailedEvent?: boolean | undefined;
   readonly includeArchived?: boolean | undefined;
+  /**
+   * Wave-17 — restrict to one project (resolved project_id, not slug).
+   * The route resolves `?project=<slug>` to a project_id before
+   * calling here. Mirrors `ListRunsOptions.projectId`.
+   */
+  readonly projectId?: string | undefined;
   readonly limit: number;
   readonly cursor?: RowCursor | undefined;
 }
@@ -272,6 +364,12 @@ export async function searchRuns(
   // Tenant scope is always FIRST so the (tenant_id) index path is hit.
   params.push(opts.tenantId);
   where.push(`r.tenant_id = $${params.length}`);
+
+  // Wave-17 project scope. Hits idx_runs_tenant_project from migration 021.
+  if (opts.projectId !== undefined) {
+    params.push(opts.projectId);
+    where.push(`r.project_id = $${params.length}`);
+  }
 
   if (opts.includeArchived !== true) {
     where.push('r.archived_at IS NULL');
@@ -413,6 +511,10 @@ export async function searchRuns(
   const countWhere: string[] = [];
   countParams.push(opts.tenantId);
   countWhere.push(`r.tenant_id = $${countParams.length}`);
+  if (opts.projectId !== undefined) {
+    countParams.push(opts.projectId);
+    countWhere.push(`r.project_id = $${countParams.length}`);
+  }
   if (opts.includeArchived !== true) {
     countWhere.push('r.archived_at IS NULL');
   }
@@ -994,6 +1096,7 @@ export async function getRun(
       r.status,
       r.started_at,
       r.ended_at,
+      r.project_id,
       COALESCE(SUM(u.usd), 0)::text AS total_usd,
       (SELECT u2.provider FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,

@@ -10,6 +10,7 @@ import type {
   TenantId,
   UsageRecord,
 } from '@aldo-ai/types';
+import type { TerminationController } from './termination.js';
 
 /** Re-export the core composite types for ergonomic imports. */
 export type { CompositeSpec, CompositeStrategy, CompositeSubagent } from '@aldo-ai/types';
@@ -58,6 +59,19 @@ export interface RunContext {
    * never narrow.
    */
   readonly privacy: PrivacyTier;
+  /**
+   * Wave-17 — project this composite tree is scoped to (the root
+   * supervisor's project assignment). The orchestrator forwards this
+   * to every child via spawnChild so children land in the same
+   * project as the supervisor; cross-project composite trees are
+   * not a thing today. Optional so the orchestrator stays
+   * compatible with pre-17 callers that haven't started threading
+   * the field through (the engine adapter falls back to the
+   * pre-existing behaviour — INSERT NULL — and the
+   * COALESCE-on-conflict in PostgresRunStore.recordRunStart
+   * preserves any value set by the API route's pre-record).
+   */
+  readonly projectId?: string;
   /** Optional cancellation signal forwarded from the parent. */
   readonly signal?: AbortSignal;
 }
@@ -165,6 +179,11 @@ export interface SupervisorRuntimeAdapter {
    * adapter owns the bridge to whatever Run primitive the engine
    * uses (LeafAgentRun.wait()) and is responsible for writing the
    * `parent_run_id` / `root_run_id` linkage to the run store.
+   *
+   * Wave-17: `projectId` rides through so children inherit the
+   * supervisor's project assignment. Optional at the boundary so
+   * pre-17 adapters keep compiling; the engine adapter passes it
+   * straight to PostgresRunStore.recordRunStart.
    */
   spawnChild(args: {
     readonly agent: AgentRef;
@@ -174,6 +193,7 @@ export interface SupervisorRuntimeAdapter {
     readonly tenant: TenantId;
     readonly privacy: PrivacyTier;
     readonly compositeStrategy?: Strategy;
+    readonly projectId?: string;
     readonly signal?: AbortSignal;
   }): Promise<SpawnedChildHandle>;
 
@@ -196,6 +216,10 @@ export interface SupervisorDeps {
    * Hook the strategy uses to surface a `composite.*` RunEvent on the
    * PARENT run's event stream. Wired by the Supervisor; strategies do
    * not call the engine directly.
+   *
+   * Wave-17 adds `run.terminated_by` so a strategy can announce that
+   * a declarative termination rule fired before the natural end of
+   * the loop.
    */
   readonly emit: (
     type:
@@ -203,7 +227,8 @@ export interface SupervisorDeps {
       | 'composite.child_completed'
       | 'composite.child_failed'
       | 'composite.usage_rollup'
-      | 'composite.iteration',
+      | 'composite.iteration'
+      | 'run.terminated_by',
     payload: unknown,
   ) => void;
   /** Fully-resolved RunContext for the supervisor invocation. */
@@ -213,6 +238,12 @@ export interface SupervisorDeps {
    * spec.composite.concurrency || env ALDO_MAX_PARALLEL_CHILDREN || 8.
    */
   readonly maxParallelChildren: number;
+  /**
+   * Wave-17 declarative termination controller. Always present (the
+   * Supervisor constructs a no-op controller when the spec carries
+   * no `termination:` block) so strategies don't need null guards.
+   */
+  readonly termination: TerminationController;
 }
 
 /**

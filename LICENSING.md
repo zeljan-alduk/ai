@@ -78,6 +78,39 @@ automatically.
 The canonical license text is in [`LICENSE`](./LICENSE). The Functional
 Source License is published at <https://fsl.software/> by Sentry, Inc.
 
+## Change log
+
+**2026-05-02 — License canonicalised to FSL-1.1-ALv2.** Until this
+date the repo had a contradictory pair: this `LICENSING.md` declared
+FSL-1.1-ALv2 while `LICENSE` carried a bespoke "ALDO AI — Proprietary
+Software License" preamble. Procurement and OSS-review teams were
+flagging the mismatch. We resolved it by aligning `LICENSE` to the
+canonical FSL-1.1-ALv2 text published at <https://fsl.software/> and
+updating every package manifest (`package.json`, `pyproject.toml`,
+SDKs, MCP servers, VS Code extension) to declare `FSL-1.1-ALv2`
+verbatim. The `-pre-publish` suffix that the SDKs carried before this
+date is retired.
+
+Why FSL-1.1-ALv2 and not pure proprietary or pure Apache-2.0:
+
+- **Stays close to the project's actual intent.** Read, fork, modify,
+  self-host, contribute. A pure-proprietary `LICENSE` foreclosed all
+  of that even though the README, docs, and SDK distribution model
+  assumed the FSL terms.
+- **Matches our peers.** Sentry (the license's author), Astral (uv,
+  ruff), Convex, and several other commercial dev-tools companies
+  ship under FSL or its sibling BSL for the same reason: source
+  available, hyperscaler-resale blocked, OSS conversion guaranteed.
+- **Procurement-friendly.** A named, published, version-stable
+  license with an OSI-recognised future license (Apache-2.0) clears
+  far more vendor-review checklists than a bespoke "all rights
+  reserved" document.
+- **Reversible direction-of-travel.** We can always offer a
+  permissive license to a specific customer via the commercial
+  carve-out, and the two-year Apache conversion guarantees a clean
+  open-source tail. The reverse — starting permissive and locking
+  down later — would burn community trust.
+
 ## Questions
 
 Licensing questions → open a GitHub discussion or email

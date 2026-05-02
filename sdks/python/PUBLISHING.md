@@ -29,8 +29,9 @@ to this project**, not account-wide tokens.
    * `sdks/python/pyproject.toml` → `[project] version = "0.X.Y"`
    * `sdks/python/src/aldo_ai/__init__.py` → `__version__ = "0.X.Y"`
 2. Confirm the `LICENSE` text in `pyproject.toml` matches the
-   top-level repo `LICENSE` (FSL-1.1-ALv2 once the repo lands the
-   final license, FSL-1.1-ALv2-pre-publish until then).
+   top-level repo `LICENSE` (FSL-1.1-ALv2). The repo flipped to the
+   final FSL-1.1-ALv2 text on 2026-05-02; the `-pre-publish` suffix
+   is no longer used.
 3. Run the full quality bar:
 
    ```bash
@@ -91,9 +92,10 @@ python -m twine upload dist/*
 
 ## Notes
 
-* Wheel metadata uses `License: FSL-1.1-ALv2-pre-publish` until the
-  top-level repo flips to the final license. After that flip, a
-  no-op patch release of the SDK should land to update metadata.
+* Wheel metadata uses `License: FSL-1.1-ALv2`. (The `-pre-publish`
+  suffix used during pre-2026-05-02 builds is no longer in the
+  manifest; the next published release picks up the canonical name
+  automatically.)
 * The `aldo-py` console script is the package's only entry point;
   if a user installs the wheel without the console-script extras
   resolved, `python -m aldo_ai.cli` is a fallback.

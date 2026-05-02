@@ -26,6 +26,11 @@ export async function spawnChild(
     tenant: deps.ctx.tenant,
     privacy: invocation.privacy,
     compositeStrategy: strategy,
+    // Wave-17: forward the supervisor's project assignment to the
+    // child. The engine adapter persists it via recordRunStart;
+    // when undefined here the child row is INSERTed with NULL and
+    // the migration-021 backfill / route pre-record handles it.
+    ...(deps.ctx.projectId !== undefined ? { projectId: deps.ctx.projectId } : {}),
     ...(deps.ctx.signal !== undefined ? { signal: deps.ctx.signal } : {}),
   });
   deps.emit('composite.child_started', {

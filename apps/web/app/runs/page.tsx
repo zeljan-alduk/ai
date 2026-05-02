@@ -17,12 +17,13 @@
 
 import { EmptyState } from '@/components/empty-state';
 import { ErrorView } from '@/components/error-boundary';
+import { ProjectFilterBanner } from '@/components/layout/project-filter-banner';
 import { PageHeader } from '@/components/page-header';
 import { RunsList } from '@/components/runs/runs-list';
 import { RunsToolbar } from '@/components/runs/runs-toolbar';
 import { parseRunSearchQuery, serializeRunSearchQuery } from '@/components/runs/search-query';
 import { Card } from '@/components/ui/card';
-import { listAgents, listSavedViews, searchRuns } from '@/lib/api';
+import { listAgents, listProjects, listSavedViews, searchRuns } from '@/lib/api';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -35,12 +36,23 @@ export default async function RunsPage({
   const sp = await searchParams;
   const query = parseRunSearchQuery(sp);
 
+  // Wave-17 (Tier 2.5) — `?project=<slug>` filter. The runs retrofit
+  // (migration 021 + RunSearchRequest.project) wired this end-to-end,
+  // so we forward as a typed field — the server resolves slug →
+  // project_id and narrows the search.
+  const projectSlugRaw = Array.isArray(sp.project) ? sp.project[0] : sp.project;
+  const projectSlug =
+    typeof projectSlugRaw === 'string' && projectSlugRaw.trim().length > 0
+      ? projectSlugRaw.trim()
+      : undefined;
+
   let runs: Awaited<ReturnType<typeof searchRuns>> | null = null;
   let agents: Awaited<ReturnType<typeof listAgents>> | null = null;
   let views: Awaited<ReturnType<typeof listSavedViews>> | null = null;
+  let projectName: string | undefined;
   let error: unknown = null;
   try {
-    [runs, agents, views] = await Promise.all([
+    [runs, agents, views, projectName] = await Promise.all([
       searchRuns({
         ...(query.q !== undefined ? { q: query.q } : {}),
         ...(query.status !== undefined ? { status: query.status } : {}),
@@ -61,10 +73,16 @@ export default async function RunsPage({
           ? { include_archived: query.include_archived }
           : {}),
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+        ...(projectSlug !== undefined ? { project: projectSlug } : {}),
         limit: 50,
       }),
       listAgents({ limit: 200 }),
       listSavedViews({ surface: 'runs' }),
+      projectSlug !== undefined
+        ? listProjects()
+            .then((r) => r.projects.find((p) => p.slug === projectSlug)?.name)
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
     ]);
   } catch (err) {
     error = err;
@@ -80,6 +98,21 @@ export default async function RunsPage({
         <ErrorView error={error} context="runs" />
       ) : runs && agents && views ? (
         <>
+          {projectSlug !== undefined ? (
+            <ProjectFilterBanner
+              projectSlug={projectSlug}
+              projectName={projectName}
+              clearHref={(() => {
+                // Strip the `project` param while preserving every other
+                // search-query field the user set. `serializeRunSearchQuery`
+                // already omits `project` (it's not a parsed key), so the
+                // resulting URL is the canonical "no-project" form.
+                const qs = serializeRunSearchQuery({ ...query, cursor: undefined }).toString();
+                return qs.length === 0 ? '/runs' : `/runs?${qs}`;
+              })()}
+              entityNoun="runs"
+            />
+          ) : null}
           <RunsToolbar
             agentNames={agents.agents.map((a) => a.name)}
             views={views.views}

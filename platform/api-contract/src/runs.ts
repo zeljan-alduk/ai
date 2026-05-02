@@ -35,12 +35,28 @@ export const RunSummary = z.object({
    * archived rows. Optional/additive.
    */
   archivedAt: z.string().nullable().optional(),
+  /**
+   * Wave-17 — project this run is scoped to within the tenant.
+   * Nullish so pre-retrofit clients (and any in-flight insert from
+   * code paths predating migration 021) round-trip cleanly. Server
+   * resolves a missing value to the tenant's Default project at
+   * write time; in practice this is always populated on rows the
+   * post-021 write path produced.
+   */
+  projectId: z.string().nullish(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 
 export const ListRunsQuery = PaginationQuery.extend({
   agentName: z.string().optional(),
   status: RunStatus.optional(),
+  /**
+   * Wave-17 — filter to one project by SLUG. The server resolves
+   * slug → project_id and returns only runs in that project.
+   * Unknown slug → 404. Omit to keep the pre-wave-17 "all runs in
+   * tenant" behaviour.
+   */
+  project: z.string().min(1).optional(),
 });
 export type ListRunsQuery = z.infer<typeof ListRunsQuery>;
 
@@ -118,6 +134,13 @@ export const CreateRunRequest = z.object({
   agentName: z.string().min(1),
   agentVersion: z.string().min(1).optional(),
   inputs: z.unknown().optional(),
+  /**
+   * Wave-17 — optional project SLUG the new run should be scoped to.
+   * Server resolves slug → project_id (404 if unknown). When omitted,
+   * the run is created under the tenant's Default project. Pre-wave-17
+   * clients omit the field and get the legacy behaviour.
+   */
+  project: z.string().min(1).optional(),
 });
 export type CreateRunRequest = z.infer<typeof CreateRunRequest>;
 
@@ -266,6 +289,14 @@ export const RunSearchRequest = z.object({
   include_archived: z.coerce.boolean().optional(),
   /** Substring-match against `runs.tags`. ANY-of, comma-separated. */
   tag: StringList,
+  /**
+   * Wave-17 — restrict the search to a single project SLUG. The server
+   * resolves slug → project_id and returns only runs in that project.
+   * Unknown slug → 404. Omit to keep the legacy "all runs in tenant"
+   * behaviour. Mirrors `ListRunsQuery.project` so the picker filter
+   * propagates uniformly across both list and search surfaces.
+   */
+  project: z.string().min(1).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });

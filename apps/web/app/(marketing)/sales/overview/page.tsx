@@ -216,9 +216,15 @@ export default function OverviewPage() {
             can dispatch to a cloud-class model. Eval harness and replay store hang off the gateway;
             nothing bypasses them.
           </p>
-          <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+          {/* a11y: scrollable region must be keyboard-focusable. */}
+          <section
+            className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-reachable per WCAG 2.1.1 (axe-core scrollable-region-focusable). The tabIndex IS the fix.
+            tabIndex={0}
+            aria-label="ALDO AI platform architecture diagram"
+          >
             <ArchitectureDiagram />
-          </div>
+          </section>
           <p className="mt-3 text-[12px] text-slate-500">
             Cloud-vs-local is decided by the agent&rsquo;s declared capability class and privacy
             tier. No code path names a provider.

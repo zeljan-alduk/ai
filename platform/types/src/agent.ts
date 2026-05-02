@@ -181,6 +181,41 @@ export interface CompositeSpec {
   readonly iteration?: CompositeIteration;
 }
 
+/**
+ * Wave-17 declarative termination conditions.
+ *
+ * A cross-strategy hard ceiling that operators can put on any composite
+ * (and, in time, leaf) agent regardless of its supervisor pattern. The
+ * wire shape lives in `@aldo-ai/api-contract` (`TerminationWire`); this
+ * is the runtime-side mirror that hangs off `AgentSpec`. Every field is
+ * optional; an empty `termination` block is the same as omitting it —
+ * the orchestrator falls through to its built-in defaults.
+ *
+ * Semantics enforced by the orchestrator runtime:
+ *
+ *   - `maxTurns`     — abort when the supervisor has spawned this many
+ *                      child turns (any strategy). Treated as success.
+ *   - `maxUsd`       — abort when the running cost roll-up crosses the
+ *                      cap. Treated as success (cost cap is operator-set,
+ *                      not a child failure).
+ *   - `textMention`  — abort when ANY child's textual output contains
+ *                      this substring (case-insensitive). Treated as
+ *                      success — the trigger is intentional.
+ *   - `successRoles` — abort SUCCESSFULLY when a message comes from a
+ *                      subagent whose `as` alias (or agent name) appears
+ *                      in this list. Lets a reviewer agent end a debate.
+ *
+ * The orchestrator emits a `run.terminated_by` RunEvent whose payload
+ * carries `{ reason, detail }` so the run-event log explains *why* a
+ * run ended early.
+ */
+export interface TerminationConfig {
+  readonly maxTurns?: number;
+  readonly maxUsd?: number;
+  readonly textMention?: string;
+  readonly successRoles?: readonly string[];
+}
+
 /** A fully-parsed agent spec (agent.v1). */
 export interface AgentSpec {
   readonly apiVersion: 'aldo-ai/agent.v1';
@@ -207,6 +242,13 @@ export interface AgentSpec {
    * parent's `modelPolicy.privacyTier` to each subagent call.
    */
   readonly composite?: CompositeSpec;
+  /**
+   * Wave-17 — optional declarative termination conditions enforced by
+   * the orchestrator runtime. Additive: pre-17 specs simply omit the
+   * field and the runtime keeps its existing implicit-termination
+   * defaults (per-strategy "all subagents finished" + iterative.terminate).
+   */
+  readonly termination?: TerminationConfig;
 }
 
 export interface AgentRef {

@@ -124,4 +124,49 @@ eval_gate: { required_suites: [], must_pass_before_promote: false }
     expect(res.spec.escalation).toHaveLength(1);
     expect(res.spec.escalation[0]?.to).toBe('boss');
   });
+
+  it('parses a wave-17 termination block (snake -> camel)', () => {
+    const yaml = `
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+identity:
+  name: x
+  version: 0.1.0
+  description: d
+  owner: o
+  tags: []
+role: { team: t, pattern: supervisor }
+model_policy:
+  capability_requirements: []
+  privacy_tier: internal
+  primary: { capability_class: reasoning-medium }
+  fallbacks: []
+  budget: { usd_per_run: 0.1 }
+  decoding: { mode: free }
+prompt: { system_file: p.md }
+tools:
+  mcp: []
+  native: []
+  permissions: { network: none, filesystem: none }
+memory: { read: [], write: [], retention: {} }
+spawn: { allowed: [] }
+escalation: []
+subscriptions: []
+eval_gate: { required_suites: [], must_pass_before_promote: false }
+termination:
+  max_turns: 6
+  max_usd: 1.50
+  text_mention: TERMINATE
+  success_roles: [judge, shipper]
+`;
+    const res = parseYaml(yaml);
+    expect(res.ok).toBe(true);
+    if (!res.ok || !res.spec) throw new Error('load failed');
+    expect(res.spec.termination).toEqual({
+      maxTurns: 6,
+      maxUsd: 1.5,
+      textMention: 'TERMINATE',
+      successRoles: ['judge', 'shipper'],
+    });
+  });
 });

@@ -58,9 +58,14 @@ export class PostgresCheckpointer implements Checkpointer {
     // because the runs row is created by `recordRunStart` before any
     // checkpoint lands; tests that bypass `recordRunStart` need to
     // INSERT into `runs` first (the test harness covers this).
+    //
+    // Wave-17: project_id rides alongside tenant_id (migration 021).
+    // Same JOIN, same row — checkpoints inherit the parent run's
+    // project assignment automatically; the engine never has to
+    // know which project a run belongs to.
     await this.client.query(
-      `INSERT INTO checkpoints (id, run_id, tenant_id, node_path, payload_jsonb)
-       SELECT $1, $2, r.tenant_id, $3, $4::jsonb
+      `INSERT INTO checkpoints (id, run_id, tenant_id, project_id, node_path, payload_jsonb)
+       SELECT $1, $2, r.tenant_id, r.project_id, $3, $4::jsonb
          FROM runs r
         WHERE r.id = $2`,
       [id, cp.runId, nodePath, JSON.stringify(payload)],

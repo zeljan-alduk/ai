@@ -25,6 +25,7 @@ import type {
   SandboxConfig,
   SpawnPolicy,
   Subscription,
+  TerminationConfig,
   ToolsConfig,
   ToolsGuardsConfig,
   ValidationResult,
@@ -231,6 +232,20 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
         }
       : undefined;
 
+  const termination: TerminationConfig | undefined =
+    y.termination !== undefined
+      ? {
+          ...(y.termination.max_turns !== undefined ? { maxTurns: y.termination.max_turns } : {}),
+          ...(y.termination.max_usd !== undefined ? { maxUsd: y.termination.max_usd } : {}),
+          ...(y.termination.text_mention !== undefined
+            ? { textMention: y.termination.text_mention }
+            : {}),
+          ...(y.termination.success_roles !== undefined
+            ? { successRoles: y.termination.success_roles }
+            : {}),
+        }
+      : undefined;
+
   const sandbox: SandboxConfig | undefined =
     y.sandbox !== undefined
       ? {
@@ -289,6 +304,7 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
     evalGate,
     ...(sandbox !== undefined ? { sandbox } : {}),
     ...(composite !== undefined ? { composite } : {}),
+    ...(termination !== undefined ? { termination } : {}),
   };
 
   return spec;

@@ -201,6 +201,13 @@ export interface SeedRunOptions {
   readonly agentName: string;
   readonly agentVersion?: string;
   readonly tenantId?: string;
+  /**
+   * Wave-17 — project this run is scoped to. Optional; when omitted
+   * the row's project_id is inserted as SQL NULL (mirrors a pre-021
+   * write path). Tests that exercise the project_id retrofit pass
+   * an explicit value so the run lands in a known project.
+   */
+  readonly projectId?: string | null;
   readonly status?: string;
   readonly parentRunId?: string | null;
   readonly startedAt: string;
@@ -223,14 +230,17 @@ export interface SeedRunOptions {
 
 export async function seedRun(db: SqlClient, opts: SeedRunOptions): Promise<void> {
   await db.query(
-    `INSERT INTO runs (id, tenant_id, agent_name, agent_version, parent_run_id, started_at, ended_at, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO runs (id, tenant_id, project_id, agent_name, agent_version, parent_run_id, started_at, ended_at, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       opts.id,
       // Default to the seeded tenant — the test harness binds its
       // authHeader to the same id so seeded rows are visible by
       // default. Cross-tenant tests pass an explicit `tenantId`.
       opts.tenantId ?? SEED_TENANT_UUID,
+      // Wave-17 — explicit project_id when the test supplied one;
+      // otherwise SQL NULL (mirrors pre-retrofit insert paths).
+      opts.projectId ?? null,
       opts.agentName,
       opts.agentVersion ?? '1.0.0',
       opts.parentRunId ?? null,
@@ -262,11 +272,25 @@ export async function seedRun(db: SqlClient, opts: SeedRunOptions): Promise<void
   }
   if (opts.events !== undefined) {
     const tenantId = opts.tenantId ?? SEED_TENANT_UUID;
+    // Wave-17 — events inherit project_id from the parent run row
+    // (mirrors PostgresRunStore.appendEvent's INSERT...SELECT pattern).
+    // We pass it explicitly here so the test seeder uses the same wire
+    // shape the runtime would, instead of relying on a follow-up
+    // backfill.
+    const projectId = opts.projectId ?? null;
     for (const e of opts.events) {
       await db.query(
-        `INSERT INTO run_events (id, run_id, tenant_id, type, payload_jsonb, at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
-        [e.id, opts.id, tenantId, e.type, JSON.stringify(e.payload), e.at ?? opts.startedAt],
+        `INSERT INTO run_events (id, run_id, tenant_id, project_id, type, payload_jsonb, at)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+        [
+          e.id,
+          opts.id,
+          tenantId,
+          projectId,
+          e.type,
+          JSON.stringify(e.payload),
+          e.at ?? opts.startedAt,
+        ],
       );
     }
   }

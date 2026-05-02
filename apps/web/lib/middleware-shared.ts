@@ -55,6 +55,8 @@ const PUBLIC_BOUNDED: ReadonlyArray<string> = [
   '/changelog',
   '/sales',
   '/deck',
+  // In-house status page — public, no auth.
+  '/status',
 ];
 
 export function isPublicPath(pathname: string): boolean {

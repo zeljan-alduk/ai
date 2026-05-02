@@ -5,7 +5,16 @@
   "version": "0.1.0",
   "private": true,
   "publisher": "aldo-tech-labs",
-  "license": "SEE LICENSE IN ../../LICENSE",
+  "license": "FSL-1.1-ALv2",
+  "homepage": "https://ai.aldo.tech",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aldo-tech-labs/aldo-ai.git",
+    "directory": "extensions/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/aldo-tech-labs/aldo-ai/issues"
+  },
   "engines": {
     "vscode": "^1.95.0",
     "node": ">=22.0.0"

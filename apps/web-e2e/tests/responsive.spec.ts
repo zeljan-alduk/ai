@@ -150,15 +150,15 @@ for (const vp of VIEWPORTS) {
 }
 
 /**
- * Same tolerance list as lighthouse-home.spec — color-contrast and
- * scrollable-region-focusable are tracked in the a11y-pass follow-up
- * (the architecture-diagram SVG focusability + the few token contrast
- * cases axe still flags after the slate-400 → slate-500 bump).
+ * Same tolerance list as lighthouse-home.spec — color-contrast is
+ * still tracked in the a11y-pass follow-up (the few token contrast
+ * cases axe flags after the slate-400 → slate-500 bump).
+ *
+ * Removed in this wave: `scrollable-region-focusable`. The
+ * architecture-diagram scroll wrapper is now keyboard-focusable
+ * (tabindex=0, role=region, aria-label).
  */
-const ACKNOWLEDGED_VIOLATION_IDS: ReadonlySet<string> = new Set([
-  'color-contrast',
-  'scrollable-region-focusable',
-]);
+const ACKNOWLEDGED_VIOLATION_IDS: ReadonlySet<string> = new Set(['color-contrast']);
 
 test.describe('a11y · axe-core (mobile viewport)', () => {
   test.use({ viewport: { width: 360, height: 640 } });

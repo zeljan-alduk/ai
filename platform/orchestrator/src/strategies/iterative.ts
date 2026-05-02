@@ -71,6 +71,24 @@ export async function runIterative(
     }
     lastOutput = summary.output;
 
+    // Wave-17 declarative termination is checked BEFORE the in-spec
+    // `iteration.terminate` predicate so an operator-set ceiling
+    // (maxTurns/maxUsd/textMention/successRoles) wins over the
+    // looper's own success signal. Fired rules emit a one-shot
+    // run.terminated_by event on the parent run.
+    const decision = deps.termination.recordChild(summary);
+    if (decision !== null) {
+      deps.emit('run.terminated_by', decision);
+      terminated = true;
+      terminateReason = `termination.${decision.reason}`;
+      deps.emit('composite.iteration', {
+        round,
+        terminated: true,
+        terminateReason,
+      });
+      break;
+    }
+
     const evalRes = evalTerminate(args.terminate, summary.output);
     if (!evalRes.ok) {
       throw new CompositeSpecError(`iterative.terminate eval failed: ${evalRes.reason}`);
