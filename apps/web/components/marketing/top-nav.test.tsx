@@ -28,6 +28,8 @@ describe('MarketingTopNav', () => {
     expect(html).toContain('href="/pricing"');
     expect(html).toContain('href="/security"');
     expect(html).toContain('href="/docs"');
+    expect(html).toContain('href="/roadmap"');
+    expect(html).toContain('href="/changelog"');
   });
 
   it('exposes both Log in and Sign up CTAs at the right routes', () => {

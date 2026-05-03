@@ -58,6 +58,7 @@ const COLUMNS: ReadonlyArray<FooterColumn> = [
     links: [
       { label: 'About', href: '/about' },
       { label: 'Pricing', href: '/pricing' },
+      { label: 'Roadmap', href: '/roadmap' },
       { label: 'Compare', href: '/vs' },
       { label: 'Security', href: '/security' },
       { label: 'Contact', href: `mailto:${CONTACT_EMAIL}` },

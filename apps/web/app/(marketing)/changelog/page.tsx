@@ -21,19 +21,89 @@ interface Entry {
   readonly title: string;
   /** A short paragraph in a customer-readable tone. */
   readonly body: string;
-  readonly tag: 'platform' | 'web' | 'sdk' | 'security' | 'docs' | 'ops';
+  readonly tag:
+    | 'platform'
+    | 'web'
+    | 'sdk'
+    | 'security'
+    | 'docs'
+    | 'ops'
+    | 'mcp'
+    | 'eval'
+    | 'billing';
 }
 
+/**
+ * Tag styling — semantic-token-tinted pills that flip with the theme.
+ * Each pill uses a `bg-<role>/12 text-<role> ring-<role>/30` shape so
+ * the same tokens that drive status pills elsewhere are reused here.
+ */
 const TAG_BADGE: Record<Entry['tag'], string> = {
-  platform: 'bg-blue-50 text-blue-700 ring-blue-200',
-  web: 'bg-violet-50 text-violet-700 ring-violet-200',
-  sdk: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  security: 'bg-rose-50 text-rose-700 ring-rose-200',
-  docs: 'bg-amber-50 text-amber-800 ring-amber-200',
-  ops: 'bg-slate-100 text-slate-700 ring-slate-200',
+  platform: 'bg-accent/12 text-accent ring-accent/30',
+  web: 'bg-accent/12 text-accent ring-accent/30',
+  sdk: 'bg-success/12 text-success ring-success/30',
+  security: 'bg-danger/12 text-danger ring-danger/30',
+  docs: 'bg-warning/12 text-warning ring-warning/30',
+  ops: 'bg-fg-muted/15 text-fg-muted ring-border',
+  mcp: 'bg-success/12 text-success ring-success/30',
+  eval: 'bg-warning/12 text-warning ring-warning/30',
+  billing: 'bg-fg-muted/15 text-fg-muted ring-border',
 };
 
+/**
+ * NEWEST AT TOP. When you ship something user-facing, prepend a row
+ * here and update apps/web/app/(marketing)/roadmap/page.tsx if it
+ * removes or moves a roadmap item.
+ */
 const ENTRIES: ReadonlyArray<Entry> = [
+  {
+    date: '2026-05-03',
+    tag: 'platform',
+    title: 'API ↔ engine bridge — agent runs actually execute end-to-end',
+    body: 'POST /v1/runs no longer just persists a queued row and stops. The route now drives the engine in-process: privacy-tier router decides → run row pre-recorded with a pinned id → executor fires → live local-discovery merges Ollama / vLLM / llama.cpp / LM Studio / MLX into the gateway → completion streams back → events land on the same row /v1/runs/:id is polling. Composite orchestrator (sequential / parallel / debate / iterative supervisors) wired into the runtime; MCP toolHost backed by the in-repo aldo-fs server (lazy stdio spawn); background scanner picks up orphaned queued runs every 30s; lastModel / lastProvider / total cost project from a real usage_records mirror. Default ON — explicit `false` disables.',
+  },
+  {
+    date: '2026-05-03',
+    tag: 'docs',
+    title: 'Local-LLM testing recipe — Ollama + LM Studio against ALDO',
+    body: 'docs/local-llm-testing.md: two paths. (A) local dev — `pnpm --filter @aldo-ai/api dev` with ALDO_LOCAL_DISCOVERY=ollama,lmstudio reaches your existing engines at the default ports, no internet exposure. (B) hosted tunnel — cloudflared (with `--http-host-header localhost:11434` for Ollama) exposes local engines so prod ALDO can call into your laptop. Includes a standalone scripts/local-llm-demo.ts that proves the gateway adapter against either backend in one command, plus a Playwright spec covering both paths.',
+  },
+  {
+    date: '2026-05-03',
+    tag: 'web',
+    title: 'Landing page — three iterations of depth (16 new sections)',
+    body: '"Five things only ALDO does" platform-invariant cards with inline SVG flows; "Define an agent in 8 lines" Python/TypeScript/YAML tabs; CSS-keyframe replay-across-models loop; Built-for-Engineer/PM/SRE personas; honest 19-row × 4-col comparison table; 8-card MCP integrations grid with copy-config; six annotated product surface mockups (flame graph, eval playground, N-way compare, prompts editor, spend dashboard, status page); ecosystem grid for every model + protocol + client; 30-second CLI quickstart terminal; built-in-the-open with last-7-commits timeline; pricing teaser; resource hub; honest compliance posture; FAQ; sticky scroll-rail nav; 4-column footer sitemap; founder story; hero dashboard cycle. First Load JS: 116 kB.',
+  },
+  {
+    date: '2026-05-03',
+    tag: 'web',
+    title: 'Wave-4 frontend — prompts, threads, sharing, ⌘K, N-way compare, tags, spend',
+    body: 'Prompts as first-class data with version history + diff + playground (closes Vellum + LangSmith Hub). Threads view groups runs by thread_id with chat-style transcripts. Inline thumbs / comments on runs + public read-only /share/<slug> links. /runs/compare extended to 6 simultaneous runs with stack-bar charts and median-deviation diff highlighting. Tag-based search + filter sheet on /runs (status pills, time presets, model + tag pickers, inline tag editor). Cost / spend dashboard at /observability/spend with budget alerts + CSV export. Linear-style ⌘K command palette across every surface, with g-prefix chord shortcuts (g a, g r, g e, g p, g d, g s) and a `?` overlay.',
+  },
+  {
+    date: '2026-05-02',
+    tag: 'platform',
+    title: 'Wave-3 — net-new wedges + half-shipped backends finished',
+    body: 'Git integration (read-only sync from a customer GitHub/GitLab repo into the agent registry — net-new vs the field). Hosted MCP HTTP/SSE transport so any HTTP-only client (ChatGPT, Cursor) can drive ALDO via mcp.aldo.tech. Eval scorer playground with picker + per-row scores + aggregate panel + score histogram (closes Braintrust). Per-template fork on /gallery (closes AutoGen-Studio + CrewAI). Self-host Helm chart + Terraform modules for AWS/GCP/Azure (closes LangSmith Self-Hosted, real artifacts not marketing copy). Retention enforcement job actually deletes old runs per plan policy (turns docs/data-retention.md from policy into reality). Per-model effectiveContextTokens lookup table replaces the hardcoded 8192. Real DB ping in /api/health (was inferred). Leaf-only termination conditions enforced at the engine.',
+  },
+  {
+    date: '2026-05-02',
+    tag: 'platform',
+    title: 'Wave-MVP ship-readiness — license, projects, termination, MCP introspection',
+    body: 'License canonicalised to FSL-1.1-ALv2 across the repo. project_id retrofit on agents + runs (multi-team isolation lights up; project picker in the sidebar). Termination conditions wired into the supervisor orchestrator (maxTurns / maxUsd / textMention / successRoles + `run.terminated_by` event). MCP tool inputSchema introspection in the engine (no more `{type:"object"}` placeholders — real schemas pulled from each connected server). Stripe checkout gap-filled — backend was 90% built; the dead pricing CTAs now mint real test-mode checkout sessions when STRIPE_* env is configured. Architecture diagram a11y violation fixed at three call sites. SDKs (Python + TypeScript) and the VS Code extension hardened for publish; release workflows have confirm-version guards.',
+  },
+  {
+    date: '2026-05-02',
+    tag: 'ops',
+    title: 'In-house status page at /status (no vendor)',
+    body: 'Polls the API + web + database every 30s; 30-day incident history backed by a JSON file in the repo (commit-driven publishing via ISR). Architecture-diagram a11y fix at three call sites; axe ACKNOWLEDGED_VIOLATION_IDS tightened to the colour-contrast carve-out only. Linked from the marketing footer + the /docs sidebar.',
+  },
+  {
+    date: '2026-05-02',
+    tag: 'docs',
+    title: 'Operational docs — runbook, retention, support intake',
+    body: 'docs/runbook.md (deploy + rollback, 5xx triage, DB restore, on-call decision tree). docs/data-retention.md (storage categories, tiered defaults, deletion SLA, sub-processor list, GDPR posture). docs/support-intake.md (P0–P3 triage matrix, SLA wording per plan, escalation chain). PROGRESS.md + PLANS.md indexed at the repo root.',
+  },
   {
     date: '2026-04-27',
     tag: 'web',
@@ -90,7 +160,7 @@ const ENTRIES: ReadonlyArray<Entry> = [
   },
   {
     date: '2026-04-08',
-    tag: 'platform',
+    tag: 'eval',
     title: 'Eval-gated promotion',
     body: 'Agent specs declare a threshold + rubric. Re-promotion to the active version is blocked if the eval score regresses. The same rubric runs in CI and in production — one source of truth, no review-as-vibes.',
   },
@@ -111,16 +181,23 @@ const ENTRIES: ReadonlyArray<Entry> = [
 export default function ChangelogPage() {
   return (
     <article className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20">
-      <header className="border-b border-slate-200 pb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+      <header className="border-b border-border pb-8">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
           Changelog
         </p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-fg sm:text-5xl">
           What we ship.
         </h1>
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-fg-muted">
           Public, curated. Updated on every meaningful release. Ships fast — we&rsquo;re a small
           team that does big-team things by doing them often.
+        </p>
+        <p className="mt-3 text-sm text-fg-muted">
+          See what&rsquo;s coming next on the{' '}
+          <Link href="/roadmap" className="text-accent underline-offset-2 hover:underline">
+            roadmap
+          </Link>
+          .
         </p>
       </header>
 
@@ -130,39 +207,38 @@ export default function ChangelogPage() {
             key={`${e.date}-${e.title}`}
             className="grid grid-cols-1 gap-3 sm:grid-cols-[7rem,1fr] sm:gap-6"
           >
-            <div className="text-[12px] font-mono text-slate-500 sm:pt-1.5">{e.date}</div>
+            <div className="font-mono text-[12px] text-fg-faint sm:pt-1.5">{e.date}</div>
             <div>
               <div className="flex items-baseline justify-between gap-3">
-                <h2 className="text-[16px] font-semibold tracking-tight text-slate-900">
-                  {e.title}
-                </h2>
+                <h2 className="text-[16px] font-semibold tracking-tight text-fg">{e.title}</h2>
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ${TAG_BADGE[e.tag]}`}
                 >
                   {e.tag}
                 </span>
               </div>
-              <p className="mt-2 text-[14px] leading-relaxed text-slate-700">{e.body}</p>
+              <p className="mt-2 text-[14px] leading-relaxed text-fg-muted">{e.body}</p>
             </div>
           </li>
         ))}
       </ol>
 
-      <footer className="mt-16 rounded-xl border border-slate-200 bg-slate-50/60 p-6">
-        <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">
-          Want to be notified?
-        </h3>
-        <p className="mt-2 text-[14px] leading-relaxed text-slate-700">
-          We don&rsquo;t have a newsletter yet — pricing for spam-free engineering tooling. For now:
-          bookmark this page, or email{' '}
-          <a className="underline" href="mailto:info@aldo.tech">
+      <footer className="mt-16 rounded-xl border border-border bg-bg-elevated p-6">
+        <h3 className="text-[15px] font-semibold tracking-tight text-fg">Want to be notified?</h3>
+        <p className="mt-2 text-[14px] leading-relaxed text-fg-muted">
+          Sign up to the digest at the bottom of the{' '}
+          <Link href="/" className="text-accent underline-offset-2 hover:underline">
+            homepage
+          </Link>
+          , or email{' '}
+          <a className="text-accent underline-offset-2 hover:underline" href="mailto:info@aldo.tech">
             info@aldo.tech
-          </a>{' '}
-          and ask to be on the (real) launch list.
+          </a>
+          .
         </p>
         <Link
           href="/signup"
-          className="mt-4 inline-flex rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="mt-4 inline-flex rounded bg-accent px-4 py-2 text-sm font-medium text-bg transition-opacity hover:opacity-90"
         >
           Try the trial →
         </Link>
