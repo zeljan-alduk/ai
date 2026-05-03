@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 15
     if: ${{ vars.DEPLOY_API_ENABLED == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: superfly/flyctl-actions/setup-flyctl@v1
 
