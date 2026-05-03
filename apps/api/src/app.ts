@@ -54,6 +54,7 @@ import { newsletterRoutes } from './routes/newsletter.js';
 import { notificationsRoutes } from './routes/notifications.js';
 import { observabilityRoutes } from './routes/observability.js';
 import { openApiRoutes } from './routes/openapi.js';
+import { assistantRoutes } from './routes/assistant.js';
 import { playgroundRoutes } from './routes/playground.js';
 import { projectsRoutes } from './routes/projects.js';
 import { promptsRoutes } from './routes/prompts.js';
@@ -228,6 +229,10 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', runsRoutes(deps));
   // Wave-13 — multi-model prompt playground (SSE).
   app.route('/', playgroundRoutes(deps));
+  // Assistant MVP — single-model SSE chat. Off by default; opt-in via
+  // ASSISTANT_ENABLED env. Tool support arrives with IterativeAgentRun
+  // (MISSING_PIECES.md #1).
+  app.route('/', assistantRoutes(deps));
   app.route('/', agentsRoutes(deps));
   app.route('/', modelsRoutes(deps));
   app.route('/', observabilityRoutes(deps));

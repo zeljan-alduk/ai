@@ -4,6 +4,7 @@
 // `lib/api` call in the same request scope. See lib/api-server-init.ts.
 import '@/lib/api-server-init';
 
+import { AssistantPanel } from '@/components/assistant/assistant-panel';
 import { CommandPalette } from '@/components/command-palette';
 import { KeyboardShortcutsRouter } from '@/components/keyboard-shortcuts-router';
 import { Sidebar, type SidebarUser } from '@/components/sidebar';
@@ -167,6 +168,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <>
             <CommandPalette />
             <KeyboardShortcutsRouter />
+            {/* Assistant MVP — chat panel, off unless
+                NEXT_PUBLIC_ASSISTANT_ENABLED=true (deployment-level).
+                Backend route also gated by ASSISTANT_ENABLED. */}
+            {process.env.NEXT_PUBLIC_ASSISTANT_ENABLED === 'true' ? (
+              <AssistantPanel />
+            ) : null}
           </>
         )}
       </body>

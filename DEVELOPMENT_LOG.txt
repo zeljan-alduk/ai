@@ -5072,3 +5072,12 @@ Out of scope (per brief):
   - Open questions (frontier-cost surface, approval-gate UX, memory quotas, eval-as-MCP-vs-engine, spec versioning, private-cloud tier)
   - Alternatives considered + why rejected (AutoGen/CrewAI dependency, mega-MCP, defer browser/vision)
 - Per user: did NOT change /examples copy yet, did NOT start the assistant MVP / flame-graph upgrade. Implementation phase begins after user signs off on the plan.
+
+2026-05-04 00:55 | engineer | flame-graph upgrade + assistant MVP (two scoped commits)
+- 2b8cba5: /runs/[id] flame-graph restyled with semantic Tailwind tokens. Lane-stripe backgrounds, status legend with counts, ticks via stroke-border / fill-fg-faint. Sub-label (lastModel) renders right-aligned inside wide bars. Existing 12 tests still pass — statusFill switched from hex to className but the assertions are type-only.
+- This commit (assistant MVP): floating bottom-right chat panel + /v1/assistant/stream SSE backend. Single-model dispatch via the same playground stub-streamer pattern (real gateway streaming inherits free when the playground real-stream wire lands). Honest scope: chat-only today, no tool calls. System prompt names the IterativeAgentRun primitive (MISSING_PIECES.md #1) as the gating dependency for tool support and approval-gated writes.
+- Feature flag: ASSISTANT_ENABLED on the API gates the route; NEXT_PUBLIC_ASSISTANT_ENABLED on the web gates the panel render. Both default false so the assistant chrome stays dormant unless explicitly enabled.
+- New apps/api/src/routes/assistant.ts (~245 lines): SSE route, AssistantStreamer interface, default stub yielding two text deltas + a usage event. Privacy class 'internal' + capability 'reasoning'; cheapest eligible model via the existing model registry/router.
+- New apps/web/components/assistant/assistant-panel.tsx (~290 lines): launcher bubble (bottom-right), expandable card (40 KB max-h, 80 vh on small screens), message list with auto-scroll, input with Enter-to-send / Shift-Enter for newline, streaming-message rendering, error surface, per-message meta footer (model · latency · token count). Uses semantic tokens throughout; works in light + dark.
+- Wired into apps/web/app/layout.tsx alongside CommandPalette + KeyboardShortcutsRouter.
+- TypeScript clean across @aldo-ai/web + @aldo-ai/api. Did not touch /examples copy per the user's earlier instruction.
