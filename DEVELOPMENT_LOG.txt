@@ -5061,3 +5061,14 @@ Out of scope (per brief):
   6. ALDO agent spec yaml (mcp permissions + prompt)
 - Stack list refreshed to reflect actual current pipeline: Real-ESRGAN x4 PyTorch CPU + GFPGAN v1.4 + YuNet + Hono SSE with heartbeat + MCP server. Summary mentions the diffusion-style processing animation.
 - Both typecheck clean (mcp-picenhancer + @aldo-ai/web).
+
+2026-05-04 00:30 | engineer | MISSING_PIECES.md — honest gap analysis + 9-piece implementation plan
+- User: "is it realistic that picenhancer is made only by using ai.aldo.tech at this stage?" — answered honestly: no, picenhancer was driven by Claude (Opus 4.7, 1M context) in this Claude Code CLI session. Platform was the artefact under construction, not the engine performing the build.
+- User: "ultrathink about it and write MISSING_PIECES.md with a detailed plan." Done.
+- NEW MISSING_PIECES.md (~700 lines): planning doc for what the platform needs to actually drive the next picenhancer-class build end-to-end. Decomposed into:
+  - Anatomy of the picenhancer build by phase, tool used, current platform equivalent
+  - Nine concrete missing pieces (iterative loop, fs-write MCP, shell+git MCPs, frontier coding capability, real PromptRunner, memory across runs, browser MCP, vision, approval gates), each with design sketch + "what done looks like" + effort estimate
+  - Sequencing (dependency graph) and 3-tier sprint plan (Tier 1 = MVP coder, ~3 weeks; Tier 2 = picenhancer-class, ~6 weeks total; Tier 3 = production, ~10 weeks total)
+  - Open questions (frontier-cost surface, approval-gate UX, memory quotas, eval-as-MCP-vs-engine, spec versioning, private-cloud tier)
+  - Alternatives considered + why rejected (AutoGen/CrewAI dependency, mega-MCP, defer browser/vision)
+- Per user: did NOT change /examples copy yet, did NOT start the assistant MVP / flame-graph upgrade. Implementation phase begins after user signs off on the plan.
