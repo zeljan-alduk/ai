@@ -57,21 +57,25 @@ def main() -> int:
 
     wrapped = GFPGANWrap(model)
     dummy = torch.randn(1, 3, 512, 512)
+
+    # Trace first so the StyleGAN2 ModulatedConv2d's dynamic kernel
+    # reshape (which torch.onnx can't symbolically export) gets baked
+    # into a constant for batch=1. We always run with batch=1 at
+    # inference time, so the loss of dynamic batching is a non-issue.
+    with torch.no_grad():
+        traced = torch.jit.trace(wrapped, dummy, check_trace=False)
+
     torch.onnx.export(
-        wrapped,
+        traced,
         dummy,
         dst,
         opset_version=17,
         input_names=["input"],
         output_names=["output"],
-        # Batch is dynamic; spatial is fixed at 512×512 (GFPGAN's
-        # native input size). Real-time alignment crops to 512×512
-        # before inference.
-        dynamic_axes={
-            "input": {0: "batch"},
-            "output": {0: "batch"},
-        },
         do_constant_folding=True,
+        # No dynamic_axes — the trace is fixed at 1×3×512×512 input
+        # and the corresponding 1×3×512×512 output. The runtime crops
+        # every face to 512×512 before inference anyway.
     )
     print(f"wrote {dst}")
     return 0
