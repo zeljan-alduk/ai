@@ -76,15 +76,14 @@ jobs:
       - name: kubeconform — prod
         run: kubeconform -strict -summary -kubernetes-version 1.31.0 /tmp/manifests-prod.yaml
 
-      - name: kubectl apply --dry-run=client (offline)
-        run: |
-          # Without a cluster, kubectl validates structure + parses every
-          # manifest. The --validate=false flag skips OpenAPI schema fetch
-          # since there's no apiserver to ask. The kubeconform step above
-          # already covers schema validation against pinned k8s 1.31.
-          kubectl apply --dry-run=client --validate=false -f /tmp/manifests-default.yaml
-          kubectl apply --dry-run=client --validate=false -f /tmp/manifests-mini.yaml
-          kubectl apply --dry-run=client --validate=false -f /tmp/manifests-prod.yaml
+      # Removed an upstream `kubectl apply --dry-run=client --validate=false`
+      # step: even with --validate=false, kubectl still attempts to reach
+      # the API server to recognize resource kinds, which fails offline
+      # ("dial tcp [::1]:8080: connect: connection refused"). kubeconform
+      # above already provides full offline schema validation against the
+      # pinned k8s 1.31 OpenAPI spec — adding kubectl here adds nothing
+      # but a flaky failure in CI. Real-cluster smoke (kind-in-CI or
+      # per-cloud nightly) is the right home for kubectl-shaped checks.
 
   terraform:
     name: terraform fmt + validate
