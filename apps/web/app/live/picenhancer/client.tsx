@@ -432,7 +432,9 @@ export function PicenhancerClient() {
                     <span className="ml-2 normal-case tracking-normal text-fg-faint">
                       ·{' '}
                       {final.engine === 'aiplus'
-                        ? `Real-ESRGAN x4 (ONNX)${final.faces ? ` · ${final.faces} face${final.faces === 1 ? '' : 's'}` : ''}`
+                        ? final.faces
+                          ? `Real-ESRGAN + GFPGAN · ${final.faces} face${final.faces === 1 ? '' : 's'}`
+                          : 'Real-ESRGAN x4 (ONNX)'
                         : final.engine === 'realesrgan'
                           ? 'Real-ESRGAN AI'
                           : 'Lanczos-3 (libvips)'}
