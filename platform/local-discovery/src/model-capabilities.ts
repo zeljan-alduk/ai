@@ -202,15 +202,19 @@ const RULES: readonly CapabilityRule[] = [
     family: 'llama-3.1+',
   },
 
-  // ── Gemma 3 — tool-use + function-calling. gemma3n is the small one ─
+  // ── Gemma 3 — Google's series supports tool-use in principle, but
+  // Ollama's stock chat template returns `does not support tools` on
+  // /v1/chat/completions. Same situation as deepseek-r1. Conservative:
+  // don't claim tool-use until Ollama upstream wires it. Revisit when
+  // the gemma3 / gemma3n models surface tool-call channels.
   {
     match: /\bgemma-?3n\b/,
-    provides: ['tool-use', 'function-calling', 'streaming', 'structured-output'],
+    provides: ['streaming', 'structured-output'],
     family: 'gemma-3n',
   },
   {
     match: /\bgemma-?3\b/,
-    provides: ['tool-use', 'function-calling', 'streaming', 'structured-output'],
+    provides: ['streaming', 'structured-output'],
     family: 'gemma-3',
   },
 

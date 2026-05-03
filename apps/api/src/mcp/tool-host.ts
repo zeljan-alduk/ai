@@ -65,10 +65,15 @@ function defaultServers(): Record<string, McpServerSpec> {
   const tsxBin = fileURLToPath(
     new URL('../../../../node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs', import.meta.url),
   );
+  // Resolve repo root from this file (not process.cwd, which is the
+  // API's working dir = apps/api when run via `pnpm --filter dev`).
+  const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+  // aldo-fs expects each root as `<path>:<ro|rw>`. Default to read-only
+  // for safety; agents that need to write would override this entry.
   return {
     'aldo-fs': {
       command: 'node',
-      args: [tsxBin, aldoFsEntry, '--roots', process.cwd()],
+      args: [tsxBin, aldoFsEntry, '--roots', `${repoRoot}:ro`],
     },
   };
 }
