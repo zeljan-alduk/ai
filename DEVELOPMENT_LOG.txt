@@ -5027,3 +5027,5 @@ Out of scope (per brief):
 2026-05-03 20:30 | engineer | scripts/vps-deploy.sh self-refreshes the webhook on changes
 - The AI-plus deploys keep failing with no log_tail in the response because the running webhook on the VPS predates my log-tail patch (webhook is installed by vps-bootstrap.sh, not refreshed by vps-deploy.sh). Adding a self-refresh step to the deploy script: when $APP_DIR/repo/scripts/vps-deploy-webhook.py differs from $APP_DIR/webhook/vps-deploy-webhook.py, install the new file and schedule `systemctl restart aldo-deploy-webhook` 30 s later via setsid. The 30 s grace lets the current webhook process return its HTTP response before getting killed, so the deploy that triggered the refresh isn't broken from the caller's perspective.
 - After this commit lands, the next-after deploy will return log_tail in its JSON body — finally giving us visibility into why the AI-plus container build is failing.
+
+2026-05-03 20:35 | engineer | trigger to test log_tail visibility after webhook refresh
