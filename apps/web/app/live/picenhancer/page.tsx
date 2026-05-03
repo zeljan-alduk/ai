@@ -50,18 +50,18 @@ export default function PicenhancerLivePage() {
           .
         </p>
         <p className="mt-3 text-[13px] text-accent">
-          🔒 Your image is processed entirely on this server. No cloud, no third-party API, no
-          telemetry, $0. (AI-plus engine — Real-ESRGAN x4 + GFPGAN face restore — coming next.)
+          🔒 Real-ESRGAN x4 generative super-resolution, run entirely on this server via ONNX
+          Runtime CPU. No cloud, no third-party API, no telemetry, $0.
         </p>
       </header>
 
       <PicenhancerClient />
 
       <footer className="mt-12 border-t border-border pt-5 text-[12px] text-fg-muted">
-        Stack: <code className="font-mono text-fg">sharp</code> (libvips) Lanczos-3 + perceptual
-        sharpen — sub-second, no GPU required. Real-ESRGAN x4 ONNX + GFPGAN face restore engine
-        is the next iteration (AI build under debugging on the VPS). Hono backend, proxied
-        through Next.js. Source briefs + agents:{' '}
+        Stack: <code className="font-mono text-fg">Real-ESRGAN x4</code> via ONNX Runtime CPU
+        (tile-based inference, no GPU required). Lanczos extension on top for ×8 / ×16. Face
+        restoration (GFPGAN) is the next planned engine pass. Hono backend, proxied through
+        Next.js. Source briefs + agents:{' '}
         <Link href="/examples#picenhancer" className="text-accent underline-offset-2 hover:underline">
           /examples
         </Link>
