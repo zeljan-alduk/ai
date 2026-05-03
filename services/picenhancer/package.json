@@ -1,0 +1,15 @@
+{
+  "name": "@aldo-ai/picenhancer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "picenhancer.ai-style local image upscaler — Hono server wrapping realesrgan-ncnn-vulkan. The picenhancer Examples reference build for ai.aldo.tech (see /examples).",
+  "type": "module",
+  "scripts": {
+    "start": "tsx server.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.1",
+    "hono": "^4.12.16",
+    "tsx": "^4.21.0"
+  }
+}

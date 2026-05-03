@@ -58,9 +58,9 @@ export default function PicenhancerLivePage() {
       <PicenhancerClient />
 
       <footer className="mt-12 border-t border-border pt-5 text-[12px] text-fg-muted">
-        Local stack: <code className="font-mono text-fg">realesrgan-ncnn-vulkan</code> (Metal) +
-        ALDO AI <code className="font-mono text-fg">enhance-sharper</code> prompt (qwen3:14b on
-        Ollama) + Hono backend, proxied through Next.js. Source briefs + agents:{' '}
+        Stack: <code className="font-mono text-fg">realesrgan-ncnn-vulkan</code> (GPU when
+        present, software Vulkan otherwise) + Hono backend, proxied through Next.js.
+        Source briefs + agents:{' '}
         <Link href="/examples#picenhancer" className="text-accent underline-offset-2 hover:underline">
           /examples
         </Link>

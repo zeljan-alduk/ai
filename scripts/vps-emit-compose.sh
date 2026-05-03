@@ -136,9 +136,32 @@ ${COMPOSE_API_NETWORKS}
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE: "https://${APP_DOMAIN}"
+      # /live/picenhancer (the Examples-page reference build) proxies
+      # multipart POST + SSE to this internal address. Set to "" or
+      # remove to short-circuit the proxy and surface a 503 instead.
+      PIXMEND_BACKEND_URL: "http://aldo-picenhancer:4000"
 ${COMPOSE_WEB_PORTS}
     networks:
 ${COMPOSE_WEB_NETWORKS}
+
+  # Picenhancer — Hono server wrapping realesrgan-ncnn-vulkan, fronted
+  # by aldo-web's /live/picenhancer/api/* routes. CPU-only via Mesa
+  # llvmpipe (software Vulkan); a real GPU is auto-detected if present.
+  # Not exposed externally — only reachable through the aldo-web proxy.
+  aldo-picenhancer:
+    build:
+      context: ${APP_DIR}/repo
+      dockerfile: services/picenhancer/Dockerfile
+    container_name: aldo-picenhancer
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    volumes:
+      # Persist in-flight uploads + produced PNGs across container
+      # restarts so an in-progress request isn't orphaned by a redeploy.
+      - ${APP_DIR}/data/picenhancer:/var/lib/picenhancer
+    networks:
+      - aldo-internal
 
 networks:
   aldo-internal:
