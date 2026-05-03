@@ -116,7 +116,7 @@ def main() -> int:
     t0 = time.time()
 
     faces = 0
-    emit("progress", pct=15, stage="inference")
+    emit("progress", pct=15, phase="inference")
 
     if face_enhancer is not None:
         # GFPGANer.enhance(): face detect -> align -> restore -> paste-back
