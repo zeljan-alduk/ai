@@ -1,0 +1,61 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: local-fs-summarizer
+  version: 0.1.0
+  description: "Reads a file via the aldo-fs MCP server and returns a 3-bullet summary. Demonstrates the wave-X MCP toolHost end-to-end: tool listing, tool call, tool result, response. Strict-local routing."
+  owner: local-test@aldo-tech-labs
+  tags: [demo, local, mcp, tool-use]
+
+role:
+  team: support
+  reports_to: principal
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, streaming]
+  privacy_tier: sensitive
+  primary:
+    capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.0
+    tokens_in_max: 8000
+    tokens_out_max: 800
+  latency:
+    p95_ms: 60000
+  decoding:
+    mode: free
+    temperature: 0.2
+
+prompt:
+  system_file: prompts/local-fs-summarizer.system.md
+  variables: {}
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read]
+  permissions:
+    network: none
+    filesystem: repo-readonly
+
+memory:
+  read:  [private]
+  write: [private]
+  retention:
+    private: 30d
+
+spawn:
+  allowed: []
+
+inputs:
+  schema_ref: schemas/local_fs_summarizer_brief.json
+
+outputs:
+  artefact:
+    json_schema: schemas/local_fs_summarizer_artefact.json
+
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: false

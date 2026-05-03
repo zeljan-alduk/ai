@@ -5,7 +5,8 @@
 > touching code, replay every run, enforce privacy at the platform layer.
 
 [![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue.svg)](./LICENSE)
-[![Status: Early](https://img.shields.io/badge/status-early-orange.svg)](./DEVELOPMENT_LOG.txt)
+[![Status: Live](https://img.shields.io/badge/status-live-brightgreen.svg)](https://ai.aldo.tech)
+[![Tests](https://img.shields.io/badge/tests-1184_green-brightgreen.svg)](./DEVELOPMENT_LOG.txt)
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
 ALDO AI is an opinionated orchestrator for AI sub-agent teams. One
@@ -23,15 +24,34 @@ instead of Claude."
 
 ## Status
 
-Early scaffolding. The core packages compile, type-check, and test
-cleanly — but there's no production deployment yet. The repository is
-being built by a virtual software agency ("ALDO TECH LABS") of
-sub-agents, dogfooding the very orchestration patterns ALDO AI
-provides. See [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) for the
-running narrative.
+Live in production at **[ai.aldo.tech](https://ai.aldo.tech)** —
+control plane, API, eval playground, prompts, threads, run sharing,
+spend dashboard, ⌘K palette, in-house status page, and the engine
+that actually executes runs against local + frontier models. Built by
+a virtual software agency ("ALDO TECH LABS") dogfooding the very
+orchestration patterns ALDO AI provides. See
+[`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) for the running
+narrative; [`PROGRESS.md`](./PROGRESS.md) for the wave-by-wave
+retrospective; [`PLANS.md`](./PLANS.md) for next actions.
 
-Roughly 84 passing tests across 5 packages, 26 reference agents, and
-a dozen design docs at the time of writing.
+**~1,184 passing tests across 9 packages**, 30 reference agents
+(direction · delivery · support), 27 sequential storage migrations,
+two SDKs (`aldo-ai` Python + `@aldo-ai/sdk` TypeScript) ready to
+publish, two MCP servers (`@aldo-ai/mcp-fs` + `@aldo-ai/mcp-platform`
+with both stdio and Streamable-HTTP transports), a Helm chart +
+Terraform modules for self-host, and the founding 50+ pages of the
+control plane.
+
+Public surfaces:
+
+| | |
+|---|---|
+| **Marketing** | [`ai.aldo.tech`](https://ai.aldo.tech) |
+| **Status** | [`ai.aldo.tech/status`](https://ai.aldo.tech/status) |
+| **Roadmap** | [`ai.aldo.tech/roadmap`](https://ai.aldo.tech/roadmap) |
+| **Changelog** | [`ai.aldo.tech/changelog`](https://ai.aldo.tech/changelog) |
+| **Docs** | [`ai.aldo.tech/docs`](https://ai.aldo.tech/docs) |
+| **API reference** | [`ai.aldo.tech/api/docs`](https://ai.aldo.tech/api/docs) |
 
 ## Why
 
@@ -127,31 +147,62 @@ other code changes. That's the agnostic promise.
 
 ```
 platform/
-  types/         cross-package type contracts (ADR 0001)
-  registry/      agent-spec loader + semver + eval-gated promotion
-  gateway/       LLM-agnostic router + provider adapters
-  engine/        runtime + orchestrator + checkpointer
-  observability/ OTEL GenAI tracer + replay bundles
+  types/             cross-package type contracts (ADR 0001)
+  registry/          agent-spec loader + semver + eval-gated promotion
+  gateway/           LLM-agnostic router + provider adapters
+  engine/            runtime + orchestrator + checkpointer
+  orchestrator/      composite supervisor (sequential / parallel /
+                     debate / iterative)
+  local-discovery/   probe Ollama / vLLM / llama.cpp / MLX / LM Studio
+  api-contract/      shared zod schemas for /v1 wire shapes
+  storage/           sequential migrations + SqlClient abstraction
+  billing/           Stripe webhooks + subscription state
+  cache/             llm-response cache + per-tenant policy
+  eval/              suite runner + promotion gate
+  observability/     OTEL GenAI tracer + replay bundles
+  rate-limit/        Postgres-advisory-lock token bucket
+  secrets/           tenant-scoped encrypted secret store
+  integrations/      git / outbound webhook plumbing
 apps/
-  cli/           the `aldo` command-line tool
-agency/          reference agency ("ALDO TECH LABS") — 26 agent YAMLs
-                 + prompts across direction / delivery / support / meta
-mcp-servers/     first-party MCP tool servers (in progress)
+  api/               Hono control-plane API (the platform brain)
+  web/               Next.js control plane + marketing surface
+  cli/               the `aldo` command-line tool
+  web-e2e/           Playwright e2e suites
+agency/              reference agency ("ALDO TECH LABS") — 30 agent
+                     YAMLs + prompts across direction / delivery /
+                     support / meta. Forkable from /gallery.
+sdks/
+  python/            `aldo-ai` (PyPI-bound)
+  typescript/        `@aldo-ai/sdk` (npm-bound)
+mcp-servers/
+  aldo-fs/           filesystem MCP server (stdio)
+  aldo-platform/     ALDO platform MCP server (stdio + Streamable HTTP)
+extensions/
+  vscode/            VS Code extension (Marketplace-bound)
+charts/
+  aldo-ai/           Helm chart — helm lint + kubeconform clean
+terraform/           per-cloud modules (aws-eks / gcp-gke / azure-aks)
 docs/
-  adr/           architectural decision records
-  research/      landscape surveys (gateway, MCP, eval, observability)
-  design/        subsystem designs (security, UX, cost, memory)
-  product/       vision, positioning, business model
-  deploy/        free-tier hosting playbook
-examples/        sample projects the agency can tackle
+  adr/               architectural decision records
+  research/          landscape surveys (gateway, MCP, eval, observability)
+  design/            subsystem designs (security, UX, cost, memory)
+  product/           vision, positioning, business model
+  guides/            customer-facing how-tos (mcp-server, self-hosting,
+                     dataset-uploads, …)
+  sdks/              Python + TypeScript SDK guides
+  runbook.md         single-operator runbook
+  data-retention.md  retention policy
+  support-intake.md  P0–P3 triage matrix
+  local-llm-testing.md  the Ollama + LM Studio recipe
+scripts/             VPS bootstrap + deploy + local-llm demo
+examples/            sample projects the agency can tackle
 tests/
 ```
 
 ## Quick start (dev)
 
-Requirements: Node 22+, pnpm 9+. Optional: Bun (for the CLI binary),
-Ollama (for local-model tests), Python 3.12 + uv (for the eval
-harness under `platform/eval`, planned).
+Requirements: Node 22+, pnpm 9+. Optional: Ollama or LM Studio for
+local-model tests (see [`docs/local-llm-testing.md`](./docs/local-llm-testing.md)).
 
 ```bash
 git clone https://github.com/zeljan-alduk/ai aldo
@@ -165,13 +216,31 @@ pnpm -r test
 # Validate the reference agency
 pnpm --filter @aldo-ai/cli exec aldo agent validate \
   agency/support/code-reviewer.yaml
+
+# Run an agent end-to-end against local Ollama
+ollama serve &
+ollama pull llama3.1:8b
+pnpm --filter @aldo-ai/cli exec aldo run local-summarizer \
+  --provider ollama --inputs '{"task":"Summarise the README"}'
+
+# Or boot the API + sign in at http://localhost:3001
+pnpm --filter @aldo-ai/api dev
 ```
 
-The CLI's `run` command is a stub in v0 — the engine + gateway wiring
-lands in the next milestone. See
-[`docs/deploy/free-tier-dev.md`](./docs/deploy/free-tier-dev.md) for
-the planned $0-cost dev environment (Vercel + Fly.io + Neon + R2 +
-Upstash + Gemini/Groq free tiers + local Ollama).
+The CLI's `run` command spawns real model calls via the engine. The
+API does too (since the wave-X bridge — see
+[`PROGRESS.md`](./PROGRESS.md)). Local engines (Ollama, vLLM,
+llama.cpp, MLX, LM Studio) are auto-discovered — see
+[`docs/local-llm-testing.md`](./docs/local-llm-testing.md) for the
+two-path recipe (local-dev + cloudflared tunnel).
+
+**Hosting**: production runs on a single VPS behind Docker Compose
+with edge nginx via the slovenia-transit proxy. GitHub Actions on
+push fires a webhook → `vps-deploy.sh` rebuilds + redeploys in
+under five minutes. Self-host via the Helm chart at
+[`charts/aldo-ai/`](./charts/aldo-ai/) or the per-cloud Terraform
+modules at [`terraform/`](./terraform/) (AWS EKS / GCP GKE /
+Azure AKS).
 
 ## Principles
 
@@ -189,16 +258,34 @@ Upstash + Gemini/Groq free tiers + local Ollama).
 6. **MCP is the tool standard.** Adopt the emerging spec rather than
    invent another.
 
-## Roadmap (short)
+## Roadmap
 
-- **v0.1** (now): core packages compile + test; CLI scaffolded;
-  reference agency defined; docs and ADRs in place.
-- **v0.2**: first end-to-end run (engine → gateway → real provider),
-  Postgres-backed registry + checkpointer, web control plane MVP.
-- **v0.3**: replay debugger (breakpoints, edit-and-rerun,
-  swap-model-from-here), eval harness wired as an MCP server.
-- **v1.0**: multi-tenant SaaS, SSO, audit export, managed-keys
-  proxy, sandbox marketplace.
+The full, living roadmap (Now / Next / Later / Maybe / End-of-2027
+vision) is at [**`ai.aldo.tech/roadmap`**](https://ai.aldo.tech/roadmap).
+The shipped log is at [**`ai.aldo.tech/changelog`**](https://ai.aldo.tech/changelog).
+Repo-internal source-of-truth files: [`ROADMAP.md`](./ROADMAP.md) +
+[`PLANS.md`](./PLANS.md).
+
+Short version of where we are:
+
+- **Live today** (v0.x): control plane + engine + gateway + composite
+  orchestrator + privacy-tier router + checkpointer + replay debugger
+  + eval harness + prompts + threads + run sharing + spend dashboard
+  + MCP toolHost + Helm chart + Terraform modules + Python/TS SDKs
+  (publish-ready, awaiting tokens) + VS Code extension.
+- **In flight** (this week): mcp.aldo.tech hosted endpoint, soak of
+  the API↔engine bridge, SDK + extension publish.
+- **Next** (1–2 weeks): Stripe live billing, engine resolve of
+  agent.promptRef, OCI Helm publish workflow, Git OAuth-app install.
+- **Later** (1+ quarter): SOC 2 Type 1, SSO/SAML, real-cluster Helm
+  e2e, bidirectional git sync, EU residency.
+- **End of 2027 (1.0)**: hire-grade UX, local frontier-class as
+  default for sensitive work, repo-as-truth bidirectional sync,
+  trust posture (SOC 2 Type 2 / HIPAA / EU residency / FedRAMP
+  Moderate), distribution via mcp.aldo.tech, observability rivalling
+  Datadog APM for agent runs, eval-gated promotion as a pattern the
+  industry copies. Goal: 20–50 paying teams + 3–5 lighthouse design
+  partners.
 
 ## Business model
 

@@ -62,7 +62,7 @@ import { getDefaultProjectIdForTenant, getProjectBySlug } from '../projects-stor
 // Wave-16 — per-tenant monthly run quota. enforceMonthlyQuota throws
 // HTTP 402 `quota_exceeded` if the tenant is over their plan cap.
 import { enforceMonthlyQuota } from '../quotas.js';
-import { loadModelCatalog } from './models.js';
+import { getDiscovered, loadModelCatalog } from './models.js';
 
 const RunIdParam = z.object({ id: z.string().min(1) });
 
@@ -117,12 +117,28 @@ export function runsRoutes(deps: Deps): Hono {
     }
     const spec = detail.spec;
     const catalog = await loadModelCatalog(deps.env);
-    const registry = createModelRegistry(
-      catalog.models.flatMap((m) => {
-        const r = catalogEntryToRegisteredModel(m);
-        return r === null ? [] : [r];
-      }),
-    );
+    const catalogRows = catalog.models.flatMap((m) => {
+      const r = catalogEntryToRegisteredModel(m);
+      return r === null ? [] : [r];
+    });
+    // Wave-X — also merge live local-discovery into the simulator's
+    // registry. The catalog ships illustrative ids (e.g.
+    // `ollama.qwen2.5-coder:32b`) that almost never match what an
+    // operator's box has actually pulled, so a sensitive agent that
+    // requires `reasoning` would 422 here even when a discovered
+    // `qwen3:14b` on Ollama claims it. Catalog rows still win on id
+    // collision so this is purely additive.
+    const discovered = await getDiscovered(deps.env);
+    const knownIds = new Set(catalogRows.map((r) => r.id));
+    const discoveredRows: RegisteredModel[] = [];
+    for (const d of discovered) {
+      if (knownIds.has(d.id)) continue;
+      const { source: _src, discoveredAt: _at, ...row } = d;
+      void _src;
+      void _at;
+      discoveredRows.push(row as RegisteredModel);
+    }
+    const registry = createModelRegistry([...catalogRows, ...discoveredRows]);
     const router = createRouter(registry);
     const ctx: CallContext = {
       required: spec.modelPolicy.capabilityRequirements,

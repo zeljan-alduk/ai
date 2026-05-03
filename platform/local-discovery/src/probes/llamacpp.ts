@@ -13,6 +13,7 @@
  * etc.). Unknown models keep the historical 8192 default.
  */
 
+import { lookupCapabilities } from '../model-capabilities.js';
 import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
@@ -50,6 +51,7 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
     // actually has available; the trained one is the model's max.
     const serverCtx = m?.n_ctx ?? m?.meta?.n_ctx ?? m?.n_ctx_train ?? m?.meta?.n_ctx_train;
     const effectiveContextTokens = resolveContextTokens(id, serverCtx);
+    const caps = lookupCapabilities(id);
     out.push({
       id,
       provider: 'llamacpp',

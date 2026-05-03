@@ -299,7 +299,7 @@ export function resetDiscoveryCache(): void {
   inFlight = null;
 }
 
-async function getDiscovered(env: Env): Promise<readonly DiscoveredModel[]> {
+export async function getDiscovered(env: Env): Promise<readonly DiscoveredModel[]> {
   // Test seam: `ALDO_LOCAL_DISCOVERY=none` short-circuits without
   // probing. The discovery package handles this internally — we still
   // call through so the cache stays consistent.

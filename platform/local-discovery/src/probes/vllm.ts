@@ -14,6 +14,7 @@
  * Unknown models keep the historical 8192 default.
  */
 
+import { lookupCapabilities } from '../model-capabilities.js';
 import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
@@ -45,6 +46,7 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
     if (id.length === 0) continue;
     const serverCtx = m?.max_model_len ?? m?.context_length;
     const effectiveContextTokens = resolveContextTokens(id, serverCtx);
+    const caps = lookupCapabilities(id);
     out.push({
       id,
       provider: 'vllm',

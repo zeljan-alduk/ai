@@ -19,6 +19,7 @@
  * window beyond what the server / table actually reports.
  */
 
+import { lookupCapabilities } from '../model-capabilities.js';
 import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
@@ -63,13 +64,18 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
     // the value to 0 and crash the gateway's positive-int validator.
     const serverCtx = m?.details?.context_length ?? m?.context_length;
     const effectiveContextTokens = resolveContextTokens(id, serverCtx);
+    // Wave-X: family-aware capability inference. Pre-wave-X this was
+    // hardcoded `['streaming']` on every discovered model, which made
+    // every non-trivial agent fail to route locally even when a fully
+    // capable Llama 3.3 / Qwen 3 / DeepSeek R1 was sitting on the box.
+    const caps = lookupCapabilities(id);
     out.push({
       id,
       provider: 'ollama',
       providerKind: 'openai-compat',
       locality: 'local',
-      capabilityClass: 'local-reasoning',
-      provides: ['streaming'],
+      capabilityClass: caps.capabilityClass ?? 'local-reasoning',
+      provides: caps.provides,
       privacyAllowed: ['public', 'internal', 'sensitive'],
       effectiveContextTokens,
       cost: { usdPerMtokIn: 0, usdPerMtokOut: 0 },

@@ -1,0 +1,70 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: local-pair
+  version: 0.1.0
+  description: "Sequential composite: summarize-then-review. Demonstrates that the composite orchestrator runs end-to-end on local-only hardware against a reasoning-tagged model. Each child agent enforces privacy_tier sensitive."
+  owner: local-test@aldo-tech-labs
+  tags: [demo, composite, local, sequential]
+
+role:
+  team: direction
+  pattern: supervisor
+
+model_policy:
+  capability_requirements: [reasoning, streaming]
+  privacy_tier: sensitive
+  primary:
+    capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.0
+    tokens_in_max: 4000
+    tokens_out_max: 1600
+  latency:
+    p95_ms: 120000
+  decoding:
+    mode: free
+    temperature: 0.2
+
+prompt:
+  system_file: prompts/local-pair.system.md
+  variables: {}
+
+tools:
+  mcp: []
+  permissions:
+    network: none
+    filesystem: none
+
+memory:
+  read:  [private]
+  write: [private]
+  retention:
+    private: 30d
+
+spawn:
+  allowed: [local-summarizer, local-reviewer]
+
+composite:
+  strategy: sequential
+  subagents:
+    - agent: local-summarizer
+      as: summarizer
+      input_map:
+        task: input.task
+    - agent: local-reviewer
+      as: reviewer
+      input_map:
+        task: previous.summarizer.output
+
+inputs:
+  schema_ref: schemas/local_pair_brief.json
+
+outputs:
+  artefact:
+    json_schema: schemas/local_pair_artefact.json
+
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: false

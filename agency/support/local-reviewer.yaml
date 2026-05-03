@@ -1,0 +1,59 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: local-reviewer
+  version: 0.1.0
+  description: "Reviews a short text and returns a one-sentence verdict (approve / revise / reject) plus a one-sentence rationale. Demonstrates a reasoning-tagged leaf agent that routes to a local model. Pairs with local-summarizer to form the local-pair composite."
+  owner: local-test@aldo-tech-labs
+  tags: [demo, local, reasoning, review]
+
+role:
+  team: support
+  reports_to: principal
+  pattern: worker
+
+model_policy:
+  capability_requirements: [reasoning, streaming]
+  privacy_tier: sensitive
+  primary:
+    capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.0
+    tokens_in_max: 4000
+    tokens_out_max: 800
+  latency:
+    p95_ms: 60000
+  decoding:
+    mode: free
+    temperature: 0.2
+
+prompt:
+  system_file: prompts/local-reviewer.system.md
+  variables: {}
+
+tools:
+  mcp: []
+  permissions:
+    network: none
+    filesystem: none
+
+memory:
+  read:  [private]
+  write: [private]
+  retention:
+    private: 30d
+
+spawn:
+  allowed: []
+
+inputs:
+  schema_ref: schemas/local_reviewer_brief.json
+
+outputs:
+  artefact:
+    json_schema: schemas/local_reviewer_artefact.json
+
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: false

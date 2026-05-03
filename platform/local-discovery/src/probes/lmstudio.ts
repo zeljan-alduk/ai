@@ -13,6 +13,7 @@
  * models keep the historical 8192 default.
  */
 
+import { lookupCapabilities } from '../model-capabilities.js';
 import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
@@ -46,6 +47,7 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
     // loaded value is what the user actually has memory budget for.
     const serverCtx = m?.loaded_context_length ?? m?.max_context_length ?? m?.context_length;
     const effectiveContextTokens = resolveContextTokens(id, serverCtx);
+    const caps = lookupCapabilities(id);
     out.push({
       id,
       provider: 'lmstudio',
