@@ -4,121 +4,97 @@
 # behind ai.aldo.tech/live/picenhancer).
 #
 # Engine: `aiplus` by default — Real-ESRGAN x4 generative SR + GFPGAN
-# v1.4 face restoration via ONNX Runtime CPU. Tile-based SR + per-face
-# warp-restore-blend. Lanczos extension for ×8 / ×16.
+# v1.4 face restoration via PyTorch CPU + the canonical RealESRGANer +
+# GFPGANer Python classes from the official upstream packages. This is
+# the reference pipeline that every face-enhancement product (Topaz,
+# Tenorshare, etc.) uses under the hood; we just run it server-side
+# with no GPU.
 #
-# Two-stage build:
-#   1. converter — installs torch+CPU + basicsr + gfpgan briefly to
-#      load the upstream .pth checkpoints and export them to .onnx
-#      with dynamic shapes. Throwaway image.
-#   2. runtime   — node:22-bookworm-slim + python3 + onnxruntime CPU
-#      + opencv-python-headless + numpy + Pillow + the .onnx models +
-#      the Hono server.
+# Single-stage: ML deps + model weights all in the runtime image.
+# Earlier revisions used a multi-stage build with ONNX exports to keep
+# the image small, but GFPGAN's StyleGAN2 ModulatedConv2d doesn't
+# survive torch.onnx.export (mixed double/float Conv types). Going
+# back to torch in the runtime is the pragmatic ship-it path.
+#
+# Image size: ~1.5 GB. Per-portrait latency: ~10–30 s on a typical
+# CPU VPS.
 #
 # `sharp` (libvips Lanczos-3) and `realesrgan` (ncnn-vulkan binary)
 # are kept as opt-in alternatives via PIXMEND_ENGINE.
+#
+# Build context = repo root (set by docker-compose `build.context`).
 
-# ===================== STAGE 1: convert .pth -> .onnx =====================
-FROM python:3.11-slim-bookworm AS converter
+FROM node:22-bookworm-slim
 
-WORKDIR /work
-
-# curl + torch CPU stack + the OpenCV native deps that basicsr/gfpgan
-# pull in transitively. libgl1 + libglib2.0-0 are the libGL.so.1 /
-# libgthread providers — without them `import cv2` blows up at import
-# time.
+# OS deps:
+#   ca-certificates / curl   — fetch model weights at build time
+#   python3 / pip / venv     — host the AI pipeline
+#   libgl1 / libglib2.0      — runtime deps for opencv-python-headless
+#   libgomp1                 — OpenMP runtime PyTorch links against
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates curl libgl1 libglib2.0-0 \
+      ca-certificates curl \
+      python3 python3-pip python3-venv \
+      libgl1 libglib2.0-0 libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /opt/picenhancer
+
+# Venv to comply with PEP 668 (Debian 12 protects system Python).
+RUN python3 -m venv /opt/picenhancer/venv
+ENV PATH="/opt/picenhancer/venv/bin:${PATH}"
 RUN pip install --no-cache-dir --upgrade pip
 
-# All deps in one pip resolve so the torch pin survives basicsr's /
+# All ML deps in one pip resolve so the torch pin survives basicsr's /
 # gfpgan's unconstrained torch dep (otherwise pip uninstalls
 # torch==2.0.1+cpu and reinstalls torch==2.11.0 from PyPI to satisfy
 # the setup.py, which then breaks because torchvision >= 0.17 removed
-# transforms.functional_tensor).
+# transforms.functional_tensor that basicsr 1.4.2 imports).
 RUN pip install --no-cache-dir \
       --index-url https://download.pytorch.org/whl/cpu \
       --extra-index-url https://pypi.org/simple \
       "torch==2.0.1+cpu" "torchvision==0.15.2+cpu" \
       "numpy<2" "Pillow>=10,<11" \
-      "basicsr==1.4.2" "facexlib==0.3.0" "gfpgan==1.3.8" \
-      "onnx==1.16.2"
+      "opencv-python-headless==4.10.0.84" \
+      "basicsr==1.4.2" "facexlib==0.3.0" \
+      "realesrgan==0.3.0" "gfpgan==1.3.8"
 
 # Belt-and-suspenders: patch basicsr's functional_tensor import in case
 # pip resolution decides to upgrade torchvision in a future build.
+# torchvision 0.17+ moved rgb_to_grayscale to transforms.functional.
 RUN sed -i 's|from torchvision.transforms.functional_tensor import rgb_to_grayscale|from torchvision.transforms.functional import rgb_to_grayscale|' \
-    /usr/local/lib/python3.11/site-packages/basicsr/data/degradations.py 2>/dev/null || true
+    /opt/picenhancer/venv/lib/python3.11/site-packages/basicsr/data/degradations.py 2>/dev/null || true
 
-# ----- Real-ESRGAN x4plus → .onnx --------------------------------------
-RUN curl -fsSL -o RealESRGAN_x4plus.pth \
+# Pre-download every model weight the pipeline can pull at runtime so
+# the first user request doesn't pay a multi-minute download tax.
+#   - RealESRGAN_x4plus.pth         — generative SR backbone (~64 MB)
+#   - GFPGANv1.4.pth                — face restoration head (~333 MB)
+#   - detection_Resnet50_Final.pth  — facexlib RetinaFace detector (~109 MB)
+#   - parsing_parsenet.pth          — facexlib face parser (~89 MB)
+# facexlib looks for the last two under gfpgan/weights/ relative to
+# the gfpgan package install; we mirror them there so they're found
+# without a download.
+RUN mkdir -p /opt/picenhancer/models \
+ && GFPGAN_WEIGHTS=/opt/picenhancer/venv/lib/python3.11/site-packages/gfpgan/weights \
+ && mkdir -p "$GFPGAN_WEIGHTS" \
+ && curl -fsSL -o /opt/picenhancer/models/RealESRGAN_x4plus.pth \
       https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth \
- && ls -lh RealESRGAN_x4plus.pth
+ && curl -fsSL -o /opt/picenhancer/models/GFPGANv1.4.pth \
+      https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth \
+ && curl -fsSL -o "$GFPGAN_WEIGHTS/detection_Resnet50_Final.pth" \
+      https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth \
+ && curl -fsSL -o "$GFPGAN_WEIGHTS/parsing_parsenet.pth" \
+      https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth \
+ && ls -lh /opt/picenhancer/models/ "$GFPGAN_WEIGHTS"
 
-COPY services/picenhancer/scripts/convert_to_onnx.py .
-RUN python convert_to_onnx.py RealESRGAN_x4plus.pth realesrgan_x4plus.onnx \
- && ls -lh realesrgan_x4plus.onnx
-
-# ----- GFPGAN — DEFERRED -----------------------------------------------
-# torch.onnx export of GFPGANv1Clean fails with mixed double/float
-# Conv types after tracing — a known issue with StyleGAN2's
-# ModulatedConv2d. enhance.py auto-skips face restore when the .onnx
-# isn't present, so we ship without it for now and the SR engine
-# stays usable. Research follow-up: try torch.onnx.dynamo_export, or
-# pull a pre-converted ONNX from a verified community source.
-
-# ----- YuNet face detector (already an ONNX in the OpenCV zoo) ---------
-# Kept for the future face-restore pass + because YuNet is also useful
-# for a separate "face detected, AI face mode would help" hint in the UI.
-RUN curl -fsSL -o face_detection_yunet.onnx \
-      https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx \
- && ls -lh face_detection_yunet.onnx
-
-
-# ============================ STAGE 2: runtime ============================
-FROM node:22-bookworm-slim
-
-# OS deps:
-#   ca-certificates    — outbound HTTPS for any future model fetches
-#   python3 / pip /
-#     venv             — host the ONNX inference script
-#   libgomp1           — OpenMP runtime onnxruntime links against
-#   libgl1 / libglib2.0
-#                      — libGL / libgthread for opencv-python-headless
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      ca-certificates \
-      python3 python3-pip python3-venv \
-      libgomp1 libgl1 libglib2.0-0 \
- && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /opt/picenhancer
-
-# Venv (PEP 668 protects system Python on Debian 12).
-RUN python3 -m venv /opt/picenhancer/venv
-ENV PATH="/opt/picenhancer/venv/bin:${PATH}"
-
-# Lean Python deps. onnxruntime CPU wheel is ~50 MB;
-# opencv-python-headless ships its own libs (no system OpenCV needed).
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir \
-      "onnxruntime==1.17.3" "numpy<2" "Pillow>=10,<11" \
-      "opencv-python-headless==4.10.0.84"
-
-# Carry only the produced .onnx files forward — no torch in runtime.
-COPY --from=converter /work/realesrgan_x4plus.onnx /opt/picenhancer/models/realesrgan_x4plus.onnx
-COPY --from=converter /work/face_detection_yunet.onnx /opt/picenhancer/models/face_detection_yunet.onnx
-
-# Sanity: the runtime can load both models. Catches a mismatched
-# onnxruntime opset / OpenCV version at build time rather than the
-# first user request.
+# Build-time sanity import + a tiny inference smoke so a broken pip
+# combo or a model-arch mismatch fails here, not on the first user
+# request.
 RUN python3 -c "\
-import onnxruntime as ort, cv2; \
-ort.InferenceSession('/opt/picenhancer/models/realesrgan_x4plus.onnx', providers=['CPUExecutionProvider']); \
-cv2.FaceDetectorYN_create('/opt/picenhancer/models/face_detection_yunet.onnx', '', (320, 320)); \
-print('ok')"
+from gfpgan import GFPGANer; \
+from realesrgan import RealESRGANer; \
+from basicsr.archs.rrdbnet_arch import RRDBNet; \
+print('ok: gfpgan, realesrgan, basicsr all import')"
 
 # Hono server + UI shell + Python script.
 COPY services/picenhancer/package.json ./
