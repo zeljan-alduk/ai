@@ -87,6 +87,17 @@ def main() -> int:
         help="1 = run GFPGAN on detected faces, 0 = SR/passthrough only",
     )
     parser.add_argument(
+        "--bg", type=int, default=None,
+        help="1 = also clean the background via Real-ESRGAN, 0 = leave bg "
+             "alone, default = auto (1 when scale > 1, 0 when scale == 1)",
+    )
+    parser.add_argument(
+        "--weight", type=float, default=0.7,
+        help="GFPGAN restoration strength 0.0–1.0. Lower preserves more of "
+             "the source person's character; higher pushes toward the GAN's "
+             "idealised face. Sweet spot is around 0.6–0.8.",
+    )
+    parser.add_argument(
         "--models-dir", default="/opt/picenhancer/models",
     )
     args = parser.parse_args()
@@ -108,9 +119,13 @@ def main() -> int:
         print(f"missing model: {gfpgan_path}", file=sys.stderr)
         return 2
 
-    # Background upsampler is only needed for upscale modes (scale > 1).
+    # Background pass policy. Default: ON when upscaling (scale > 1),
+    # OFF for plain Enhance (so the source background isn't touched and
+    # the operation is fastest). Explicit --bg 0/1 overrides.
+    bg_on = args.bg if args.bg is not None else (1 if args.scale > 1 else 0)
+
     bg_upsampler = None
-    if args.scale > 1:
+    if bg_on:
         from basicsr.archs.rrdbnet_arch import RRDBNet
         from realesrgan import RealESRGANer
 
@@ -132,10 +147,9 @@ def main() -> int:
     face_enhancer = None
     if args.face:
         from gfpgan import GFPGANer
-        # upscale=1 keeps the output at source resolution in enhance-only
-        # mode. For upscale modes (>=4) we still pass upscale=4 because
-        # GFPGAN delegates to the bg_upsampler whose scale is fixed at 4;
-        # the further x8/x16 pass happens via Lanczos below.
+        # upscale=1 keeps the output at source resolution. For upscale
+        # modes the GFPGANer.enhance call returns a 4x output via the
+        # bg_upsampler; the further x8/x16 pass happens via Lanczos below.
         gfp_upscale = 4 if args.scale > 1 else 1
         face_enhancer = GFPGANer(
             model_path=str(gfpgan_path),
@@ -171,6 +185,7 @@ def main() -> int:
                 has_aligned=False,
                 only_center_face=False,
                 paste_back=True,
+                weight=max(0.0, min(1.0, args.weight)),
             )
 
         cropped, restored, out_bgr = run_with_heartbeat(
@@ -200,7 +215,14 @@ def main() -> int:
 
     emit("progress", pct=95)
     cv2.imwrite(args.output, out_bgr, [cv2.IMWRITE_PNG_COMPRESSION, 6])
-    emit("done", ms=int((time.time() - t0) * 1000), faces=faces, scale=args.scale)
+    emit(
+        "done",
+        ms=int((time.time() - t0) * 1000),
+        faces=faces,
+        scale=args.scale,
+        bg=int(bool(bg_on)),
+        weight=round(args.weight, 2),
+    )
     return 0
 
 

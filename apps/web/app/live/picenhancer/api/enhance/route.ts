@@ -5,7 +5,7 @@
  * response back without buffering. Configurable via the
  * `PIXMEND_BACKEND_URL` env (default http://127.0.0.1:4000), so the
  * production deploy can point at the co-located pixmend container on
- * the slovenia-transit VPS.
+ * the VPS.
  *
  * Failure modes the visitor sees:
  *   - 503 + clear message when the backend isn't reachable. The

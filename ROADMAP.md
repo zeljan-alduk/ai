@@ -85,7 +85,7 @@ Everything below is "set a GitHub repo secret, push the button" work.
 | **VS Code Marketplace publish** | Create publisher at `https://marketplace.visualstudio.com/manage`. Generate PAT at `https://dev.azure.com/<org>/_usersSettings/tokens` with Marketplace=Manage scope. Set `VSCE_PAT`. Add real screenshots and final icon to `extensions/vscode/media/`. Run `release-vscode-extension`. | 2 hr (includes screenshots) |
 | **On-call number** | Pick on-call phone/SMS, drop into `docs/runbook.md` placeholders. | 5 min |
 | **VPS provider name** | For sub-processor list in `docs/data-retention.md`. | 5 min |
-| **Edge nginx access-log path** | Inside the slovenia-transit container, for the runbook. | 15 min |
+| **Edge nginx access-log path** | Inside the edge nginx container, for the runbook. | 15 min |
 | **Scheduled pg_dump cron + offsite push** | Today is manual. Add a cron + S3-compatible push (Backblaze B2 / Cloudflare R2). | 2 hr |
 | **Status page incident workflow** | Editing `apps/web/data/status-incidents.json` is the publish path; ISR makes it go live within 60s. Document the commit-message convention you want. | 15 min |
 

@@ -15,7 +15,8 @@ and you'll land on the welcome screen of a fresh tenant.
 ## 2. Seed the default agency
 
 The control plane ships with a reference organization — the one
-ALDO TECH LABS uses to dogfood the platform. From the welcome screen
+ALDO TECH LABS uses internally to ship the platform. From the welcome
+screen
 click **Seed default agency**, or run:
 
 ```bash

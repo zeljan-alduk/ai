@@ -135,6 +135,24 @@ app.post('/enhance', async (c) => {
   const scale: 1 | 4 | 8 | 16 =
     rawScale === 16 ? 16 : rawScale === 8 ? 8 : rawScale === 4 ? 4 : 1;
 
+  // Background-clean toggle. 'auto' (default) lets the python script
+  // pick: ON for upscale modes, OFF for plain Enhance. Explicit
+  // bg=0|1 overrides — that's how the new "Enhance + bg" UI button
+  // tells us to also clean the background even at scale=1.
+  const bgRaw = String(form.bg ?? 'auto').toLowerCase();
+  const bgFlag: 'auto' | '0' | '1' =
+    bgRaw === '1' || bgRaw === 'true' || bgRaw === 'on' ? '1' :
+    bgRaw === '0' || bgRaw === 'false' || bgRaw === 'off' ? '0' :
+    'auto';
+
+  // GFPGAN restoration strength. 0.0 = no restoration; 1.0 = full GAN.
+  // Sweet spot 0.5–0.8; default 0.7 preserves more of the source
+  // person's character than the GFPGANer library default of 0.5.
+  const rawWeight = Number((form.weight as string | undefined) ?? '0.7');
+  const weight = Number.isFinite(rawWeight)
+    ? Math.max(0, Math.min(1, rawWeight))
+    : 0.7;
+
   const buf = Buffer.from(await file.arrayBuffer());
   const id = randomUUID();
   const ext = (extname(file.name) || '.png').toLowerCase();
@@ -207,7 +225,11 @@ app.post('/enhance', async (c) => {
         if (ENGINE === 'aiplus') {
           // pass.s carries the full target scale (4/8/16). One pass.
           const result = await runAiPlus(
-            currentInput, outPath, pass.s as 1 | 4 | 8 | 16, onProgress,
+            currentInput,
+            outPath,
+            pass.s as 1 | 4 | 8 | 16,
+            onProgress,
+            { bg: bgFlag, weight },
           );
           faces = result.faces;
         } else if (ENGINE === 'realesrgan') {
@@ -246,6 +268,8 @@ app.post('/enhance', async (c) => {
       model,
       engine: ENGINE,
       faces,
+      bg: bgFlag === '1' ? 1 : bgFlag === '0' ? 0 : (scale > 1 ? 1 : 0),
+      weight,
     });
   });
 });
@@ -356,6 +380,7 @@ async function runAiPlus(
   output: string,
   scale: 1 | 4 | 8 | 16,
   onProgress?: (pct: number) => void,
+  opts: { readonly bg?: 'auto' | '0' | '1'; readonly weight?: number } = {},
 ): Promise<{ readonly faces: number; readonly ms: number }> {
   return new Promise((resolve, reject) => {
     const args = [
@@ -364,8 +389,14 @@ async function runAiPlus(
       '--output', output,
       '--scale', String(scale),
       '--face', '1',
+      '--weight', String(opts.weight ?? 0.7),
       '--models-dir', MODELS_DIR,
     ];
+    // Only forward --bg when explicitly set; "auto" lets the python
+    // script use its default policy (ON for upscale, OFF for enhance).
+    if (opts.bg === '0' || opts.bg === '1') {
+      args.push('--bg', opts.bg);
+    }
     const p = spawn(PYTHON_BIN, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       // Force unbuffered stdout so the JSON-line progress arrives as

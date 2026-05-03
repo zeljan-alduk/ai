@@ -9,8 +9,8 @@
  * shipped artefact a visitor can click through to.
  *
  * First entry: picenhancer.aldo.tech — a local-only image upscaler
- * built in a single session against the dogfood agency, end-to-end on
- * Apple Silicon Metal. Same VPS as ai.aldo.tech.
+ * built in a single session against the in-house reference agency,
+ * end-to-end on Apple Silicon Metal. Same VPS as ai.aldo.tech.
  *
  * Curated by hand for the same reason /changelog and /roadmap are: a
  * generated gallery would drift into "every demo we ever made" within
@@ -43,7 +43,7 @@ interface Example {
   readonly summary: readonly string[];
   /** Step-by-step "how the platform built it" timeline. */
   readonly build: readonly BuildLine[];
-  /** Which dogfood agents touched the work. */
+  /** Which in-house agents touched the work. */
   readonly agents: readonly string[];
 }
 
@@ -67,7 +67,7 @@ const EXAMPLES: readonly Example[] = [
     summary: [
       'One screen. Drop an image, get a better one back. Three scale options (×4, ×8, ×16). Live progress bar tied to real Real-ESRGAN tile-by-tile output.',
       'Privacy as a product feature: the badge above the fold ("processed entirely on your machine") is enforceable, not marketing copy. The platform router is configured local-only — a cloud model is physically unable to receive the image.',
-      'Built with the same dogfood agency every other ALDO customer uses. The strategist that picks the upscaling model is a normal ALDO prompt; the team that scaffolded the page is a normal ALDO composite agent.',
+      'Built with the same reference agency every other ALDO customer gets. The strategist that picks the upscaling model is a normal ALDO prompt; the team that scaffolded the page is a normal ALDO composite agent.',
     ],
     build: [
       {
@@ -92,7 +92,7 @@ const EXAMPLES: readonly Example[] = [
       },
       {
         when: 'Same day',
-        what: 'Mounted under ai.aldo.tech/live/picenhancer — no DNS, no new TLS cert, no separate domain. The Next.js route proxies /enhance to the pixmend backend; the same docker-compose stack co-locates the Hono server with the web app on the slovenia-transit VPS.',
+        what: 'Mounted under ai.aldo.tech/live/picenhancer — no DNS, no new TLS cert, no separate domain. The Next.js route proxies /enhance to the pixmend backend; the same docker-compose stack co-locates the Hono server with the web app on the VPS.',
       },
     ],
     agents: [
@@ -118,7 +118,7 @@ export default function ExamplesPage() {
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-fg-muted">
           Not demos. Not screenshots of a future state. Each entry below is a live, useful product
-          built by ALDO&rsquo;s own dogfood agency — usually in hours, not weeks — and is running
+          built by ALDO&rsquo;s own in-house agency — usually in hours, not weeks — and is running
           on the public internet right now. Click through and use them.
         </p>
         <p className="mt-3 text-sm text-fg-muted">

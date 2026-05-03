@@ -114,7 +114,7 @@ const ENTRIES: ReadonlyArray<Entry> = [
     date: '2026-04-27',
     tag: 'ops',
     title: 'Self-hosted at ai.aldo.tech with auto-deploy on every push',
-    body: 'Production now runs on our own VPS instead of Fly + Vercel — coexisting with the existing slovenia-transit edge proxy on the same host (it stays untouched). Every push to main or our active dev branch fires a GitHub Actions workflow that calls a token-gated webhook on the VPS to git fetch + rebuild + redeploy in under five minutes. The operator is no longer in the deploy loop.',
+    body: 'Production now runs on our own VPS instead of Fly + Vercel — coexisting with the existing edge nginx proxy on the same host (it stays untouched). Every push to main or our active dev branch fires a GitHub Actions workflow that calls a token-gated webhook on the VPS to git fetch + rebuild + redeploy in under five minutes. The operator is no longer in the deploy loop.',
   },
   {
     date: '2026-04-26',

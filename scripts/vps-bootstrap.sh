@@ -2,7 +2,7 @@
 # ALDO AI — single-host VPS bootstrap.
 #
 # Designed to coexist with other projects already running on the same
-# VPS (e.g. slovenia-transit.aldo.tech). It will:
+# VPS. It will:
 #
 #   1. Install missing system deps (docker, docker compose plugin,
 #      nginx, certbot) — skips what's present.
@@ -113,11 +113,10 @@ fi
 # ---------------------------------------------------------------------
 # 1b. Detect a pre-existing edge proxy.
 #
-# If a docker-managed nginx already owns ports 80/443 (the slovenia-transit
-# pattern: container name "transit-nginx", config dir mounted from
-# /opt/slovenia-transit/nginx/conf.d, certbot via webroot volumes), we
-# plug ai.aldo.tech into THAT nginx instead of running our own. This keeps
-# the existing site untouched and avoids a port-80 fight.
+# If a docker-managed nginx already owns ports 80/443 (config dir
+# mounted from a host path, certbot via webroot volumes), we plug
+# ai.aldo.tech into THAT nginx instead of running our own. This keeps
+# any existing sites on the VPS untouched and avoids a port-80 fight.
 #
 # Strategy is detected → strategy is "external"; otherwise "system".
 # Override with EDGE_STRATEGY=external|system if you want to force it.
@@ -144,7 +143,7 @@ detect_edge_proxy() {
     --format '{{range .Mounts}}{{if eq .Destination "/etc/nginx/conf.d"}}{{.Source}}{{end}}{{end}}')
   [[ -n "$EDGE_PROXY_CONF_DIR" && -d "$EDGE_PROXY_CONF_DIR" ]] || return 1
 
-  # Pull the docker network (first one wins; for slovenia-transit it's the only one).
+  # Pull the docker network (first one wins).
   EDGE_PROXY_NETWORK=$(docker inspect "$container_id" \
     --format '{{range $k, $_ := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' | head -n1)
   [[ -n "$EDGE_PROXY_NETWORK" ]] || return 1

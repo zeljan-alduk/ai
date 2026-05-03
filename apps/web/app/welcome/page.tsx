@@ -49,7 +49,7 @@ export default function WelcomePage() {
         >
           <h2 className="text-sm font-semibold text-slate-900">Start from the default agency</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Seeds your workspace with the dogfood org we use to ship ALDO AI itself: principal,
+            Seeds your workspace with the in-house org we use to ship ALDO AI itself: principal,
             architect, engineers, reviewers. Great for kicking the tires.
           </p>
           <form action={seedDefaultAgencyAction} className="mt-4">

@@ -17,7 +17,7 @@ The most recent ratified spec is **2025-06-18**; a **2026-06** spec release is s
 
 **Versioning.** Dated (`YYYY-MM-DD`). Breaking changes every 4-6 months: transport swap, OAuth mandate, elicitation were all breaking. Expect another mid-2026 (discovery metadata, stateless sessions). Pin a spec version; upgrade deliberately.
 
-**Clients widely deployed.** Claude Desktop (largest install base), Claude Code, Cursor (dominant IDE client), VS Code / Copilot agent mode, Windsurf, Cline, Continue, Zed, Replit, JetBrains AI Assistant. ChatGPT added remote-only MCP in late 2025. ALDO AI's host will be a full client — interop with this set matters for dogfooding and for users wiring our agents into existing IDEs.
+**Clients widely deployed.** Claude Desktop (largest install base), Claude Code, Cursor (dominant IDE client), VS Code / Copilot agent mode, Windsurf, Cline, Continue, Zed, Replit, JetBrains AI Assistant. ChatGPT added remote-only MCP in late 2025. ALDO AI's host will be a full client — interop with this set matters for our own internal use and for users wiring our agents into existing IDEs.
 
 ## 2. Ecosystem snapshot
 

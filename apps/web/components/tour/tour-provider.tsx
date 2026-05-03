@@ -78,7 +78,7 @@ const STEPS = [
     content: (
       <TourCard
         title="Use the default agency template"
-        body="Seeds your tenant with the same principal -> architect -> engineers -> reviewers mesh we use to ship ALDO AI itself. Click here to dogfood."
+        body="Seeds your tenant with the same principal -> architect -> engineers -> reviewers mesh we use to ship ALDO AI itself. Click to seed your own copy."
       />
     ),
     position: 'bottom' as const,

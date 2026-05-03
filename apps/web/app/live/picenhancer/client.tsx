@@ -20,18 +20,33 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Scale = 1 | 4 | 8 | 16;
 
-const SCALE_LABELS: Record<Scale, string> = {
-  1: 'Enhance',
-  4: 'Upscale ×4',
-  8: 'Upscale ×8',
-  16: 'Upscale ×16',
+// Action = a (scale, bg) pair the UI shows as one button. Keeping
+// these as discrete options instead of two pickers because they're
+// not orthogonal — "Upscale" implies you also want a clean
+// background, "Enhance" alone implies don't touch it.
+type Action = 'enhance' | 'enhance-bg' | 'upscale-4' | 'upscale-8';
+
+const ACTION_ORDER: readonly Action[] = ['enhance', 'enhance-bg', 'upscale-4', 'upscale-8'];
+
+const ACTION_LABELS: Record<Action, string> = {
+  'enhance': 'Enhance',
+  'enhance-bg': 'Enhance + bg',
+  'upscale-4': 'Upscale ×4',
+  'upscale-8': 'Upscale ×8',
 };
 
-const SCALE_HINTS: Record<Scale, string> = {
-  1: 'Restore the face, keep the dimensions. Fast — typically 5–15 s.',
-  4: 'Restore + Real-ESRGAN ×4 super-resolution. 15–30 s on a portrait.',
-  8: '×8 — AI ×4 then Lanczos ×2 on top. Roughly 1.2× the wall time of ×4.',
-  16: '×16 — AI ×4 then Lanczos ×4 on top. Slow on big inputs; great on small ones.',
+const ACTION_HINTS: Record<Action, string> = {
+  'enhance': 'Restore faces, keep dimensions, leave background alone. Fastest — 5–15 s.',
+  'enhance-bg': 'Restore faces + clean background via Real-ESRGAN, same dimensions. 10–25 s.',
+  'upscale-4': 'Restore faces + Real-ESRGAN ×4 super-resolution. 15–30 s on a portrait.',
+  'upscale-8': 'AI ×4 then Lanczos ×2 on top. Roughly 1.2× the wall time of ×4.',
+};
+
+const ACTION_PARAMS: Record<Action, { scale: Scale; bg: '0' | '1' }> = {
+  'enhance':    { scale: 1, bg: '0' },
+  'enhance-bg': { scale: 1, bg: '1' },
+  'upscale-4':  { scale: 4, bg: '1' },
+  'upscale-8':  { scale: 8, bg: '1' },
 };
 
 interface DoneEvent {
@@ -46,10 +61,14 @@ interface DoneEvent {
   enhanceMs: number;
   engine?: 'aiplus' | 'realesrgan' | 'sharp';
   faces?: number;
+  bg?: 0 | 1;
+  weight?: number;
 }
 
 export function PicenhancerClient() {
-  const [scale, setScale] = useState<Scale>(1);
+  const [action, setAction] = useState<Action>('enhance');
+  const [weight, setWeight] = useState<number>(0.7);
+  const scale = ACTION_PARAMS[action].scale;
   const [origUrl, setOrigUrl] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultBlobUrl, setResultBlobUrl] = useState<string | null>(null);
@@ -107,9 +126,12 @@ export function PicenhancerClient() {
       });
 
       const t0 = performance.now();
+      const params = ACTION_PARAMS[action];
       const fd = new FormData();
       fd.append('file', f);
-      fd.append('scale', String(scale));
+      fd.append('scale', String(params.scale));
+      fd.append('bg', params.bg);
+      fd.append('weight', weight.toFixed(2));
 
       try {
         const res = await fetch('/live/picenhancer/api/enhance', {
@@ -229,7 +251,7 @@ export function PicenhancerClient() {
         setBusy(false);
       }
     },
-    [scale],
+    [action, weight],
   );
 
   // Clipboard paste — anywhere on the page.
@@ -259,7 +281,7 @@ export function PicenhancerClient() {
     return () => window.removeEventListener('paste', onPaste);
   }, [submit]);
 
-  const scaleHint = useMemo(() => SCALE_HINTS[scale], [scale]);
+  const actionHint = useMemo(() => ACTION_HINTS[action], [action]);
 
   return (
     <div className="mt-8 space-y-6">
@@ -273,25 +295,54 @@ export function PicenhancerClient() {
           aria-label="Enhancement mode"
           className="inline-flex overflow-hidden rounded-md border border-border bg-bg-elevated"
         >
-          {([1, 4, 8, 16] as const).map((s) => (
+          {ACTION_ORDER.map((a) => (
             <button
-              key={s}
+              key={a}
               type="button"
-              onClick={() => setScale(s)}
-              aria-pressed={scale === s}
+              onClick={() => setAction(a)}
+              aria-pressed={action === a}
               className={cn(
                 'min-w-touch px-3 py-2 font-mono text-[12px] font-semibold transition-colors border-r border-border last:border-r-0',
-                scale === s
+                action === a
                   ? 'bg-accent/15 text-accent'
                   : 'text-fg-muted hover:text-fg hover:bg-bg-subtle',
               )}
               disabled={busy}
             >
-              {SCALE_LABELS[s]}
+              {ACTION_LABELS[a]}
             </button>
           ))}
         </div>
-        <span className="text-[12px] text-fg-faint">{scaleHint}</span>
+        <span className="text-[12px] text-fg-faint flex-1 min-w-[180px]">{actionHint}</span>
+      </div>
+
+      {/* GFPGAN strength slider — preserves more of the source person's
+          character at lower values; pushes toward GFPGAN's idealised
+          face at higher values. Sweet spot 0.6–0.8. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <label
+          htmlFor="picenhancer-strength"
+          className="font-mono text-[11px] uppercase tracking-[0.09em] text-fg-muted"
+        >
+          Strength
+        </label>
+        <input
+          id="picenhancer-strength"
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={weight}
+          onChange={(e) => setWeight(Number(e.target.value))}
+          disabled={busy}
+          className="h-1 w-44 cursor-pointer accent-accent disabled:opacity-50"
+        />
+        <span className="font-mono text-[12px] text-accent w-10 text-right">
+          {Math.round(weight * 100)}%
+        </span>
+        <span className="text-[12px] text-fg-faint">
+          Lower preserves the source face; higher pushes toward GFPGAN&rsquo;s ideal.
+        </span>
       </div>
 
       {/* Drop zone */}
@@ -438,23 +489,22 @@ export function PicenhancerClient() {
                   Enhanced (×{final?.scale ?? scale})
                   {final?.engine && (
                     <span className="ml-2 normal-case tracking-normal text-fg-faint">
-                      ·{' '}
-                      {final.engine === 'aiplus'
-                        ? final.faces
-                          ? `Real-ESRGAN + GFPGAN · ${final.faces} face${final.faces === 1 ? '' : 's'} restored`
-                          : 'Real-ESRGAN x4 (no faces detected)'
-                        : final.engine === 'realesrgan'
-                          ? 'Real-ESRGAN AI'
-                          : 'Lanczos-3 (libvips)'}
+                      · {engineCaption(final)}
                     </span>
                   )}
                 </figcaption>
                 {resultBlobUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={resultBlobUrl} alt="Enhanced" className="block h-auto w-full" />
+                ) : busy && origUrl ? (
+                  <DiffusionStage
+                    src={origUrl}
+                    pct={progress?.pct ?? 0}
+                    indeterminate={progress?.indeterminate ?? true}
+                  />
                 ) : (
                   <div className="flex h-32 items-center justify-center text-fg-faint text-sm">
-                    {busy ? 'enhancing…' : 'waiting…'}
+                    waiting…
                   </div>
                 )}
               </figure>
@@ -523,4 +573,99 @@ function prettyBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * Truthful AFTER-figure caption. Names what actually ran:
+ *   - aiplus + faces > 0 + bg=1 → "Real-ESRGAN + GFPGAN · N face(s)"
+ *   - aiplus + faces > 0 + bg=0 → "GFPGAN · N face(s)"
+ *   - aiplus + faces == 0 + bg=1 → "Real-ESRGAN x4 (no faces)"
+ *   - aiplus + faces == 0 + bg=0 → "Passthrough (no faces)"
+ *   - other engines unchanged
+ */
+function engineCaption(final: DoneEvent): string {
+  if (final.engine === 'realesrgan') return 'Real-ESRGAN AI';
+  if (final.engine === 'sharp') return 'Lanczos-3 (libvips)';
+  if (final.engine !== 'aiplus') return final.engine ?? '';
+  const faces = final.faces ?? 0;
+  const bg = final.bg ?? (final.scale > 1 ? 1 : 0);
+  const facePart =
+    faces > 0
+      ? `GFPGAN · ${faces} face${faces === 1 ? '' : 's'} restored`
+      : 'no faces detected';
+  const bgPart = bg ? 'Real-ESRGAN bg + ' : '';
+  return faces > 0 ? `${bgPart}${facePart}` : `${bg ? 'Real-ESRGAN background' : 'Passthrough'} (${facePart})`;
+}
+
+/**
+ * Diffusion-style processing animation. Shown in the AFTER pane while
+ * the request is in flight, in place of "enhancing…". Renders the
+ * source image with a progressive deblur tied to the SSE bar's pct,
+ * plus an SVG turbulence noise overlay that scrambles every ~150 ms
+ * and fades as pct climbs. The metaphor is a diffusion model
+ * progressively denoising the image into the final result.
+ *
+ * Pure visual — does no actual work, doesn't block the SSE stream,
+ * doesn't read from the network. Just turns dead-air-during-inference
+ * into something the visitor wants to watch.
+ */
+function DiffusionStage({
+  src,
+  pct,
+  indeterminate,
+}: {
+  src: string;
+  pct: number;
+  indeterminate: boolean;
+}) {
+  const [seed, setSeed] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setSeed((s) => (s + 1) % 1024), 150);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // When indeterminate (boot / model-loading / SSE keepalive), show
+  // ~30% deblur so the bar looks alive even though pct is 0.
+  const visualPct = indeterminate ? 30 : Math.max(0, Math.min(100, pct));
+  const blur = 18 - visualPct * 0.16;        // 18 → 2 px
+  const sat = 0.5 + visualPct * 0.005;       // 0.5 → 1.0
+  const noiseOpacity = Math.max(0.06, 0.65 - visualPct * 0.0065); // 0.65 → 0.06
+
+  return (
+    <div className="relative w-full">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt="processing"
+        className="block h-auto w-full transition-[filter] duration-300 ease-out"
+        style={{ filter: `blur(${blur}px) saturate(${sat})` }}
+      />
+      <svg
+        className="pointer-events-none absolute inset-0 h-full w-full mix-blend-overlay"
+        aria-hidden
+      >
+        <filter id={`pn-${seed}`}>
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.85"
+            numOctaves={2}
+            seed={seed}
+            stitchTiles="stitch"
+          />
+        </filter>
+        <rect
+          width="100%"
+          height="100%"
+          filter={`url(#pn-${seed})`}
+          opacity={noiseOpacity}
+        />
+      </svg>
+      {/* Subtle accent vignette — pulses with the noise so the stage
+          reads as "processing", not "broken image". */}
+      <div
+        className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-accent/20"
+        style={{ boxShadow: 'inset 0 0 60px rgba(94, 234, 212, 0.10)' }}
+      />
+    </div>
+  );
 }

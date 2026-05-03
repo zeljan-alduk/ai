@@ -99,8 +99,8 @@ export function BuiltInTheOpen() {
           </h2>
           <p className="mt-3 text-base leading-relaxed text-fg-muted">
             ALDO is source-available from day one. The licence is honest, the cadence is public, and
-            the receipts are the commits below. We dogfood the platform on its own repo — the agency
-            directory ships an ALDO TECH LABS organization that runs against this codebase.
+            the receipts are the commits below. We run ALDO on its own repo — the agency
+            directory ships an ALDO TECH LABS organization that operates against this codebase.
           </p>
         </div>
 

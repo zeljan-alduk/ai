@@ -17,10 +17,10 @@
 ALDO AI runs on a single VPS (`vps-77bcd56d`, see STATUS.md) under
 Docker Compose. Three containers — `aldo-postgres` (Postgres 16, named
 volume), `aldo-api` (Hono, internal port 8081), `aldo-web` (Next.js,
-internal port 8082) — sit behind an edge nginx. The edge is the
-`slovenia-transit` docker-managed nginx already running on the host, so
-ai.aldo.tech ships as an additional vhost (`zzz-ai-aldo-tech.conf`) in
-that container's mounted `conf.d/` rather than its own host nginx. A
+internal port 8082) — sit behind an edge nginx. The edge is a
+docker-managed nginx already running on the host, so ai.aldo.tech
+ships as an additional vhost (`zzz-ai-aldo-tech.conf`) in that
+container's mounted `conf.d/` rather than its own host nginx. A
 separate systemd service, `aldo-deploy-webhook`, runs a Python stdlib
 HTTP server on `127.0.0.1:9999` (or `0.0.0.0:9999` when the edge is
 external); nginx proxies `/_admin/*` to it. Pushes to
@@ -198,8 +198,8 @@ file an issue and roll back the most recent platform change to
 
 ### Edge nginx itself
 
-The edge proxy is the `slovenia-transit` docker container, not host
-nginx. To reload after a vhost change:
+The edge proxy is a docker-managed nginx container, not host nginx.
+To reload after a vhost change:
 
 ```sh
 docker exec <edge-container> nginx -t   # validate
@@ -289,7 +289,7 @@ Use the smallest hammer that fixes the problem.
 | Postgres | `docker compose -f /opt/aldo-ai/docker-compose.yml logs -f aldo-postgres` |
 | Deploy script | `tail -f /opt/aldo-ai/logs/deploy.log` |
 | Webhook (Python) | `tail -f /opt/aldo-ai/logs/webhook.log` or `journalctl -u aldo-deploy-webhook -f` |
-| Edge nginx access / error | Inside the edge container: `docker exec <edge> tail -f /var/log/nginx/access.log /var/log/nginx/error.log` (TBD: confirm exact path on the slovenia-transit edge — depends on its baked image) |
+| Edge nginx access / error | Inside the edge container: `docker exec <edge> tail -f /var/log/nginx/access.log /var/log/nginx/error.log` (TBD: confirm exact path on the edge container — depends on its baked image) |
 
 Log rotation: docker's default `json-file` driver does not rotate. If a
 container goes chatty during an incident, free disk with

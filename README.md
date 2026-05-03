@@ -28,7 +28,7 @@ Live in production at **[ai.aldo.tech](https://ai.aldo.tech)** —
 control plane, API, eval playground, prompts, threads, run sharing,
 spend dashboard, ⌘K palette, in-house status page, and the engine
 that actually executes runs against local + frontier models. Built by
-a virtual software agency ("ALDO TECH LABS") dogfooding the very
+a virtual software agency ("ALDO TECH LABS") that runs on the same
 orchestration patterns ALDO AI provides. See
 [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) for the running
 narrative; [`PROGRESS.md`](./PROGRESS.md) for the wave-by-wave
@@ -235,7 +235,7 @@ llama.cpp, MLX, LM Studio) are auto-discovered — see
 two-path recipe (local-dev + cloudflared tunnel).
 
 **Hosting**: production runs on a single VPS behind Docker Compose
-with edge nginx via the slovenia-transit proxy. GitHub Actions on
+with edge nginx as the proxy. GitHub Actions on
 push fires a webhook → `vps-deploy.sh` rebuilds + redeploys in
 under five minutes. Self-host via the Helm chart at
 [`charts/aldo-ai/`](./charts/aldo-ai/) or the per-cloud Terraform

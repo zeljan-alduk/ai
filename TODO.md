@@ -70,7 +70,7 @@ Already in [`PLANS.md`](./PLANS.md), restated for at-a-glance:
 |---|---|---|
 | 🔑 | **Stripe** — 5 GitHub secrets + dashboard products/prices/webhook | 1–2 hr → unlocks revenue |
 | 🔑 | **PYPI_API_TOKEN, NPM_PUBLISH_TOKEN, VSCE_PAT** + Marketplace publisher account + screenshots | 2 hr → SDKs + extension public |
-| 🌐 | **mcp.aldo.tech deploy** — DNS A record + slovenia-transit nginx route + TLS + docker-compose entry for the `aldo-mcp-http` container that's already built and tested | 30 min |
+| 🌐 | **mcp.aldo.tech deploy** — DNS A record + edge nginx route + TLS + docker-compose entry for the `aldo-mcp-http` container that's already built and tested | 30 min |
 | 📦 | **OCI Helm chart publish workflow** — one-shot `helm push aldo-ai-0.1.0.tgz oci://ghcr.io/aldo-tech-labs/charts` once ghcr credentials are wired | 1 hr |
 | 🔐 | **Git OAuth-app registration** (GitHub + GitLab) — eliminates customer PAT minting in the wave-3 git integration | 2 hr |
 | 📞 | **Operational fillers** — on-call number, VPS provider name (Hetzner?) for sub-processor list, edge nginx access-log path, scheduled `pg_dump` cron + offsite | ~3 hr cumulative |

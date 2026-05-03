@@ -121,7 +121,7 @@ export const STATIC_DOC_PAGES: ReadonlyArray<DocPage> = [
     section: 'concepts',
     title: 'Reference agency',
     summary:
-      'The dogfood organization shipped with ALDO AI. Use it as the example for every platform feature.',
+      'The reference organization shipped with ALDO AI. Use it as the example for every platform feature.',
   },
   {
     slug: 'guides/building-an-agent',

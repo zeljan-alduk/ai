@@ -124,7 +124,7 @@ export default function GalleryPage() {
     <>
       <PageHeader
         title="Template gallery"
-        description="The reference agent organization we dogfood internally — fork the whole agency in one click, or pick individual templates per card and drop them into any project."
+        description="The reference agent organization we run on internally — fork the whole agency in one click, or pick individual templates per card and drop them into any project."
         actions={<SeedAgencyButton />}
       />
 

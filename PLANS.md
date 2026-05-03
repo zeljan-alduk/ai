@@ -38,7 +38,7 @@ Ordered by leverage. Effort is elapsed time including account setup.
 
 | # | Item | Effort | What it unlocks |
 |---|---|---|---|
-| B1 | **`mcp.aldo.tech` deploy** — DNS A/AAAA → VPS, edge nginx route in slovenia-transit proxy, TLS via existing certbot, add `aldo-mcp-http` container to docker-compose. Container is built, tested, `/healthz` returns 200 | 30 min | ChatGPT custom GPTs / Cursor / any HTTP-only MCP client can connect |
+| B1 | **`mcp.aldo.tech` deploy** — DNS A/AAAA → VPS, edge nginx route, TLS via existing certbot, add `aldo-mcp-http` container to docker-compose. Container is built, tested, `/healthz` returns 200 | 30 min | ChatGPT custom GPTs / Cursor / any HTTP-only MCP client can connect |
 | B2 | **OCI Helm chart publish workflow** — one-shot workflow `helm push aldo-ai-0.1.0.tgz oci://ghcr.io/aldo-tech-labs/charts` after ghcr credentials are wired | 1 hr | `helm install oci://ghcr.io/aldo-tech-labs/charts/aldo-ai` for self-host customers |
 | B3 | **Git OAuth-app registration** — register at github.com/settings/developers + gitlab.com/-/profile/applications. Eliminates customer PAT minting | 2 hr | Smoother onboarding for git integration |
 
@@ -48,7 +48,7 @@ Ordered by leverage. Effort is elapsed time including account setup.
 |---|---|---|
 | C1 | On-call phone number → `docs/runbook.md` placeholders | 5 min |
 | C2 | VPS provider name (likely Hetzner — confirm) → `docs/data-retention.md` sub-processor list | 5 min |
-| C3 | Edge nginx access-log path inside slovenia-transit container → `docs/runbook.md` | 15 min ssh |
+| C3 | Edge nginx access-log path inside the edge container → `docs/runbook.md` | 15 min ssh |
 | C4 | Scheduled `pg_dump` cron + offsite push (B2 / R2) | 2 hr |
 | C5 | Status page incident-workflow doc — editing `apps/web/data/status-incidents.json` publishes via ISR within 60s | 15 min |
 

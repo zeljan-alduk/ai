@@ -1,6 +1,6 @@
 ---
 title: Reference agency
-summary: The dogfood organization shipped with ALDO AI. Use it as the example for every platform feature.
+summary: The reference organization shipped with ALDO AI. Use it as the example for every platform feature.
 ---
 
 This page is the public-docs version of the agency README. The
@@ -57,6 +57,6 @@ without the referenced eval suites passing their declared minimums.
 ## Use it as a test case
 
 Every platform feature should answer "does this help ALDO TECH LABS
-ship?". The agency is the dogfood organization — if a feature
+ship?". The agency is the reference organization — if a feature
 doesn't help these 26 agents do their job, the platform doesn't
 need it.

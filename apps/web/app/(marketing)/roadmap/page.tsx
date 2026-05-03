@@ -58,7 +58,7 @@ const NOW: ReadonlyArray<Item> = [
   {
     tag: 'ops',
     title: 'mcp.aldo.tech hosted MCP endpoint — DNS + edge route',
-    body: 'The Streamable-HTTP MCP server (@aldo-ai/mcp-platform) is built, tested, container ready. Pure ops follow-up: DNS A record, slovenia-transit nginx route to the new container, TLS via the existing certbot path, docker-compose entry. Once live, ChatGPT custom GPTs / Cursor / any HTTP-only MCP client can drive ALDO directly.',
+    body: 'The Streamable-HTTP MCP server (@aldo-ai/mcp-platform) is built, tested, container ready. Pure ops follow-up: DNS A record, edge nginx route to the new container, TLS via the existing certbot path, docker-compose entry. Once live, ChatGPT custom GPTs / Cursor / any HTTP-only MCP client can drive ALDO directly.',
     horizon: 'this week',
   },
   {
@@ -176,7 +176,7 @@ const VISION_2027: ReadonlyArray<VisionItem> = [
     theme: 'Hire-grade',
     title: 'Hiring an agent feels like hiring a contractor',
     body:
-      'A non-engineer drops a brief into ALDO; the platform resolves the right team, hands them the right tools, runs the work with the privacy posture the org needs, and reports back with citations + cost. The agent registry, the eval harness, the privacy router, the spend dashboard — all of it disappears into one workflow: scope → run → review → ship. The reference agency we dogfood internally is the worked example everyone forks.',
+      'A non-engineer drops a brief into ALDO; the platform resolves the right team, hands them the right tools, runs the work with the privacy posture the org needs, and reports back with citations + cost. The agent registry, the eval harness, the privacy router, the spend dashboard — all of it disappears into one workflow: scope → run → review → ship. The reference agency we run on internally is the worked example everyone forks.',
   },
   {
     theme: 'Local 1st-class',

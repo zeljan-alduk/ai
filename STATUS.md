@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Canonical URL** | https://ai.aldo.tech |
-| **Hosting** | Single VPS (`vps-77bcd56d`), Docker Compose, edge nginx via the slovenia-transit proxy |
+| **Hosting** | Single VPS (`vps-77bcd56d`), Docker Compose, edge nginx as the proxy |
 | **Deploy** | GitHub Actions on push → POST to `/_admin/deploy` webhook → `vps-deploy.sh` rebuilds + redeploys |
 | **DB** | Postgres 16 (containerised, named volume) |
 | **Status page** | `/status` (in-house, polls API + web every 30s, ISR-backed incident timeline) |
