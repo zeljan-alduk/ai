@@ -433,8 +433,8 @@ export function PicenhancerClient() {
                       ·{' '}
                       {final.engine === 'aiplus'
                         ? final.faces
-                          ? `Real-ESRGAN + GFPGAN · ${final.faces} face${final.faces === 1 ? '' : 's'}`
-                          : 'Real-ESRGAN x4 (ONNX)'
+                          ? `Real-ESRGAN + GFPGAN · ${final.faces} face${final.faces === 1 ? '' : 's'} restored`
+                          : 'Real-ESRGAN x4 (no faces detected)'
                         : final.engine === 'realesrgan'
                           ? 'Real-ESRGAN AI'
                           : 'Lanczos-3 (libvips)'}
