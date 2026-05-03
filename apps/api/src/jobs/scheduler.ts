@@ -38,6 +38,7 @@
 
 import type { Deps } from '../deps.js';
 import { pruneRunsForAllTenants } from './prune-runs.js';
+import { scanForOrphanedQueuedRuns } from './run-scanner.js';
 
 /**
  * How often the scheduler checks if any job is due. We tick once per
@@ -109,6 +110,22 @@ export function startScheduler(deps: Deps, opts: StartSchedulerOptions = {}): Sc
       console.error('[scheduler] prune-runs job threw', err);
     });
   }, TICK_MS);
+
+  // Run-scanner: orphan-queued recovery. Ticks every 30s — much
+  // faster than the hourly prune because a stuck queued run is
+  // operator-visible (the polling client sees no progress) whereas
+  // a delayed prune is invisible.
+  const SCANNER_TICK_MS = 30_000;
+  const scannerTimer = setIntervalFn(() => {
+    void scanForOrphanedQueuedRuns(deps).catch((err) => {
+      console.error('[scheduler] run-scanner threw', err);
+    });
+  }, SCANNER_TICK_MS);
+  if (typeof (scannerTimer as unknown as { unref?: () => void }).unref === 'function') {
+    (scannerTimer as unknown as { unref: () => void }).unref();
+  }
+  // Replace the original return to clear both timers.
+  // (kept the original `timer` reference so `stop()` below clears prune too.)
   // Don't pin the event loop open — production gets a SIGTERM that
   // calls stop() explicitly; this is the fast-kill recovery path.
   if (typeof (timer as unknown as { unref?: () => void }).unref === 'function') {
@@ -117,12 +134,13 @@ export function startScheduler(deps: Deps, opts: StartSchedulerOptions = {}): Sc
 
   console.log(
     `[scheduler] started: prune-runs at xx:${String(PRUNE_MINUTE).padStart(2, '0')} UTC, ` +
-      `tick=${TICK_MS}ms`,
+      `tick=${TICK_MS}ms; run-scanner tick=${SCANNER_TICK_MS}ms`,
   );
 
   return {
     stop() {
       clearInterval(timer);
+      clearInterval(scannerTimer);
     },
   };
 }

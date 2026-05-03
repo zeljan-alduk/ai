@@ -71,6 +71,8 @@ import {
   PlatformRuntime,
   PostgresRunStore,
 } from '@aldo-ai/engine';
+import { Supervisor } from '@aldo-ai/orchestrator';
+import { createMcpToolHost } from './mcp/tool-host.js';
 import type {
   AgentRef,
   AgentRegistry,
@@ -313,15 +315,44 @@ function finalizeRuntime(deps: Deps, tenantId: string, state: ProviderState): Ru
   });
 
   const runStore = new PostgresRunStore({ client: deps.db });
+  // Wave-X — MCP-backed toolHost (replaces noopToolHost). Lazy: each
+  // declared MCP server is spawned on first use. Falls back to noop
+  // if MCP_TOOLHOST_DISABLED=true (operator escape hatch for envs
+  // where spawning child processes isn't possible).
+  const toolHost =
+    (deps.env.MCP_TOOLHOST_DISABLED ?? '').toLowerCase() === 'true'
+      ? noopToolHost
+      : createMcpToolHost();
   const runtime = new PlatformRuntime({
     modelGateway: gateway,
-    toolHost: noopToolHost,
+    toolHost,
     registry: buildAgentRegistry(deps, tenantId),
     tracer: new NoopTracer(),
     tenant,
     checkpointer: new InMemoryCheckpointer(),
     runStore,
   });
+
+  // Wave-X — wire the composite orchestrator so agents whose specs
+  // carry a `composite` block (sequential / parallel / debate /
+  // iterative supervisors) actually run instead of throwing
+  // CompositeRuntimeMissingError. The Supervisor needs a
+  // SupervisorRuntimeAdapter at construction time which only an
+  // already-constructed runtime can provide; setOrchestrator() is the
+  // documented chicken-and-egg fix.
+  const supervisor = new Supervisor({
+    runtime: runtime.asSupervisorAdapter(),
+    // Composite events are emitted onto the supervisor LeafAgentRun's
+    // event stream by the runtime itself (see CompositeAgentRun in
+    // platform/engine/src/runtime.ts). We hand a no-op emit because
+    // the engine already plumbs events via the RunStore. A hosted
+    // ALDO that wanted to forward composite events to a separate
+    // bus would override this seam.
+    emit: () => {
+      /* engine RunStore is the canonical event sink */
+    },
+  });
+  runtime.setOrchestrator(supervisor);
 
   const bundle: RuntimeBundle = {
     runtime,

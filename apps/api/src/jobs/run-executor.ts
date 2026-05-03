@@ -58,9 +58,13 @@ export interface ExecuteRunResult {
 export async function executeQueuedRun(args: ExecuteRunArgs): Promise<ExecuteRunResult> {
   const { deps, tenantId, runId, agentName, inputs, projectId } = args;
 
-  const knob = (args.deps.env.API_INLINE_EXECUTOR ?? '').toLowerCase();
-  if (knob !== 'true') {
-    return { status: 'skipped_no_runtime', reason: 'API_INLINE_EXECUTOR != true' };
+  // Default ON — explicit `false` disables. The bridge has been
+  // verified end-to-end against local Ollama; leaving it OFF by
+  // default would mean every fresh deploy stays in queued-only mode
+  // and the operator has to remember to flip the knob.
+  const knob = (args.deps.env.API_INLINE_EXECUTOR ?? 'true').toLowerCase();
+  if (knob === 'false' || knob === '0' || knob === 'no' || knob === 'off') {
+    return { status: 'skipped_no_runtime', reason: `API_INLINE_EXECUTOR=${knob}` };
   }
 
   let bundle;
@@ -89,6 +93,34 @@ export async function executeQueuedRun(args: ExecuteRunArgs): Promise<ExecuteRun
       runId: runId as unknown as import('@aldo-ai/types').RunId,
       ...(projectId !== null && projectId !== undefined ? { projectId } : {}),
     })
+    .then((run) => {
+      // Subscribe to the run's event stream so we can mirror `usage`
+      // events into the usage_records table — that's what the
+      // last_provider / last_model / total_usd projections in
+      // /v1/runs read from. The engine's RunStore writes events to
+      // run_events but not usage_records.
+      void (async () => {
+        try {
+          for await (const event of run.events()) {
+            // The engine's RunEvent union doesn't yet enumerate
+            // 'usage' even though it emits it (the type is widened
+            // at the wire layer in @aldo-ai/api-contract). Cast for
+            // the comparison and trust the runtime check below.
+            const t = (event as { type: string }).type;
+            if (t === 'usage') {
+              await mirrorUsageRecord(deps.db, runId, tenantId, event as unknown as {
+                id?: string;
+                payload?: Record<string, unknown>;
+              }).catch((e) => {
+                console.error('[run-executor] mirrorUsageRecord failed', e);
+              });
+            }
+          }
+        } catch (e) {
+          console.error('[run-executor] event-stream subscriber crashed', e);
+        }
+      })();
+    })
     .catch(async (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       // Best-effort. If the run row already terminated we leave it
@@ -101,6 +133,42 @@ export async function executeQueuedRun(args: ExecuteRunArgs): Promise<ExecuteRun
     });
 
   return { status: 'started' };
+}
+
+/**
+ * Mirror an engine `usage` RunEvent into the `usage_records` table so
+ * the API's last_provider / last_model / total_usd projections light up.
+ * The engine doesn't write usage_records itself — RunStore owns runs +
+ * run_events only. Idempotent on (run_id, span_id) via a NOT EXISTS
+ * guard so a double-emit can't double-bill.
+ */
+async function mirrorUsageRecord(
+  db: SqlClient,
+  runId: string,
+  tenantId: string,
+  event: { id?: string; payload?: Record<string, unknown> },
+): Promise<void> {
+  const p = event.payload;
+  if (!p || typeof p !== 'object') return;
+  const provider = typeof p.provider === 'string' ? p.provider : null;
+  const model = typeof p.model === 'string' ? p.model : null;
+  const tokensIn = typeof p.tokensIn === 'number' ? p.tokensIn : 0;
+  const tokensOut = typeof p.tokensOut === 'number' ? p.tokensOut : 0;
+  const usd = typeof p.usd === 'number' ? p.usd : 0;
+  if (provider === null || model === null) return;
+  // span_id: the engine doesn't expose one for the model call yet, so
+  // fall back to the event id (each `usage` event is one model call).
+  const spanId = String(p.spanId ?? event.id ?? `${runId}-${Date.now()}`);
+  await db.query(
+    `INSERT INTO usage_records (id, run_id, span_id, provider, model, tokens_in, tokens_out, usd, at)
+     SELECT gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8
+      WHERE NOT EXISTS (
+        SELECT 1 FROM usage_records WHERE run_id = $1 AND span_id = $2
+      )`,
+    [runId, spanId, provider, model, tokensIn, tokensOut, usd, new Date().toISOString()],
+  );
+  // Tenant id is implicit via the runs row; usage_records doesn't carry tenant_id directly.
+  void tenantId;
 }
 
 /** Best-effort: flip a queued run to failed with a short reason. */

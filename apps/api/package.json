@@ -29,6 +29,7 @@
     "@aldo-ai/storage": "workspace:*",
     "@aldo-ai/types": "workspace:*",
     "@hono/node-server": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@node-rs/argon2": "^2.0.2",
     "hono": "^4.6.0",
     "jose": "^6.2.2",
