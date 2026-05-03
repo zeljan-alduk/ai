@@ -30,6 +30,13 @@ interface BuildLine {
   readonly what: string;
 }
 
+interface UsageSnippet {
+  readonly id: string;
+  readonly label: string;
+  readonly note?: string;
+  readonly code: string;
+}
+
 interface Example {
   readonly slug: string;
   readonly name: string;
@@ -45,6 +52,8 @@ interface Example {
   readonly build: readonly BuildLine[];
   /** Which in-house agents touched the work. */
   readonly agents: readonly string[];
+  /** Optional integration recipes — API, MCP, code snippets. */
+  readonly usage?: readonly UsageSnippet[];
 }
 
 const EXAMPLES: readonly Example[] = [
@@ -59,15 +68,17 @@ const EXAMPLES: readonly Example[] = [
     elapsed: 'Brief → live, working product in a single afternoon',
     cost: '$0 per enhancement (no cloud egress)',
     stack: [
-      'Real-ESRGAN-ncnn-vulkan on Apple Silicon Metal',
-      'Hono server (Node 23, tsx)',
-      'ALDO AI strategist agent (qwen3:14b on Ollama)',
-      'Server-Sent Events for live progress',
+      'Real-ESRGAN x4 generative super-resolution (PyTorch CPU)',
+      'GFPGAN v1.4 face restoration with 5-point landmark alignment',
+      'YuNet face detector (OpenCV ONNX zoo, 1 MB)',
+      'Hono server + SSE progress with heartbeat thread',
+      'Next.js proxy at ai.aldo.tech/live/picenhancer · MCP server at @aldo-ai/mcp-picenhancer',
     ],
     summary: [
-      'One screen. Drop an image, get a better one back. Three scale options (×4, ×8, ×16). Live progress bar tied to real Real-ESRGAN tile-by-tile output.',
-      'Privacy as a product feature: the badge above the fold ("processed entirely on your machine") is enforceable, not marketing copy. The platform router is configured local-only — a cloud model is physically unable to receive the image.',
-      'Built with the same reference agency every other ALDO customer gets. The strategist that picks the upscaling model is a normal ALDO prompt; the team that scaffolded the page is a normal ALDO composite agent.',
+      'One screen. Drop, paste, or click an image. Action picker: Enhance / Enhance + bg / Upscale ×4 / Upscale ×8. Strength slider for GFPGAN weight (0–100 %). Live progress bar with heartbeat ticks during the long blocking inference call so the SSE stream survives the upstream HTTP/2 idle timeout.',
+      'Diffusion-style processing animation in the AFTER pane while inference runs — the source image with progressive deblur and an SVG turbulence noise overlay that scrambles every 150 ms and clears as progress climbs.',
+      'Privacy as a product feature: every model runs on the same VPS, no cloud egress, no third-party API, no telemetry, $0 per request. The image never leaves the box.',
+      'Same reference agency every ALDO customer gets. The strategist that picks the upscaling strategy is a normal ALDO prompt; the agents that scaffolded the page + Dockerfile + Python pipeline + MCP wrapper are normal ALDO composite agents.',
     ],
     build: [
       {
@@ -102,6 +113,122 @@ const EXAMPLES: readonly Example[] = [
       'ml-engineer',
       'ux-researcher',
       'security-auditor',
+    ],
+    usage: [
+      {
+        id: 'curl',
+        label: 'HTTP API · curl',
+        note: 'POST a multipart form. Returns text/event-stream NDJSON; the final `data: {"type":"done", ...}` carries the imageUrl.',
+        code: `curl -N -X POST https://ai.aldo.tech/live/picenhancer/api/enhance \\
+  -F file=@portrait.jpg \\
+  -F scale=1 \\
+  -F bg=1 \\
+  -F weight=0.7
+# Then GET https://ai.aldo.tech/live/picenhancer/api/out/<filename> for the PNG.`,
+      },
+      {
+        id: 'fetch',
+        label: 'JS · fetch + SSE',
+        note: 'Streams the SSE; resolves with the final result once the pipeline emits `done`.',
+        code: `async function enhance(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('scale', '1');     // 1 / 4 / 8 / 16
+  fd.append('bg', '1');        // 0 = leave background alone
+  fd.append('weight', '0.7');  // GFPGAN strength
+  const res = await fetch('https://ai.aldo.tech/live/picenhancer/api/enhance', {
+    method: 'POST', body: fd,
+  });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let i; while ((i = buf.indexOf('\\n\\n')) >= 0) {
+      const line = buf.slice(0, i).split('\\n').find(l => l.startsWith('data:'));
+      buf = buf.slice(i + 2);
+      if (!line) continue;
+      const ev = JSON.parse(line.slice(5).trim());
+      if (ev.type === 'done') return ev;          // { imageUrl, faces, scale, ... }
+      if (ev.type === 'progress') /* update UI */;
+    }
+  }
+}`,
+      },
+      {
+        id: 'python',
+        label: 'Python · requests + sseclient',
+        note: 'Same wire shape; works identically from any HTTP client.',
+        code: `import json, requests
+from sseclient import SSEClient
+
+with open('portrait.jpg', 'rb') as f:
+    res = requests.post(
+        'https://ai.aldo.tech/live/picenhancer/api/enhance',
+        files={'file': ('portrait.jpg', f, 'image/jpeg')},
+        data={'scale': '1', 'bg': '1', 'weight': '0.7'},
+        stream=True,
+    )
+done = None
+for ev in SSEClient(res).events():
+    payload = json.loads(ev.data)
+    if payload['type'] == 'done':
+        done = payload
+print(done['imageUrl'], done['faces'], done['enhanceMs'])`,
+      },
+      {
+        id: 'mcp-claude',
+        label: 'MCP · Claude Desktop / Cursor / ChatGPT GPTs',
+        note: 'Drop into your MCP client config. The server runs as a stdio child process and exposes one tool: `picenhancer.enhance`.',
+        code: `// claude_desktop_config.json (or any MCP client that speaks stdio)
+{
+  "mcpServers": {
+    "picenhancer": {
+      "command": "npx",
+      "args": ["-y", "@aldo-ai/mcp-picenhancer"]
+      // Optional override:
+      // "env": { "PICENHANCER_BASE_URL": "https://ai.aldo.tech/live/picenhancer/api" }
+    }
+  }
+}`,
+      },
+      {
+        id: 'mcp-tool',
+        label: 'MCP · tool call shape',
+        note: 'Once the MCP server is registered, any chat / agent can call:',
+        code: `// tools/call request body
+{
+  "name": "picenhancer.enhance",
+  "arguments": {
+    "image": "data:image/jpeg;base64,/9j/4AAQ...",   // or an https:// URL
+    "mode": "enhance",                                // enhance | enhance-bg | upscale-x4 | upscale-x8
+    "strength": 0.7                                   // GFPGAN weight 0.0–1.0
+  }
+}
+// Response (structuredContent):
+//   {
+//     imageUrl, scale, bg, weight, faces,
+//     origDims, enhancedDims, origBytes, enhancedBytes, enhanceMs
+//   }`,
+      },
+      {
+        id: 'aldo-agent',
+        label: 'ALDO agent spec',
+        note: 'Wire the MCP tool into any composite agent in your tenant — same pattern as the bundled aldo-fs MCP server.',
+        code: `# agency/your-agent.yaml
+name: my-image-agent
+tools:
+  permissions:
+    mcp:
+      - picenhancer.enhance:
+          allow: ["*"]
+prompt: |
+  When the user gives you a portrait photo, call picenhancer.enhance
+  with mode="enhance" and strength=0.7. Return the resulting imageUrl
+  and the face count to the user.`,
+      },
     ],
   },
 ];
@@ -243,6 +370,42 @@ function ExampleCard({ ex }: { ex: Example }) {
           </span>
         ))}
       </div>
+
+      {ex.usage && ex.usage.length > 0 && (
+        <>
+          <h3 className="mt-8 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-muted">
+            Use it as an API or MCP tool
+          </h3>
+          <p className="mt-2 text-[13px] leading-relaxed text-fg-muted">
+            Same pipeline that powers the live page is callable from any agent
+            chain — HTTP for anything that speaks fetch, MCP for Claude Desktop
+            / Cursor / ChatGPT GPTs / ALDO composite agents.
+          </p>
+          <div className="mt-4 space-y-3">
+            {ex.usage.map((u) => (
+              <details
+                key={u.id}
+                className="group rounded-lg border border-border bg-bg-elevated"
+              >
+                <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-mono text-[12px] font-semibold uppercase tracking-wider text-fg hover:bg-bg-subtle">
+                  <span>{u.label}</span>
+                  <span aria-hidden className="text-fg-faint group-open:rotate-90 transition-transform">
+                    ▸
+                  </span>
+                </summary>
+                <div className="border-t border-border px-4 pb-4 pt-3 text-[13px] leading-relaxed">
+                  {u.note && (
+                    <p className="mb-3 text-fg-muted">{u.note}</p>
+                  )}
+                  <pre className="overflow-x-auto rounded-md border border-border bg-bg px-3 py-3 font-mono text-[12px] leading-relaxed text-fg">
+                    <code>{u.code}</code>
+                  </pre>
+                </div>
+              </details>
+            ))}
+          </div>
+        </>
+      )}
 
       <p className="mt-8 border-t border-border pt-5 text-[13px] text-fg-muted">
         The same pattern is yours: brief the agency, watch the composite run, ship the artefact.

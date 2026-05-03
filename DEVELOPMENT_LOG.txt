@@ -5045,3 +5045,19 @@ Out of scope (per brief):
   * Removed "slovenia-transit" from all user-facing copy (changelog, roadmap, examples, README, STATUS, ROADMAP, TODO, PLANS, runbook). Replaced with neutral "edge nginx" / "VPS" / "the edge container". scripts/vps-bootstrap.sh comments generalised — pattern detection logic unchanged.
   * Removed "dogfood" / "dogfooding" / "dogfood organization" from user-facing copy (README, CLAUDE.md, marketing pages, gallery, welcome, docs, tour, components). Replaced with "in-house" / "reference" / "we run on" framings that read less awkwardly.
   * DEVELOPMENT_LOG.txt left untouched per the project rule (append-only history; never rewrite prior entries).
+
+2026-05-04 00:00 | engineer | NEW @aldo-ai/mcp-picenhancer + Examples-page usage instructions
+- User: "yes [add the MCP wrapper], add also details and instructions on /examples under picenhancer"
+- NEW mcp-servers/picenhancer/{package.json,tsconfig.json,src/{index.ts,server.ts,enhance.ts}}: stdio MCP server exposing one tool, picenhancer.enhance({image, mode, strength}) → {imageUrl, scale, bg, weight, faces, origDims, enhancedDims, origBytes, enhancedBytes, enhanceMs}. Image input accepts data URI / bare base64 / https URL; URL fetches are size-capped at 25 MB.
+- Implementation wraps the existing Hono backend's POST /enhance: POSTs the multipart form, drains the SSE stream, returns the final `done` event. Default backend is https://ai.aldo.tech/live/picenhancer/api; override via PICENHANCER_BASE_URL or --base-url flag for local dev.
+- Same registerTool/zodToJsonSchema/structuredContent pattern as @aldo-ai/mcp-fs (the reference MCP server in the repo) so both servers behave identically from a client's perspective.
+- Smoke-tested via stdio JSON-RPC: {"id":2,"method":"tools/list"} returns the tool with full input/output schemas. Banner: "aldo-mcp-picenhancer: ready (backend=https://ai.aldo.tech/live/picenhancer/api)".
+- apps/web/app/(marketing)/examples/page.tsx: added a `usage` block to the Example interface + rendered a new "Use it as an API or MCP tool" section in ExampleCard. Six expandable recipes for picenhancer:
+  1. HTTP API · curl (multipart POST + SSE)
+  2. JS · fetch + SSE (full reader loop)
+  3. Python · requests + sseclient
+  4. MCP · Claude Desktop / Cursor / ChatGPT GPTs config (claude_desktop_config.json shape)
+  5. MCP · tools/call wire shape (request + structuredContent response)
+  6. ALDO agent spec yaml (mcp permissions + prompt)
+- Stack list refreshed to reflect actual current pipeline: Real-ESRGAN x4 PyTorch CPU + GFPGAN v1.4 + YuNet + Hono SSE with heartbeat + MCP server. Summary mentions the diffusion-style processing animation.
+- Both typecheck clean (mcp-picenhancer + @aldo-ai/web).

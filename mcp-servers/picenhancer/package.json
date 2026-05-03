@@ -1,0 +1,34 @@
+{
+  "name": "@aldo-ai/mcp-picenhancer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ALDO AI first-party MCP server: picenhancer image enhance + face restore + upscale, callable as a single tool from any MCP client (Claude Desktop, Cursor, ChatGPT GPTs, ALDO agents, …).",
+  "license": "FSL-1.1-ALv2",
+  "main": "./src/index.ts",
+  "bin": {
+    "aldo-mcp-picenhancer": "./dist/index.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --import=tsx/esm src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
