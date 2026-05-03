@@ -30,7 +30,7 @@ jobs:
     name: helm lint + template + kubeconform
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -93,7 +93,7 @@ jobs:
       matrix:
         module: [aws-eks, gcp-gke, azure-aks]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3

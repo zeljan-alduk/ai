@@ -58,7 +58,7 @@ jobs:
     outputs:
       run: ${{ steps.decide.outputs.run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need history back to the base ref for the diff check.
           fetch-depth: 0
@@ -122,7 +122,7 @@ jobs:
       E2E_API_BASE_URL: ${{ github.event.inputs.e2e_api_base_url || 'https://ai.aldo.tech' }}
       E2E_ALLOW_WRITES: ${{ github.event_name == 'workflow_run' && 'true' || (github.event.inputs.e2e_allow_writes || 'false') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
         with:
