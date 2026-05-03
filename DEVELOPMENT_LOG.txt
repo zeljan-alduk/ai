@@ -5029,3 +5029,7 @@ Out of scope (per brief):
 - After this commit lands, the next-after deploy will return log_tail in its JSON body — finally giving us visibility into why the AI-plus container build is failing.
 
 2026-05-03 20:35 | engineer | trigger to test log_tail visibility after webhook refresh
+
+2026-05-03 20:50 | engineer | landing-page hero closer + trigger redeploy with refreshed webhook
+- User noticed the hero closer "The control plane the agent stack has been missing" was awkward (repeated "control plane" from the eyebrow). Rewrite #1 of the three I proposed: "Everything the rest of the agent stack assumed someone else would build." — sharper, no repetition, makes the missing tier concrete.
+- This push also doubles as the trigger to surface log_tail in the next deploy failure (the prior DEVELOPMENT_LOG.txt-only push was filtered by paths-ignore so no workflow fired).

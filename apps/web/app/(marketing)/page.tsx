@@ -235,7 +235,7 @@ function Hero() {
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-fg-muted">
               Privacy enforced by the platform, not the prompt. Local models first-class. Every run
-              replayable. The control plane the agent stack has been missing.
+              replayable. Everything the rest of the agent stack assumed someone else would build.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
