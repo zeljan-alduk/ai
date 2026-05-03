@@ -32,7 +32,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@node-rs/argon2": "^2.0.2",
     "hono": "^4.6.0",
-    "jose": "^6.2.2",
+    "jose": "^6.2.3",
     "tsx": "^4.19.0",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"
