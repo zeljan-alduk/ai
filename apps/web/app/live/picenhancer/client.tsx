@@ -36,7 +36,8 @@ interface DoneEvent {
   enhancedDims: { w: number; h: number };
   enhancedBytes: number;
   enhanceMs: number;
-  engine?: 'realesrgan' | 'sharp';
+  engine?: 'aiplus' | 'realesrgan' | 'sharp';
+  faces?: number;
 }
 
 export function PicenhancerClient() {
@@ -429,7 +430,12 @@ export function PicenhancerClient() {
                   Enhanced (×{final?.scale ?? scale})
                   {final?.engine && (
                     <span className="ml-2 normal-case tracking-normal text-fg-faint">
-                      · {final.engine === 'realesrgan' ? 'Real-ESRGAN AI' : 'Lanczos-3 (libvips)'}
+                      ·{' '}
+                      {final.engine === 'aiplus'
+                        ? `Real-ESRGAN + GFPGAN${final.faces ? ` · ${final.faces} face${final.faces === 1 ? '' : 's'}` : ''}`
+                        : final.engine === 'realesrgan'
+                          ? 'Real-ESRGAN AI'
+                          : 'Lanczos-3 (libvips)'}
                     </span>
                   )}
                 </figcaption>

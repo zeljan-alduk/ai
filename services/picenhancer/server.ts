@@ -43,19 +43,31 @@ const HOST = process.env.PIXMEND_HOST ?? '127.0.0.1';
 // Docker image installs imagemagick and sets PIXMEND_DIMS_CMD=identify.
 const DIMS_CMD = process.env.PIXMEND_DIMS_CMD ?? 'sips';
 // Upscale engine.
-//   `realesrgan` — AI super-resolution via realesrgan-ncnn-vulkan. Great
-//                  on a GPU host or Apple Silicon Metal; impractical on
-//                  a CPU-only VPS via Mesa software Vulkan.
-//   `sharp`      — Lanczos resize + perceptual sharpen via libvips
-//                  (npm `sharp`). Pure-native, no shelling out, no
-//                  binary policy gotchas. Sub-second. Default.
-// Earlier revisions tried `magick`/`convert` here. Both were affected
-// by Debian's restrictive /etc/ImageMagick-6/policy.xml and by missing
-// binaries on bookworm-slim — convert exited -2 with an empty stderr.
-// sharp removes that whole class of failure modes.
-type Engine = 'realesrgan' | 'sharp';
+//   `aiplus`     — Real-ESRGAN x4 (generative SR) + GFPGAN v1.4 (face
+//                  restore on detected faces) via a Python sidecar
+//                  using PyTorch CPU. Slow (3–15 s/image) but actually
+//                  competitive with Topaz/Tenorshare-class output on
+//                  faces. Default. Requires the picenhancer container
+//                  with Python deps + model weights pre-downloaded.
+//   `realesrgan` — AI super-resolution via realesrgan-ncnn-vulkan
+//                  binary. Great on a GPU host / Apple Silicon Metal;
+//                  impractical on CPU-only VPS via Mesa llvmpipe.
+//   `sharp`      — Lanczos-3 resize + perceptual sharpen via libvips
+//                  (npm `sharp`). Pure-native, sub-second. Use for
+//                  hosts without Python or as a graceful fallback.
+type Engine = 'aiplus' | 'realesrgan' | 'sharp';
 const ENGINE: Engine =
-  process.env.PIXMEND_ENGINE === 'realesrgan' ? 'realesrgan' : 'sharp';
+  process.env.PIXMEND_ENGINE === 'realesrgan' ? 'realesrgan' :
+  process.env.PIXMEND_ENGINE === 'sharp' ? 'sharp' :
+  'aiplus';
+// Path to the Python interpreter inside the container. Override on
+// macOS dev with PIXMEND_PYTHON=python3.
+const PYTHON_BIN = process.env.PIXMEND_PYTHON ?? 'python3';
+// Path to the AI-plus pipeline script. Resolves relative to this file
+// at runtime (Docker COPY puts both at /opt/picenhancer/).
+const ENHANCE_SCRIPT =
+  process.env.PIXMEND_AIPLUS_SCRIPT ?? `${ROOT}/scripts/enhance.py`;
+const MODELS_DIR = process.env.PIXMEND_MODELS_DIR ?? `${ROOT}/models`;
 
 const ALDO_API = process.env.ALDO_API_BASE ?? 'http://localhost:3001';
 const ALDO_TOKEN = process.env.ALDO_TOKEN ?? '';
@@ -87,13 +99,21 @@ app.get('/out/:name', async (c) => {
 });
 
 /**
- * Pass plan for a target scale. Real-ESRGAN x4plus models do x4 natively;
- * `-s 2` performs an x4 internal upscale + bilinear downsample, which gives
- * a smoother x2 than bicubic. We chain passes for x8 / x16 because a single
- * `-s 8` invocation isn't supported and chaining preserves detail better
- * than upscaling once and bicubic-resampling.
+ * Pass plan for a target scale.
+ *
+ * `aiplus`: a single "pass" of the full Python pipeline — the script
+ *   handles AI x4 + face restore + Lanczos extension to ×8/×16 in
+ *   one call. Pass count is always 1; the per-pass `s` carries the
+ *   target scale (4 / 8 / 16) directly to enhance.py.
+ *
+ * `realesrgan` / `sharp`: chain x4 passes. `-s 2` (realesrgan) or
+ *   `lanczos3 ×2` (sharp) gives a smoother half-step than bicubic.
+ *   ×8 = x4 + ×2; ×16 = x4 + x4. Type stays narrow because the binary
+ *   only accepts 2 or 4 directly.
  */
-function planPasses(scale: 4 | 8 | 16): readonly { readonly s: 2 | 4 }[] {
+type PassS = 2 | 4 | 8 | 16;
+function planPasses(scale: 4 | 8 | 16): readonly { readonly s: PassS }[] {
+  if (ENGINE === 'aiplus') return [{ s: scale }];
   if (scale === 4) return [{ s: 4 }];
   if (scale === 8) return [{ s: 4 }, { s: 2 }];
   return [{ s: 4 }, { s: 4 }];
@@ -148,6 +168,7 @@ app.post('/enhance', async (c) => {
     const t0 = Date.now();
     let currentInput = inPath;
     let outPath = '';
+    let faces = 0;
     for (let i = 0; i < passes.length; i++) {
       const pass = passes[i];
       const passLabel = `${i + 1}/${passes.length}`;
@@ -175,10 +196,17 @@ app.post('/enhance', async (c) => {
             label: passLabel,
           });
         };
-        if (ENGINE === 'realesrgan') {
-          await runRealesrgan(currentInput, outPath, model, pass.s, onProgress);
+        if (ENGINE === 'aiplus') {
+          // pass.s carries the full target scale (4/8/16). One pass.
+          const result = await runAiPlus(
+            currentInput, outPath, pass.s as 4 | 8 | 16, onProgress,
+          );
+          faces = result.faces;
+        } else if (ENGINE === 'realesrgan') {
+          // Real-ESRGAN ncnn-vulkan only accepts -s 2 or -s 4.
+          await runRealesrgan(currentInput, outPath, model, pass.s as 2 | 4, onProgress);
         } else {
-          await runSharp(currentInput, outPath, pass.s, onProgress);
+          await runSharp(currentInput, outPath, pass.s as 2 | 4, onProgress);
         }
       } catch (err) {
         await send({
@@ -209,6 +237,7 @@ app.post('/enhance', async (c) => {
       scale,
       model,
       engine: ENGINE,
+      faces,
     });
   });
 });
@@ -298,6 +327,96 @@ async function runRealesrgan(
 }
 
 /**
+ * AI-plus engine — spawns the Python pipeline (Real-ESRGAN x4 + GFPGAN
+ * face restore + Lanczos extension for ×8/×16). Parses NDJSON progress
+ * events from stdout and maps them onto the existing onProgress
+ * callback so the SSE bar moves naturally.
+ *
+ * The script's progress vocabulary:
+ *   boot               -> 5%
+ *   models_loading     -> 10%
+ *   models_loaded      -> 25%
+ *   inference_start    -> 30%
+ *   progress (with pct as the canonical bar position)
+ *   done               -> 100%
+ *
+ * Stderr is captured + included in the rejection message so a broken
+ * model file or OOM surfaces with context, not just `python exited 1`.
+ */
+async function runAiPlus(
+  input: string,
+  output: string,
+  scale: 4 | 8 | 16,
+  onProgress?: (pct: number) => void,
+): Promise<{ readonly faces: number; readonly ms: number }> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      ENHANCE_SCRIPT,
+      '--input', input,
+      '--output', output,
+      '--scale', String(scale),
+      '--face', '1',
+      '--models-dir', MODELS_DIR,
+    ];
+    const p = spawn(PYTHON_BIN, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // Force unbuffered stdout so the JSON-line progress arrives as
+      // emitted, not at process exit.
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    });
+
+    let stderr = '';
+    let stdoutTail = '';
+    let lastDone: { faces: number; ms: number } | null = null;
+
+    const stageToPct: Record<string, number> = {
+      boot: 5,
+      models_loading: 10,
+      models_loaded: 25,
+      inference_start: 30,
+    };
+
+    p.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    p.stdout.on('data', (chunk) => {
+      stdoutTail += chunk.toString();
+      const lines = stdoutTail.split('\n');
+      stdoutTail = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const ev = JSON.parse(trimmed) as { stage: string; pct?: number; faces?: number; ms?: number };
+          if (ev.stage === 'done') {
+            lastDone = { faces: ev.faces ?? 0, ms: ev.ms ?? 0 };
+            onProgress?.(100);
+          } else if (typeof ev.pct === 'number') {
+            onProgress?.(ev.pct);
+          } else if (ev.stage in stageToPct) {
+            onProgress?.(stageToPct[ev.stage]);
+          }
+        } catch {
+          // Non-JSON line — ignore (Python warnings, torch chatter).
+        }
+      }
+    });
+    p.on('error', reject);
+    p.on('close', (code) => {
+      if (code === 0 && lastDone) {
+        resolve(lastDone);
+      } else {
+        reject(
+          new Error(
+            `aiplus pipeline exited ${code}: ${stderr.slice(-600).trim() || '(no stderr)'}`,
+          ),
+        );
+      }
+    });
+  });
+}
+
+/**
  * Lanczos-3 resize + perceptual sharpen via sharp/libvips. Pure native,
  * no shelling out, no binary-on-PATH gotchas. Sub-second on a typical
  * VPS for typical inputs; quality is the same kernel that Photoshop
@@ -377,6 +496,7 @@ function guessKind(name: string): string {
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`picenhancer listening on http://${HOST}:${info.port}`);
   console.log(`engine=${ENGINE}  dims=${DIMS_CMD}`);
+  if (ENGINE === 'aiplus') console.log(`python=${PYTHON_BIN}  script=${ENHANCE_SCRIPT}  models=${MODELS_DIR}`);
   if (ENGINE === 'realesrgan') console.log(`bin=${BIN}  models=${MODELS}`);
   console.log(`ALDO API: ${ALDO_API}  | strategist: ${ENHANCE_SHARPER_ID || '(none)'}`);
 });
