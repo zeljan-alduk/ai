@@ -45,7 +45,8 @@ RUN pip install --no-cache-dir \
       --extra-index-url https://pypi.org/simple \
       "torch==2.0.1+cpu" "torchvision==0.15.2+cpu" \
       "numpy<2" "Pillow>=10,<11" \
-      "basicsr==1.4.2"
+      "basicsr==1.4.2" \
+      "onnx==1.16.2"
 
 # Belt-and-suspenders: patch basicsr's functional_tensor import in case
 # pip resolution decides to upgrade torchvision in a future build.
