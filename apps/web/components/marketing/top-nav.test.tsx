@@ -28,6 +28,7 @@ describe('MarketingTopNav', () => {
     expect(html).toContain('href="/pricing"');
     expect(html).toContain('href="/security"');
     expect(html).toContain('href="/docs"');
+    expect(html).toContain('href="/examples"');
     expect(html).toContain('href="/roadmap"');
     expect(html).toContain('href="/changelog"');
   });

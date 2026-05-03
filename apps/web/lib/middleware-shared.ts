@@ -54,6 +54,11 @@ const PUBLIC_BOUNDED: ReadonlyArray<string> = [
   '/vs',
   '/changelog',
   '/roadmap',
+  '/examples',
+  // /live/<slug> hosts the running instances of every featured Examples
+  // build (today: /live/picenhancer). Public so a prospect can click
+  // through from /examples and use the product without signing in.
+  '/live',
   '/sales',
   '/deck',
   // In-house status page — public, no auth.

@@ -38,6 +38,7 @@ const NAV_LINKS: ReadonlyArray<{ href: string; label: string }> = [
   { href: '/pricing', label: 'Pricing' },
   { href: '/security', label: 'Security' },
   { href: '/docs', label: 'Docs' },
+  { href: '/examples', label: 'Examples' },
   { href: '/roadmap', label: 'Roadmap' },
   { href: '/changelog', label: 'Changelog' },
 ];
