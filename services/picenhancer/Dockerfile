@@ -19,11 +19,11 @@
 
 FROM node:22-bookworm-slim
 
-# ImageMagick provides both `magick convert` (upscale) and `identify`
-# (dimensions). Tiny, well-supported, no Vulkan/GPU concerns.
+# Just ca-certificates for HTTPS; sharp ships its own libvips prebuilt
+# binary inside the npm package (linux-x64 / linux-arm64 / darwin-arm64
+# all covered) so we don't need any system-level image libraries.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      ca-certificates imagemagick \
+ && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/picenhancer
@@ -43,8 +43,7 @@ ENV NODE_ENV=production \
     PIXMEND_PUB=/opt/picenhancer/public \
     PIXMEND_HOST=0.0.0.0 \
     PIXMEND_PORT=4000 \
-    PIXMEND_DIMS_CMD=identify \
-    PIXMEND_ENGINE=imagemagick
+    PIXMEND_ENGINE=sharp
 
 # Persistent input/output directories. docker-compose can mount a named
 # volume here to avoid losing in-flight uploads on container restart.

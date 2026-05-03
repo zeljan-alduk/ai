@@ -58,9 +58,10 @@ export default function PicenhancerLivePage() {
       <PicenhancerClient />
 
       <footer className="mt-12 border-t border-border pt-5 text-[12px] text-fg-muted">
-        Stack: ImageMagick Lanczos + perceptual unsharp (default; sub-second) — or Real-ESRGAN
-        AI mode opt-in on a GPU host (set <code className="font-mono text-fg">PIXMEND_ENGINE</code>).
-        Hono backend, proxied through Next.js. Source briefs + agents:{' '}
+        Stack: <code className="font-mono text-fg">sharp</code> (libvips) Lanczos-3 + perceptual
+        sharpen (default; sub-second) — or Real-ESRGAN AI mode opt-in on a GPU host (set{' '}
+        <code className="font-mono text-fg">PIXMEND_ENGINE</code>). Hono backend, proxied through
+        Next.js. Source briefs + agents:{' '}
         <Link href="/examples#picenhancer" className="text-accent underline-offset-2 hover:underline">
           /examples
         </Link>

@@ -26,6 +26,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { streamSSE } from 'hono/streaming';
+import sharp from 'sharp';
 
 // All paths env-overridable so the same server runs:
 //  - local dev on macOS out of /tmp/pixmend-stack
@@ -41,16 +42,20 @@ const HOST = process.env.PIXMEND_HOST ?? '127.0.0.1';
 // `sips` on macOS, `identify` (ImageMagick) on Linux. The production
 // Docker image installs imagemagick and sets PIXMEND_DIMS_CMD=identify.
 const DIMS_CMD = process.env.PIXMEND_DIMS_CMD ?? 'sips';
-// Upscale engine. `realesrgan` runs the AI binary (great on a GPU host
-// or Apple Silicon Metal); `imagemagick` runs `convert -filter Lanczos
-// -unsharp` (sub-second; ships fine on a CPU-only VPS). Default is
-// `imagemagick` because the production VPS has no GPU and software
-// Vulkan via llvmpipe is too slow to be useful (40+ s before the first
-// progress tick on a 200x150 image). Local dev on a Mac sets
-// PIXMEND_ENGINE=realesrgan to exercise the AI path.
-type Engine = 'realesrgan' | 'imagemagick';
+// Upscale engine.
+//   `realesrgan` — AI super-resolution via realesrgan-ncnn-vulkan. Great
+//                  on a GPU host or Apple Silicon Metal; impractical on
+//                  a CPU-only VPS via Mesa software Vulkan.
+//   `sharp`      — Lanczos resize + perceptual sharpen via libvips
+//                  (npm `sharp`). Pure-native, no shelling out, no
+//                  binary policy gotchas. Sub-second. Default.
+// Earlier revisions tried `magick`/`convert` here. Both were affected
+// by Debian's restrictive /etc/ImageMagick-6/policy.xml and by missing
+// binaries on bookworm-slim — convert exited -2 with an empty stderr.
+// sharp removes that whole class of failure modes.
+type Engine = 'realesrgan' | 'sharp';
 const ENGINE: Engine =
-  process.env.PIXMEND_ENGINE === 'realesrgan' ? 'realesrgan' : 'imagemagick';
+  process.env.PIXMEND_ENGINE === 'realesrgan' ? 'realesrgan' : 'sharp';
 
 const ALDO_API = process.env.ALDO_API_BASE ?? 'http://localhost:3001';
 const ALDO_TOKEN = process.env.ALDO_TOKEN ?? '';
@@ -173,7 +178,7 @@ app.post('/enhance', async (c) => {
         if (ENGINE === 'realesrgan') {
           await runRealesrgan(currentInput, outPath, model, pass.s, onProgress);
         } else {
-          await runImageMagick(currentInput, outPath, pass.s, onProgress);
+          await runSharp(currentInput, outPath, pass.s, onProgress);
         }
       } catch (err) {
         await send({
@@ -293,72 +298,52 @@ async function runRealesrgan(
 }
 
 /**
- * Lanczos resize + perceptual unsharp via ImageMagick `convert`.
- * Sub-second for typical inputs; the only path that's actually
- * usable on a CPU-only VPS today. Quality is "very good" for photos
- * and screenshots, less impressive for tiny pixelated sources where
- * a real super-resolution model would invent detail.
+ * Lanczos-3 resize + perceptual sharpen via sharp/libvips. Pure native,
+ * no shelling out, no binary-on-PATH gotchas. Sub-second on a typical
+ * VPS for typical inputs; quality is the same kernel that Photoshop
+ * Bicubic Sharper roughly aims at — clean gradients, restored edges,
+ * no halo on a sane sigma.
  *
- * Emits two synthetic progress ticks (10% on spawn, 100% on close)
- * so the UI bar still animates — the actual work is too fast to
- * stream meaningful intermediate progress.
+ * Emits a 10% tick on entry and a 100% tick on completion so the UI
+ * progress bar animates; the actual work is too fast to stream
+ * meaningful intermediate progress.
  */
-async function runImageMagick(
+async function runSharp(
   input: string,
   output: string,
   s: 2 | 4,
   onProgress?: (pct: number) => void,
 ): Promise<void> {
-  const pct = Math.round(s * 100); // 200 or 400, ImageMagick's % syntax
-  // -filter Lanczos: high-quality reconstruction kernel, the standard
-  //   for upscaling. Sharper than Mitchell, less ringy than sinc.
-  // -unsharp 0x1.0+1.0+0.02: gentle sharpen — radius=0 (auto), sigma=1,
-  //   amount=1, threshold=0.02 (skip near-flat regions). Keeps gradients
-  //   clean while restoring perceived detail on edges.
-  // -strip: drop EXIF + colour profile chunks for a smaller PNG out.
-  const args = [
-    input,
-    '-filter', 'Lanczos',
-    '-resize', `${pct}%`,
-    '-unsharp', '0x1.0+1.0+0.02',
-    '-strip',
-    output,
-  ];
-  // ImageMagick on Debian is usually `magick convert`; older versions
-  // and Alpine are just `convert`. Try `magick` first, fall back.
-  const cmd = process.env.PIXMEND_IM_CMD ?? 'magick';
-  await new Promise<void>((resolve, reject) => {
-    if (onProgress) onProgress(10);
-    const tryRun = (bin: string, fallback?: string): void => {
-      const argv = bin === 'magick' ? ['convert', ...args] : args;
-      const p = spawn(bin, argv, { stdio: ['ignore', 'ignore', 'pipe'] });
-      let stderr = '';
-      p.stderr.on('data', (d) => (stderr += d));
-      p.on('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'ENOENT' && fallback) {
-          tryRun(fallback);
-          return;
-        }
-        reject(err);
-      });
-      p.on('close', (code) => {
-        if (code === 0) {
-          if (onProgress) onProgress(100);
-          resolve();
-        } else {
-          reject(new Error(`imagemagick exited ${code}: ${stderr.slice(0, 400)}`));
-        }
-      });
-    };
-    tryRun(cmd, cmd === 'magick' ? 'convert' : undefined);
-  });
+  if (onProgress) onProgress(10);
+  // Read the source dims; sharp's resize accepts an absolute width/height.
+  const { width = 0, height = 0 } = await sharp(input).metadata();
+  if (!width || !height) throw new Error('sharp: failed to read input dimensions');
+  await sharp(input)
+    .resize({
+      width: width * s,
+      height: height * s,
+      kernel: 'lanczos3',
+      withoutEnlargement: false,
+    })
+    // Perceptual sharpen — sigma=1.0 is gentle; m1=1.0 / m2=2.0 ratio
+    // keeps the edge boost real without introducing visible halos.
+    .sharpen({ sigma: 1.0, m1: 1.0, m2: 2.0 })
+    .png({ compressionLevel: 6, adaptiveFiltering: true })
+    .toFile(output);
+  if (onProgress) onProgress(100);
 }
 
 async function readDims(path: string): Promise<{ readonly w: number; readonly h: number }> {
+  // Prefer sharp's native metadata read — works on every platform sharp
+  // ships a prebuilt binary for (Linux x64/arm64, macOS arm64/x64).
+  // Falls back to `identify`/`sips` only when PIXMEND_DIMS_CMD is set
+  // explicitly, kept for ops who have a reason to use the CLI tools.
+  if (!process.env.PIXMEND_DIMS_CMD) {
+    const meta = await sharp(path).metadata();
+    return { w: meta.width ?? 0, h: meta.height ?? 0 };
+  }
   return new Promise((resolve, reject) => {
     if (DIMS_CMD === 'identify') {
-      // ImageMagick — Linux/container path. `%w %h` is the most portable
-      // shape across IM 6 and 7.
       const p = spawn('identify', ['-format', '%w %h', path]);
       let out = '';
       p.stdout.on('data', (d) => (out += d));
@@ -368,7 +353,6 @@ async function readDims(path: string): Promise<{ readonly w: number; readonly h:
       });
       p.on('error', reject);
     } else {
-      // macOS — `sips` ships with the OS, no install needed for local dev.
       const p = spawn('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', path]);
       let out = '';
       p.stdout.on('data', (d) => (out += d));

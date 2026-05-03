@@ -36,7 +36,7 @@ interface DoneEvent {
   enhancedDims: { w: number; h: number };
   enhancedBytes: number;
   enhanceMs: number;
-  engine?: 'realesrgan' | 'imagemagick';
+  engine?: 'realesrgan' | 'sharp';
 }
 
 export function PicenhancerClient() {
@@ -426,7 +426,7 @@ export function PicenhancerClient() {
                   Enhanced (×{final?.scale ?? scale})
                   {final?.engine && (
                     <span className="ml-2 normal-case tracking-normal text-fg-faint">
-                      · {final.engine === 'realesrgan' ? 'Real-ESRGAN AI' : 'Lanczos + sharpen'}
+                      · {final.engine === 'realesrgan' ? 'Real-ESRGAN AI' : 'Lanczos-3 (libvips)'}
                     </span>
                   )}
                 </figcaption>
