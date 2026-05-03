@@ -131,26 +131,61 @@ export function barRect(
 }
 
 /**
- * Pick the fill colour for a bar by status. Returned as a Tailwind-ish
- * key so the caller can map to whatever the design system exposes (the
- * stub component returns hex; Engineer S's tokens may swap to CSS vars).
+ * Pick the fill colour for a bar by status. Returns a Tailwind className
+ * targeting the semantic token system (works in light + dark mode without
+ * a theme switch). The component applies the class to the SVG <rect>.
  *
  * NOTE: never colours by provider name. Status is the only signal.
  */
 export function statusFill(status: FlameStatus): string {
   switch (status) {
     case 'completed':
-      return '#2563eb'; // blue-600
+      return 'fill-accent';
     case 'running':
-      return '#3b82f6'; // blue-500 (animated via stroke pulse in the component)
+      return 'fill-accent';
     case 'failed':
-      return '#e11d48'; // rose-600
+      return 'fill-danger';
     case 'cancelled':
-      return '#94a3b8'; // slate-400
+      return 'fill-fg-muted';
     case 'queued':
-      return '#cbd5e1'; // slate-300
+      return 'fill-fg-muted/40';
     default:
-      return '#cbd5e1';
+      return 'fill-fg-muted/30';
+  }
+}
+
+/** Human-readable label for legends + a11y text. */
+export function statusLabel(status: FlameStatus): string {
+  switch (status) {
+    case 'completed':
+      return 'completed';
+    case 'running':
+      return 'running';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'queued':
+      return 'queued';
+    default:
+      return 'unknown';
+  }
+}
+
+/** Bg/text pair for the legend swatch chip (CSS-class form). */
+export function statusSwatch(status: FlameStatus): { bg: string; ring: string } {
+  switch (status) {
+    case 'completed':
+    case 'running':
+      return { bg: 'bg-accent', ring: 'ring-accent/30' };
+    case 'failed':
+      return { bg: 'bg-danger', ring: 'ring-danger/30' };
+    case 'cancelled':
+      return { bg: 'bg-fg-muted', ring: 'ring-fg-muted/30' };
+    case 'queued':
+      return { bg: 'bg-fg-muted/40', ring: 'ring-fg-muted/20' };
+    default:
+      return { bg: 'bg-fg-muted/30', ring: 'ring-fg-muted/15' };
   }
 }
 
