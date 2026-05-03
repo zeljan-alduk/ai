@@ -172,6 +172,192 @@ body {
   }
 }
 
+/* ------------------------------------------------------------------
+ * Replay-across-models stage — the "interactive" demo on the home
+ * page is a pure-CSS keyframe loop. 8s cadence, 5 phases:
+ *
+ *   t=0–2.8   lane A nodes appear left-to-right
+ *   t=2.8     fork connector + checkpoint pulse
+ *   t=3.5     lane B fades in, replays first 3 (ghost), then forks
+ *   t=5.5     diff strip fades in
+ *   t=8.0     loop
+ *
+ * Honors prefers-reduced-motion: reduce — collapses to end-state.
+ * ------------------------------------------------------------------ */
+@keyframes aldo-rep-node {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  6%,
+  92% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes aldo-rep-pulse {
+  0%,
+  35%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0);
+  }
+  45% {
+    box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.25);
+  }
+  55% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0);
+  }
+}
+@keyframes aldo-rep-fork {
+  0%,
+  35% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  46%,
+  92% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes aldo-rep-laneB {
+  0%,
+  40% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  52%,
+  92% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes aldo-rep-diff {
+  0%,
+  65% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  78%,
+  92% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.aldo-replay-stage .aldo-replay-node {
+  animation: aldo-rep-node 8s ease-in-out infinite both;
+}
+.aldo-replay-stage .aldo-replay-pulse {
+  animation: aldo-rep-node 8s ease-in-out infinite both, aldo-rep-pulse 8s ease-in-out infinite both;
+}
+.aldo-replay-stage .aldo-replay-fork {
+  animation: aldo-rep-fork 8s ease-in-out infinite both;
+}
+.aldo-replay-stage .aldo-replay-laneB {
+  animation: aldo-rep-laneB 8s ease-in-out infinite both;
+}
+.aldo-replay-stage .aldo-replay-diff {
+  animation: aldo-rep-diff 8s ease-in-out infinite both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aldo-replay-stage .aldo-replay-node,
+  .aldo-replay-stage .aldo-replay-pulse,
+  .aldo-replay-stage .aldo-replay-fork,
+  .aldo-replay-stage .aldo-replay-laneB,
+  .aldo-replay-stage .aldo-replay-diff {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * CLI quickstart typewriter — wave-iter-2.
+ *
+ * Single dark terminal panel that reveals 13 lines in cadence then
+ * loops every 12 s. Each line is given a per-line `animation-delay`
+ * inline (set in cli-quickstart.tsx) and shares the same 12s loop
+ * duration, so the cadence is "command → output → pause → next
+ * command".
+ *
+ * The caret span pulses on command lines only.
+ *
+ * Honors prefers-reduced-motion: reduce — collapses to a fully
+ * rendered, static end-state (every line visible, no caret blink).
+ * ------------------------------------------------------------------ */
+@keyframes aldo-cli-line {
+  0% {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  /* Lines hold visible for the bulk of the loop, then fade out
+     just before the next iteration. The numbers below assume a 12s
+     loop and a ~0.7s per-line stagger handled by inline delays. */
+  4%,
+  92% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aldo-cli-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.aldo-cli .aldo-cli-line {
+  animation-name: aldo-cli-line;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+  /* duration set per-element inline so it stays in sync with the
+     stagger (currently 12s — keep matched in cli-quickstart.tsx) */
+}
+
+.aldo-cli .aldo-cli-caret {
+  display: inline-block;
+  margin-left: 0.15em;
+  color: rgb(148 163 184);
+  animation: aldo-cli-caret 1s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aldo-cli .aldo-cli-line {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .aldo-cli .aldo-cli-caret {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* Subtle table styling re-used across pages (legacy; kept for non-redesigned routes). */
 .aldo-table {
   width: 100%;
@@ -325,4 +511,170 @@ body {
 .docs-code-block pre {
   margin: 0;
   border-radius: 8px;
+}
+
+/* ------------------------------------------------------------------
+ * Wave-iter-3 — hero secondary visual: 3-frame auto-cycling dashboard.
+ *
+ * Three absolutely-positioned frames trade in / out via opacity over
+ * an 18s loop (6s per frame). The active span on frame 2 pulses; the
+ * "Replay" button on frame 3 has a soft glow.
+ *
+ * The cadence is deliberately slow — 6s gives a reader time to parse
+ * each frame without feeling rushed. `prefers-reduced-motion: reduce`
+ * collapses the cycle to frame 3 (the most product-meaningful frame:
+ * it shows the cross-model replay differential).
+ * ------------------------------------------------------------------ */
+@keyframes aldo-hero-cycle-frame {
+  0%, 30% {
+    opacity: 1;
+  }
+  35%, 100% {
+    opacity: 0;
+  }
+}
+@keyframes aldo-hero-cycle-frame-mid {
+  0%, 33% {
+    opacity: 0;
+  }
+  38%, 63% {
+    opacity: 1;
+  }
+  68%, 100% {
+    opacity: 0;
+  }
+}
+@keyframes aldo-hero-cycle-frame-late {
+  0%, 66% {
+    opacity: 0;
+  }
+  71%, 100% {
+    opacity: 1;
+  }
+}
+@keyframes aldo-hero-pulse {
+  0%, 50%, 100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+  60% {
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25);
+  }
+  70% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+@keyframes aldo-hero-glow {
+  0%, 70%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: translateY(0);
+  }
+  80% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.18);
+    transform: translateY(-1px);
+  }
+  90% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: translateY(0);
+  }
+}
+@keyframes aldo-hero-cycle-dot {
+  0%, 30% {
+    background-color: rgb(var(--accent));
+  }
+  35%, 100% {
+    background-color: rgb(var(--fg-faint));
+  }
+}
+@keyframes aldo-hero-cycle-dot-mid {
+  0%, 33% {
+    background-color: rgb(var(--fg-faint));
+  }
+  38%, 63% {
+    background-color: rgb(var(--accent));
+  }
+  68%, 100% {
+    background-color: rgb(var(--fg-faint));
+  }
+}
+@keyframes aldo-hero-cycle-dot-late {
+  0%, 66% {
+    background-color: rgb(var(--fg-faint));
+  }
+  71%, 100% {
+    background-color: rgb(var(--accent));
+  }
+}
+
+.aldo-hero-cycle .aldo-hero-frame {
+  animation-duration: 18s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+.aldo-hero-cycle .aldo-hero-frame-1 {
+  animation-name: aldo-hero-cycle-frame;
+}
+.aldo-hero-cycle .aldo-hero-frame-2 {
+  animation-name: aldo-hero-cycle-frame-mid;
+  opacity: 0;
+}
+.aldo-hero-cycle .aldo-hero-frame-3 {
+  animation-name: aldo-hero-cycle-frame-late;
+  opacity: 0;
+}
+.aldo-hero-cycle .aldo-hero-active-span {
+  animation: aldo-hero-pulse 18s ease-in-out infinite;
+}
+.aldo-hero-cycle .aldo-hero-replay-btn {
+  animation: aldo-hero-glow 18s ease-in-out infinite;
+}
+.aldo-hero-cycle .aldo-hero-cycle-dot {
+  animation-duration: 18s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+.aldo-hero-cycle .aldo-hero-cycle-dot-1 {
+  animation-name: aldo-hero-cycle-dot;
+}
+.aldo-hero-cycle .aldo-hero-cycle-dot-2 {
+  animation-name: aldo-hero-cycle-dot-mid;
+}
+.aldo-hero-cycle .aldo-hero-cycle-dot-3 {
+  animation-name: aldo-hero-cycle-dot-late;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aldo-hero-cycle .aldo-hero-frame-1,
+  .aldo-hero-cycle .aldo-hero-frame-2,
+  .aldo-hero-cycle .aldo-hero-active-span,
+  .aldo-hero-cycle .aldo-hero-replay-btn,
+  .aldo-hero-cycle .aldo-hero-cycle-dot {
+    animation: none;
+  }
+  /* Land on frame 3 — the most product-meaningful (cross-model
+     replay diff). Frame 1 + 2 stay opacity:0 from their initial
+     stylesheet declaration. */
+  .aldo-hero-cycle .aldo-hero-frame-3 {
+    animation: none;
+    opacity: 1;
+  }
+  .aldo-hero-cycle .aldo-hero-cycle-dot-3 {
+    background-color: rgb(var(--accent));
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Wave-iter-3 — founder-story dropcap.
+ *
+ * Magazine-style first-letter treatment on the opening paragraph of
+ * the "Why we built ALDO AI" section. Pure CSS, no JS, no dependency.
+ * Falls back gracefully on browsers that ignore `::first-letter`.
+ * ------------------------------------------------------------------ */
+.dropcap::first-letter {
+  float: left;
+  font-size: 3.4em;
+  line-height: 0.85;
+  font-weight: 600;
+  margin: 0.05em 0.1em 0 0;
+  color: rgb(var(--accent));
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
 }

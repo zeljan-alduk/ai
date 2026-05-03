@@ -41,3 +41,5 @@ export * from './prompts.js';
 export * from './threads.js';
 // Wave-4 — cost + spend analytics (LangSmith spend / Braintrust experiments cost view parity).
 export * from './spend.js';
+// Wave-iter-3 — newsletter subscribe (marketing capture between FAQ + DualCta).
+export * from './newsletter.js';

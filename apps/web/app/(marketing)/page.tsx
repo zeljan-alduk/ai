@@ -1,25 +1,74 @@
 /**
  * Homepage — `/`.
  *
- * Public, server-rendered, zero JS. Headline + sub + two CTAs, six
- * feature cards reflecting the CLAUDE.md non-negotiables, an "About
- * the agency" paragraph, and a 4-step "How it works" section.
+ * Public, server-rendered (a handful of sections are client islands
+ * for interactivity: SDK tab-switcher, MCP copy-config grid, demo
+ * loop, section nav rail). The page is the marketing showcase for
+ * the platform, organised as a single narrative arc:
+ *
+ *   Hook            → Hero + TrustStrip
+ *   Why-unique      → FiveThings + Architecture
+ *   How-it-works    → DefineAnAgent + UseCases + ReplayAcrossModels
+ *                     + CliQuickstart
+ *   Personas        → BuiltForTheWayYouWork
+ *   Proof           → HonestComparisonV2 + McpIntegrations + StatsStrip
+ *                     + BuiltInTheOpen + CompliancePosture
+ *   Pricing         → PricingTeaser
+ *   Resources / FAQ → ResourceHub + Faq
+ *   Final CTA       → DualCta
+ *
+ * Wave-iter-2 dedupe:
+ *   - Removed the inline `Features` 6-card section (FiveThings already
+ *     covers the differentiators with richer visuals).
+ *   - Removed the inline `Builders` "we use ALDO to build ALDO" section
+ *     (the new BuiltInTheOpen panel makes this explicit with the cadence
+ *     timeline + repo facts; we don't say it twice).
+ *   - Removed the inline `HowItWorks` 4-step list (the new CliQuickstart
+ *     terminal does the same job with motion + a real CLI).
  *
  * Honest copy guard-rails:
- *   - No specific cloud-provider names (LLM-agnostic). The local-models
- *     card lists Ollama / vLLM / llama.cpp / LM Studio / MLX — those
- *     are runtime identifiers, not vendor names.
+ *   - No specific cloud-provider names (LLM-agnostic). Where we name
+ *     a provider it is as a runtime identifier (Ollama, vLLM, …) or a
+ *     comparison row label (LangSmith, Braintrust, CrewAI), never as
+ *     "the model".
  *   - No fake testimonials, no fabricated stats, no implied compliance.
- *   - The hero loop is a code-driven 5-scene animation of the actual
- *     platform mechanics (spec → route → run → eval → swap). No
- *     recorded video, no third-party iframe, no audio.
+ *   - Every link in the page resolves to a real route — clicking
+ *     anything must land on a real surface.
+ *   - The replay demo + CLI typewriter are CSS keyframe animations.
+ *     No video, no animation lib, no recorded reel.
+ *
+ * Test-contract pinning:
+ *   - The hero h1 string matches `/run real software-engineering/i`
+ *     (golden-path.spec.ts + auth.spec.ts).
+ *   - The primary CTA href is `/signup` (auth + responsive specs).
+ *   - Don't change either without updating those specs together.
  */
 
 import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
+import { BuiltForTheWayYouWork } from '@/components/marketing/built-for-the-way-you-work';
+import { BuiltInTheOpen } from '@/components/marketing/built-in-the-open';
+import { CliQuickstart } from '@/components/marketing/cli-quickstart';
+import { CompliancePosture } from '@/components/marketing/compliance-posture';
+import { DefineAnAgent } from '@/components/marketing/define-an-agent';
+import { DualCta } from '@/components/marketing/dual-cta';
+import { EcosystemGrid } from '@/components/marketing/ecosystem-grid';
+import { Faq } from '@/components/marketing/faq';
+import { FiveThings } from '@/components/marketing/five-things';
+import { FounderStory } from '@/components/marketing/founder-story';
 import { HeroCodeSnippet } from '@/components/marketing/hero-code-snippet';
+import { HeroDashboardCycle } from '@/components/marketing/hero-dashboard-cycle';
+import { HonestComparisonV2 } from '@/components/marketing/honest-comparison-v2';
+import { McpIntegrations } from '@/components/marketing/mcp-integrations';
+import { NewsletterSignup } from '@/components/marketing/newsletter-signup';
 import { PlatformDemoLoop } from '@/components/marketing/platform-demo-loop';
+import { PricingTeaser } from '@/components/marketing/pricing-teaser';
+import { ProductSurfacesInMotion } from '@/components/marketing/product-surfaces';
+import { ReplayAcrossModels } from '@/components/marketing/replay-across-models';
+import { ResourceHub } from '@/components/marketing/resource-hub';
+import { SectionNavRail } from '@/components/marketing/section-nav-rail';
 import { StatsStrip } from '@/components/marketing/stats-strip';
 import { TrustStrip } from '@/components/marketing/trust-strip';
+import { UseCases } from '@/components/marketing/use-cases';
 import Link from 'next/link';
 
 export const metadata = {
@@ -43,87 +92,96 @@ export const metadata = {
   },
 };
 
-/**
- * Wave-14C — last verification of the comparison table below.
- *
- * LAUNCH REQUIREMENT: the comparison numbers and capability claims
- * must be re-verified at least quarterly. The footnote on the table
- * shows this date verbatim — update both this constant AND the table
- * footer when you re-verify. Do NOT compute the date dynamically; an
- * always-now string would be a lie.
- */
-const COMPARISON_TABLE_VERIFIED = '2026-04-26';
-
-const FEATURES: ReadonlyArray<{ title: string; body: string }> = [
-  {
-    title: 'LLM-agnostic',
-    body: 'Capability-class routing. Agents declare what they need; the gateway picks the model. Switch providers with config, never code.',
-  },
-  {
-    title: 'Local models, first-class',
-    body: 'Ollama, vLLM, llama.cpp, LM Studio, and MLX (Apple Silicon) are auto-discovered. The eval harness compares frontier and local on the same agent spec.',
-  },
-  {
-    title: 'Privacy tiers, enforced',
-    body: 'Agents marked sensitive are physically incapable of reaching a cloud model. The router fails closed — not the agent author.',
-  },
-  {
-    title: 'Multi-agent orchestration',
-    body: 'Sequential, parallel, debate, and iterative supervisors with deterministic cost rollup at every node of the run tree.',
-  },
-  {
-    title: 'Replayable end-to-end',
-    body: 'Every run is checkpointed — full message and tool-call history. Re-execute any step against a different model and diff the output.',
-  },
-  {
-    title: 'Sandbox + guards',
-    body: 'Every tool call runs through process isolation, prompt-injection spotlighting, and an output scanner before it touches your data.',
-  },
-];
-
-const STEPS: ReadonlyArray<{ n: string; title: string; body: string }> = [
-  {
-    n: '01',
-    title: 'Sign up',
-    body: 'Create a workspace. No credit card required for the 14-day trial.',
-  },
-  {
-    n: '02',
-    title: 'Start with the reference organization',
-    body: 'A working agent organization (principal, architect, engineers, reviewers) is seeded into your tenant on first login — the same template our team uses internally. Edit it freely or replace it entirely.',
-  },
-  {
-    n: '03',
-    title: 'Run an agent',
-    body: 'Pick an agent, give it a task. Local models work out of the box; bring your own provider keys for cloud models via Secrets.',
-  },
-  {
-    n: '04',
-    title: 'Inspect the run tree',
-    body: 'Walk the supervisor tree, see every prompt, every tool call, every cost roll-up. Replay any node against a different model.',
-  },
-];
-
 export default function HomePage() {
   return (
     <>
+      {/* Sticky right-edge nav rail (lg+ only). Hidden on mobile so the
+          page reads top-to-bottom without crowding a small viewport. */}
+      <SectionNavRail />
+
+      {/* HOOK ─── what we are, and the promise. */}
       <Hero />
       <TrustStrip />
+
+      {/* WHY-UNIQUE ─── the five lines no one else stacks, then the
+          one-glance picture of the architecture. */}
+      <FiveThings />
       <Architecture />
-      <Features />
-      <RecentShipments />
+
+      {/* SHOW-DON'T-TELL ─── iter-3: the six product surfaces with
+          annotated mockups. Closes the "every competitor leads with
+          screenshots, we ship zero" gap. Sits between Architecture
+          (bg-elevated) and DefineAnAgent (bg-elevated) so its bg-bg
+          breaks the otherwise-consecutive elevated stripe. */}
+      <ProductSurfacesInMotion />
+
+      {/* HOW-IT-WORKS ─── define the agent, see real scenarios, watch
+          a step replay across models, then run it from the CLI. */}
+      <DefineAnAgent />
+      <UseCases />
+      <ReplayAcrossModels />
+      <CliQuickstart />
+
+      {/* PERSONAS ─── three rooms in the same house. */}
+      <BuiltForTheWayYouWork />
+
+      {/* PROOF ─── honest comparison · ecosystem · MCP · stats ·
+          source-available cadence · compliance posture. */}
+      <HonestComparisonV2 />
+      {/* iter-3: ecosystem grid — proves the LLM-agnostic invariant
+          visually, with typographic-only badges (no real vendor logos
+          to keep licensing clean). */}
+      <EcosystemGrid />
+      <McpIntegrations />
       <StatsStrip />
-      <Builders />
-      <HowItWorks />
-      <Comparison />
-      <BottomCta />
+      <BuiltInTheOpen />
+      <CompliancePosture />
+
+      {/* PRICING ─── teaser, then deep link to the full table. */}
+      <PricingTeaser />
+
+      {/* RESOURCES + FAQ ─── twelve doors deeper, then the six
+          questions we get every week. */}
+      <ResourceHub />
+      <FaqSection />
+
+      {/* iter-3: community capture — weekly digest signup + 3 recent
+          changelog snippets. Posts to /v1/newsletter/subscribe. */}
+      <NewsletterSignup />
+
+      {/* iter-3: the founder story. Single column, prose-shaped, no
+          graphics. The four convictions that drove the platform's
+          non-negotiables (CLAUDE.md). */}
+      <FounderStory />
+
+      {/* FINAL CTA ─── two ways in: cloud trial or self-host. */}
+      <GetStartedSection />
     </>
+  );
+}
+
+// Wrappers add the section IDs the nav rail targets without forcing
+// the underlying components to know about the rail's existence.
+
+function FaqSection() {
+  return (
+    <div id="faq">
+      <Faq />
+    </div>
+  );
+}
+
+function GetStartedSection() {
+  return (
+    <div id="get-started">
+      <DualCta />
+    </div>
   );
 }
 
 function Architecture() {
   return (
-    <section className="border-t border-border bg-bg-elevated">
+    <section id="architecture" className="border-t border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
         <div className="mb-10 max-w-2xl">
           <p className="text-[11px] uppercase tracking-wider text-accent">Architecture</p>
@@ -159,123 +217,6 @@ function Architecture() {
   );
 }
 
-/**
- * Honest comparison table. Three columns: ALDO AI, "general AI
- * frameworks" (LangChain / LlamaIndex / etc.), "chat wrappers" (the
- * cohort of UIs around a single API key). No vendor names — we
- * describe categories so the comparison is durable across model
- * launches.
- *
- * LAUNCH REQUIREMENT: re-verify the rows quarterly. Update both
- * `COMPARISON_TABLE_VERIFIED` at the top of the file AND the footnote
- * at the bottom of this section.
- */
-function Comparison() {
-  const rows: ReadonlyArray<{ feature: string; aldo: string; framework: string; wrapper: string }> =
-    [
-      {
-        feature: 'LLM-agnostic capability routing',
-        aldo: 'Yes',
-        framework: 'Partial (per-call)',
-        wrapper: 'No',
-      },
-      {
-        feature: 'Local-model first-class',
-        aldo: 'Yes (Ollama / vLLM / llama.cpp / MLX)',
-        framework: 'Possible',
-        wrapper: 'No',
-      },
-      {
-        feature: 'Privacy tier fail-closed',
-        aldo: 'Yes (router drops sensitive → cloud)',
-        framework: 'No',
-        wrapper: 'No',
-      },
-      {
-        feature: 'Replayable run tree',
-        aldo: 'Yes (per-node model swap)',
-        framework: 'Logs',
-        wrapper: 'No',
-      },
-      {
-        feature: 'Sandboxed tool execution',
-        aldo: 'Yes (process isolation + scanner)',
-        framework: 'BYO',
-        wrapper: 'No',
-      },
-      {
-        feature: 'Eval gating before promotion',
-        aldo: 'Yes',
-        framework: 'BYO',
-        wrapper: 'No',
-      },
-    ];
-  return (
-    <section className="border-t border-border bg-bg">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-        <div className="mb-8 max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-fg">Honest comparison.</h2>
-          <p className="mt-2 text-sm text-fg-muted">
-            Three categories of incumbents: general-purpose agent frameworks, chat-wrapper apps, and
-            us. We&rsquo;re only comparing what we ship today — no roadmap items in the table.
-          </p>
-        </div>
-        <div className="overflow-x-auto rounded-lg border border-border bg-bg-elevated">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-bg-subtle text-xs uppercase tracking-wider text-fg-muted">
-              <tr>
-                <th className="px-4 py-3">Capability</th>
-                <th className="px-4 py-3">ALDO AI</th>
-                <th className="px-4 py-3">Agent framework</th>
-                <th className="px-4 py-3">Chat wrapper</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.feature} className="border-t border-border">
-                  <td className="px-4 py-3 font-medium text-fg">{r.feature}</td>
-                  <td className="px-4 py-3 text-fg">{r.aldo}</td>
-                  <td className="px-4 py-3 text-fg-muted">{r.framework}</td>
-                  <td className="px-4 py-3 text-fg-muted">{r.wrapper}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2 text-sm">
-          <span className="text-fg-muted">Side-by-side with named tools:</span>
-          <Link
-            href="/vs/crewai"
-            className="rounded-full border border-border bg-bg-elevated px-3 py-1 font-medium text-fg transition-colors hover:border-accent hover:text-accent"
-          >
-            vs CrewAI
-          </Link>
-          <Link
-            href="/vs/langsmith"
-            className="rounded-full border border-border bg-bg-elevated px-3 py-1 font-medium text-fg transition-colors hover:border-accent hover:text-accent"
-          >
-            vs LangSmith
-          </Link>
-          <Link
-            href="/vs/braintrust"
-            className="rounded-full border border-border bg-bg-elevated px-3 py-1 font-medium text-fg transition-colors hover:border-accent hover:text-accent"
-          >
-            vs Braintrust
-          </Link>
-        </div>
-        <p className="mt-3 text-[11px] text-fg-faint">
-          Last verified: {COMPARISON_TABLE_VERIFIED}. We re-verify these claims quarterly; if one is
-          out of date,{' '}
-          <Link className="underline hover:text-fg" href="/security">
-            email us
-          </Link>{' '}
-          and we&rsquo;ll fix the row in the next deploy.
-        </p>
-      </div>
-    </section>
-  );
-}
-
 function Hero() {
   return (
     <section className="relative overflow-hidden">
@@ -299,13 +240,13 @@ function Hero() {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/signup"
-                className="rounded bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+                className="rounded bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 Start free trial
               </Link>
               <Link
                 href="/pricing"
-                className="rounded border border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle"
+                className="rounded border border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 See pricing
               </Link>
@@ -324,270 +265,37 @@ function Hero() {
               </p>
               <a
                 href="mailto:info@aldo.tech?subject=ALDO%20AI%20%E2%80%94%20self-host%20inquiry"
-                className="mt-3 inline-flex rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+                className="mt-3 inline-flex rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 Talk to us → info@aldo.tech
               </a>
             </div>
           </div>
 
-          {/* Right — code snippet + 60s demo. */}
+          {/* Right — code snippet + cycling dashboard + 60s demo.
+              The HeroCodeSnippet ships static (LCP element on every
+              viewport) and stays the test-contract-pinned visual.
+              HeroDashboardCycle is a lg+-only secondary visual that
+              auto-rotates through three product frames; mobile users
+              keep the lightweight original. */}
           <div className="lg:col-span-6">
             <HeroCodeSnippet />
             <p className="mt-3 text-center text-[11px] text-fg-muted">
               An agent is a YAML file — versioned, eval-gated, privacy-tagged. No Python class
               hierarchies. No vendor names.
             </p>
+            {/* iter-3: auto-cycling dashboard mockup (lg+ only).
+                Three frames, 6s each, opacity-only transitions —
+                respects prefers-reduced-motion. */}
+            <div className="mt-6">
+              <HeroDashboardCycle />
+            </div>
             {/* Auto-looping animated walkthrough below the snippet —
                 showing actual platform mechanics, not a marketing reel. */}
             <div className="mt-8">
               <PlatformDemoLoop />
             </div>
           </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Features() {
-  return (
-    <section className="border-t border-border bg-bg-elevated">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mb-12 max-w-2xl">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
-            Six non-negotiables
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
-            Built like a control plane, not a chat wrapper.
-          </h2>
-          <p className="mt-3 text-base leading-relaxed text-fg-muted">
-            These shape every line of code in the platform. They&rsquo;re also why most features in
-            our roadmap are short — the constraints do the work.
-          </p>
-        </div>
-        <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f) => (
-            <li
-              key={f.title}
-              className="group rounded-lg border border-border bg-bg-elevated p-6 shadow-sm transition-shadow hover:shadow-md"
-            >
-              <h3 className="text-[15px] font-semibold tracking-tight text-fg">{f.title}</h3>
-              <p className="mt-2.5 text-[14px] leading-relaxed text-fg-muted">{f.body}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function Builders() {
-  return (
-    <section className="border-t border-border bg-bg">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
-          <div className="lg:col-span-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
-              Built by ALDO TECH LABS
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
-              We use ALDO&nbsp;AI to build ALDO&nbsp;AI.
-            </h2>
-            <p className="mt-4 text-sm leading-relaxed text-fg-muted">
-              The platform you evaluate is the platform our own team works in every day.
-            </p>
-          </div>
-          <div className="lg:col-span-7">
-            <p className="text-base leading-relaxed text-fg">
-              Every new tenant arrives with a reference agent organization — principal, architect,
-              engineers, reviewers — preconfigured for sequential, parallel, and review handoffs. It
-              is the same template our team uses internally to ship this product. Pain points
-              surface in our own work first.
-            </p>
-            <p className="mt-4 text-base leading-relaxed text-fg">
-              Replay, eval gates, the run tree, and the privacy-tier router are not boxes we ticked
-              for a comparison table.{' '}
-              <strong className="text-fg">They are the surfaces we live in.</strong> If a feature
-              does not help that organization ship faster, we do not build it.
-            </p>
-            <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-border pt-5 text-sm">
-              <Stat label="Eval suites gating promotion" value="every agent" />
-              <Stat label="Replay against another model" value="any node" />
-              <Stat label="Sensitive traffic to cloud" value="0" />
-            </dl>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-wider text-fg-muted">{label}</dt>
-      <dd className="mt-1 font-mono text-base font-medium tabular-nums text-fg">{value}</dd>
-    </div>
-  );
-}
-
-/**
- * "Recently shipped" — surfaces capabilities the homepage didn't yet
- * mention. Each entry links into the relevant page so a visitor can
- * verify the claim by clicking through.
- *
- * LAUNCH GUARD-RAIL: never list a feature here that isn't visible on
- * the live product. The first time a visitor clicks "Replay" and the
- * URL 404s, the section becomes a liability.
- */
-const RECENT_SHIPMENTS: ReadonlyArray<{
-  tag: string;
-  title: string;
-  body: string;
-  href: string;
-  cta: string;
-}> = [
-  {
-    tag: 'Run debugger',
-    title: 'Replay any step against any model — side-by-side.',
-    body: 'Click swap-model on a checkpoint. We fork the run, route the new step through any provider you have, and drop you on a /runs/compare view with event-by-event, output, and cost diff.',
-    href: '/runs',
-    cta: 'See the run viewer →',
-  },
-  {
-    tag: 'Datasets',
-    title: 'Capture a production trace as an eval row, in one click.',
-    body: 'Save-as-eval-row pre-fills input + expected from the run’s message events, captures provenance metadata, and writes the row into the dataset of your choice. The eval harness then replays it against any model on this agent spec.',
-    href: '/datasets',
-    cta: 'Browse datasets →',
-  },
-  {
-    tag: 'Multi-team',
-    title: 'Projects: tenant-scoped grouping for teams.',
-    body: 'Group agents, runs, datasets, and evaluators into named projects with their own slug, settings, and (soon) RBAC. Foundation just landed; the entity-scoping retrofit ships incrementally per resource.',
-    href: '/projects',
-    cta: 'Open projects →',
-  },
-  {
-    tag: 'MCP server',
-    title: 'Drive ALDO AI from Claude, Codex, Cursor, VS Code, and more.',
-    body: 'A first-party Model Context Protocol server (`@aldo-ai/mcp-platform`) exposes agents, runs, datasets, and the run debugger as MCP tools. One config block works in Claude Desktop, Claude Code, OpenAI Codex, Cursor, GitHub Copilot Chat, Windsurf, Zed, and Continue.dev.',
-    href: '/docs/guides/mcp-server',
-    cta: 'Set it up →',
-  },
-];
-
-function RecentShipments() {
-  return (
-    <section className="border-t border-border bg-bg">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-        <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
-          <div className="max-w-2xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
-              Recently shipped
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
-              Built in-house, shipped continuously.
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-fg-muted">
-              We&rsquo;re a single team building the whole platform. That means tight feedback loops
-              and frequent releases — here&rsquo;s what landed in the last wave.
-            </p>
-          </div>
-          <Link
-            href="/changelog"
-            className="rounded border border-border bg-bg-elevated px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle"
-          >
-            Full changelog →
-          </Link>
-        </div>
-        <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {RECENT_SHIPMENTS.map((s) => (
-            <li
-              key={s.title}
-              className="flex flex-col rounded-lg border border-border bg-bg-elevated p-6 shadow-sm transition-shadow hover:shadow-md"
-            >
-              <span className="self-start rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
-                {s.tag}
-              </span>
-              <h3 className="mt-3 text-[16px] font-semibold leading-snug tracking-tight text-fg">
-                {s.title}
-              </h3>
-              <p className="mt-2 text-[14px] leading-relaxed text-fg-muted">{s.body}</p>
-              <Link
-                href={s.href}
-                className="mt-4 inline-flex text-sm font-medium text-accent hover:text-accent-hover"
-              >
-                {s.cta}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function HowItWorks() {
-  return (
-    <section className="border-t border-border bg-bg-elevated">
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mb-12 max-w-2xl">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
-            How it works
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-fg sm:text-[2.1rem]">
-            Sixty seconds, four steps.
-          </h2>
-          <p className="mt-3 text-base leading-relaxed text-fg-muted">
-            The whole flow in plain text — and a 14-day trial that takes five minutes to spin up.
-          </p>
-        </div>
-        <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((s) => (
-            <li
-              key={s.n}
-              className="rounded-lg border border-border bg-bg-elevated p-6 shadow-sm transition-shadow hover:shadow-md"
-            >
-              <div className="font-mono text-[12px] font-semibold tracking-wider text-accent">
-                {s.n}
-              </div>
-              <h3 className="mt-2 text-[15px] font-semibold tracking-tight text-fg">{s.title}</h3>
-              <p className="mt-2.5 text-[14px] leading-relaxed text-fg-muted">{s.body}</p>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </section>
-  );
-}
-
-function BottomCta() {
-  return (
-    <section className="border-t border-slate-800 bg-slate-950">
-      <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-14 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">
-            Ready to run a real agent team?
-          </h2>
-          <p className="mt-2 text-sm text-slate-300">
-            14-day trial, no card required. Local models work out of the box.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/signup"
-            className="rounded bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          >
-            Start free trial
-          </Link>
-          <a
-            href="mailto:info@aldo.tech?subject=ALDO%20AI%20%E2%80%94%20enterprise%20inquiry"
-            className="rounded border border-slate-700 bg-transparent px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
-          >
-            Talk to us
-          </a>
         </div>
       </div>
     </section>

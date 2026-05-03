@@ -60,6 +60,9 @@ const PUBLIC_PATH_EXACT = new Set<string>([
   '/v1/auth/signup',
   '/v1/auth/login',
   '/v1/design-partners/apply',
+  // Wave-iter-3: marketing newsletter capture. Subscribers don't have
+  // a tenant yet (many never sign up). Rate-limited per source IP.
+  '/v1/newsletter/subscribe',
   // Wave 11: Stripe POSTs webhooks without a JWT. Authentication is
   // HMAC over the raw body via `Stripe-Signature`; the route handler
   // verifies the signature before touching any state.

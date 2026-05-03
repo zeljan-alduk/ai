@@ -3,38 +3,79 @@
  *
  * Replaces the "X runs in last hour" pattern (which would be embarrassing
  * for a young product). Shows numbers that are real today AND impressive:
- * code shipped, tests, packages, agency members, supported runtimes.
+ * gateways, MCP tools, app surfaces, tests, migrations, invariants.
  *
  * Update these manually as the repo grows. Refresh quarterly with the
  * same cadence as the comparison-table verified-on date.
+ *
+ * Always-dark band — matches the BottomCta + DualCta aesthetic. The
+ * slate-* colors are the documented exception to the semantic-token
+ * rule for these always-dark CTA strips.
  */
 
 const STATS: ReadonlyArray<{ value: string; label: string; sub?: string }> = [
-  { value: '91K+',  label: 'lines TypeScript', sub: 'shipped, no Python plumbing' },
-  { value: '19',    label: 'platform packages', sub: 'orchestrator · gateway · eval · …' },
-  { value: '184',   label: 'tests in CI',       sub: 'green on every push' },
-  { value: '5',     label: 'local model runtimes', sub: 'Ollama · vLLM · llama.cpp · LM Studio · MLX' },
-  { value: '3',     label: 'privacy tiers',      sub: 'enforced by the router' },
-  { value: '107+',  label: 'commits to date',    sub: 'shipped daily' },
+  {
+    value: '9',
+    label: 'model gateways',
+    sub: '5 local + 4 frontier — capability routed',
+  },
+  {
+    value: '8',
+    label: 'MCP tools shipped',
+    sub: '@aldo-ai/mcp-platform stdio + HTTP',
+  },
+  {
+    value: '50+',
+    label: 'product surfaces',
+    sub: 'pages in the app today',
+  },
+  {
+    value: '1,184',
+    label: 'tests in CI',
+    sub: 'across 9 packages, green on every push',
+  },
+  {
+    value: '26',
+    label: 'sequential migrations',
+    sub: 'monotonic, replayable, never reordered',
+  },
+  {
+    value: '4',
+    label: 'invariants enforced',
+    sub: 'privacy, replay, eval-gate, agents-as-data',
+  },
 ];
 
-export const STATS_VERIFIED_ON = '2026-04-27';
+export const STATS_VERIFIED_ON = '2026-05-03';
 
 export function StatsStrip() {
   return (
-    <section className="border-y border-slate-200 bg-slate-950 text-slate-100">
+    <section className="border-y border-slate-200 bg-slate-950 text-slate-100 dark:border-slate-800">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-14">
-        <div className="mb-8 max-w-2xl">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-400">
-            What's in the box, today
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-            Real numbers, no filler.
-          </h2>
-          <p className="mt-2 text-sm text-slate-400">
-            We don&rsquo;t have a "trusted by" logo wall yet. We do have a working product. Here
-            is what it actually is, today.
-          </p>
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <div className="max-w-2xl">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-400">
+              What&apos;s in the box, today
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              Real numbers, no filler.
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              No "trusted by" logo wall. A working product. Every cell below is countable in the
+              repo as of the snapshot date.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2.5 py-1 font-mono text-slate-300">
+              FSL-1.1-ALv2
+            </span>
+            <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2.5 py-1 font-mono text-slate-300">
+              source-available
+            </span>
+            <span className="rounded-full border border-emerald-700/50 bg-emerald-500/10 px-2.5 py-1 font-mono text-emerald-300">
+              MIT in 2 yrs
+            </span>
+          </div>
         </div>
         <ul className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 lg:grid-cols-6">
           {STATS.map((s) => (
@@ -52,8 +93,8 @@ export function StatsStrip() {
           ))}
         </ul>
         <p className="mt-8 text-[11px] text-slate-500">
-          Snapshot: {STATS_VERIFIED_ON}. We re-snapshot quarterly. Every number above is
-          countable in the repo.
+          Snapshot: {STATS_VERIFIED_ON}. We re-snapshot quarterly. Every number above is countable
+          in the repo.
         </p>
       </div>
     </section>

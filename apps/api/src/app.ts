@@ -50,6 +50,7 @@ import { integrationsRoutes } from './routes/integrations.js';
 import { invitationsRoutes } from './routes/invitations.js';
 import { membersRoutes } from './routes/members.js';
 import { modelsRoutes } from './routes/models.js';
+import { newsletterRoutes } from './routes/newsletter.js';
 import { notificationsRoutes } from './routes/notifications.js';
 import { observabilityRoutes } from './routes/observability.js';
 import { openApiRoutes } from './routes/openapi.js';
@@ -286,6 +287,9 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   // (entire product) + LangSmith Hub. Versioned prompt bodies, diff,
   // playground; agent specs gain an additive `promptRef` slot.
   app.route('/', promptsRoutes(deps));
+  // Wave-iter-3 — public newsletter capture. POST is on the
+  // bearer-auth allow-list (`apps/api/src/auth/middleware.ts`).
+  app.route('/', newsletterRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>
