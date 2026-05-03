@@ -61,16 +61,17 @@ COPY services/picenhancer/scripts/convert_to_onnx.py .
 RUN python convert_to_onnx.py RealESRGAN_x4plus.pth realesrgan_x4plus.onnx \
  && ls -lh realesrgan_x4plus.onnx
 
-# ----- GFPGAN v1.4 → .onnx --------------------------------------------
-RUN curl -fsSL -o GFPGANv1.4.pth \
-      https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth \
- && ls -lh GFPGANv1.4.pth
-
-COPY services/picenhancer/scripts/convert_gfpgan_to_onnx.py .
-RUN python convert_gfpgan_to_onnx.py GFPGANv1.4.pth gfpgan_v1_4.onnx \
- && ls -lh gfpgan_v1_4.onnx
+# ----- GFPGAN — DEFERRED -----------------------------------------------
+# torch.onnx export of GFPGANv1Clean fails with mixed double/float
+# Conv types after tracing — a known issue with StyleGAN2's
+# ModulatedConv2d. enhance.py auto-skips face restore when the .onnx
+# isn't present, so we ship without it for now and the SR engine
+# stays usable. Research follow-up: try torch.onnx.dynamo_export, or
+# pull a pre-converted ONNX from a verified community source.
 
 # ----- YuNet face detector (already an ONNX in the OpenCV zoo) ---------
+# Kept for the future face-restore pass + because YuNet is also useful
+# for a separate "face detected, AI face mode would help" hint in the UI.
 RUN curl -fsSL -o face_detection_yunet.onnx \
       https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx \
  && ls -lh face_detection_yunet.onnx
@@ -108,16 +109,14 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Carry only the produced .onnx files forward — no torch in runtime.
 COPY --from=converter /work/realesrgan_x4plus.onnx /opt/picenhancer/models/realesrgan_x4plus.onnx
-COPY --from=converter /work/gfpgan_v1_4.onnx /opt/picenhancer/models/gfpgan_v1_4.onnx
 COPY --from=converter /work/face_detection_yunet.onnx /opt/picenhancer/models/face_detection_yunet.onnx
 
-# Sanity: the runtime can load all three models. Catches a mismatched
+# Sanity: the runtime can load both models. Catches a mismatched
 # onnxruntime opset / OpenCV version at build time rather than the
 # first user request.
 RUN python3 -c "\
 import onnxruntime as ort, cv2; \
 ort.InferenceSession('/opt/picenhancer/models/realesrgan_x4plus.onnx', providers=['CPUExecutionProvider']); \
-ort.InferenceSession('/opt/picenhancer/models/gfpgan_v1_4.onnx', providers=['CPUExecutionProvider']); \
 cv2.FaceDetectorYN_create('/opt/picenhancer/models/face_detection_yunet.onnx', '', (320, 320)); \
 print('ok')"
 
