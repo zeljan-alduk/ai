@@ -19,7 +19,7 @@ model_policy:
   # code, so the tier is `sensitive`; on-prem-only tenants must be able
   # to author specs without reaching a cloud endpoint, so a local
   # reasoning fallback is mandatory.
-  capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
+  capability_requirements: [tool-use, 128k-context, reasoning, extended-thinking, structured-output]
   privacy_tier: sensitive
   primary:
     capability_class: reasoning-large

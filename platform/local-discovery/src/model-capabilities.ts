@@ -72,36 +72,78 @@ const RULES: readonly CapabilityRule[] = [
     family: 'embedding',
   },
 
-  // ── Reasoning models — tool-use is variable; reasoning + streaming + structured ─
+  // ── Reasoning models — they all carry the `extended-thinking` tag the
+  // catalog uses for Anthropic + Qwen-3-thinking + DeepSeek-R1 + Phi-4
+  // class models that emit a chain-of-thought trace before the answer.
+  // NOTE: deepseek-r1 served by Ollama's stock template returns
+  // `does not support tools` to /v1/chat/completions tool-call requests.
+  // We intentionally DO NOT claim tool-use / function-calling here so
+  // the router picks a tool-capable model (qwen3, llama3.1+, gpt-oss)
+  // for any agent whose capability_requirements include tool-use.
+  // Tool support may land upstream in Ollama; revisit then.
   {
     match: /\bdeepseek-?r1\b/,
-    provides: ['reasoning', 'streaming', 'structured-output'],
+    provides: [
+      'reasoning',
+      'extended-thinking',
+      'streaming',
+      'structured-output',
+      '128k-context',
+    ],
     family: 'deepseek-r1',
   },
-  { match: /\bphi-?4(-reasoning)?\b/, provides: ['reasoning', 'streaming', 'structured-output'], family: 'phi-4' },
+  {
+    match: /\bphi-?4(-reasoning)?\b/,
+    provides: [
+      'reasoning',
+      'extended-thinking',
+      'streaming',
+      'structured-output',
+      '128k-context',
+    ],
+    family: 'phi-4',
+  },
   {
     match: /\bgpt-?oss\b/,
-    provides: ['reasoning', 'tool-use', 'function-calling', 'streaming', 'structured-output'],
+    provides: [
+      'reasoning',
+      'extended-thinking',
+      'tool-use',
+      'function-calling',
+      'streaming',
+      'structured-output',
+      '128k-context',
+    ],
     family: 'gpt-oss',
   },
 
-  // ── Qwen 3 — reasoning + tool-use + 128k ─────────────────────────
+  // ── Qwen 3 — reasoning + tool-use + 128k + extended-thinking ─────
   {
     match: /\bqwen-?3-?coder\b/,
     provides: [
       'reasoning',
+      'extended-thinking',
       'tool-use',
       'function-calling',
       'streaming',
       'structured-output',
       'code-fim',
       'constrained-decoding',
+      '128k-context',
     ],
     family: 'qwen-3-coder',
   },
   {
     match: /\bqwen-?3\b/,
-    provides: ['reasoning', 'tool-use', 'function-calling', 'streaming', 'structured-output'],
+    provides: [
+      'reasoning',
+      'extended-thinking',
+      'tool-use',
+      'function-calling',
+      'streaming',
+      'structured-output',
+      '128k-context',
+    ],
     family: 'qwen-3',
   },
 
@@ -115,19 +157,48 @@ const RULES: readonly CapabilityRule[] = [
       'structured-output',
       'code-fim',
       'constrained-decoding',
+      '128k-context',
     ],
     family: 'qwen-2.5-coder',
   },
   {
     match: /\bqwen-?2\.5\b/,
-    provides: ['tool-use', 'function-calling', 'streaming', 'structured-output'],
+    provides: [
+      'tool-use',
+      'function-calling',
+      'streaming',
+      'structured-output',
+      '128k-context',
+    ],
     family: 'qwen-2.5',
   },
 
-  // ── Llama 3.1 / 3.2 / 3.3 / 4 — tool-use + function-calling ──────
+  // ── Llama 4 — 10M context, reasoning, tool-use ───────────────────
   {
-    match: /\bllama-?(3\.[123]|4)\b/,
-    provides: ['tool-use', 'function-calling', 'streaming', 'structured-output'],
+    match: /\bllama-?4\b/,
+    provides: [
+      'reasoning',
+      'extended-thinking',
+      'tool-use',
+      'function-calling',
+      'streaming',
+      'structured-output',
+      '128k-context',
+      '200k-context',
+      '1m-context',
+    ],
+    family: 'llama-4',
+  },
+  // ── Llama 3.1 / 3.2 / 3.3 — tool-use + function-calling + 128k ──
+  {
+    match: /\bllama-?3\.[123]\b/,
+    provides: [
+      'tool-use',
+      'function-calling',
+      'streaming',
+      'structured-output',
+      '128k-context',
+    ],
     family: 'llama-3.1+',
   },
 

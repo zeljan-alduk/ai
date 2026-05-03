@@ -14,7 +14,7 @@ role:
   pattern: subscribe
 
 model_policy:
-  capability_requirements: [tool-use, 200k-context, structured-output, reasoning]
+  capability_requirements: [tool-use, 128k-context, structured-output, reasoning]
   privacy_tier: internal
   primary:
     capability_class: reasoning-small

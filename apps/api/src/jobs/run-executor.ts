@@ -120,16 +120,30 @@ export async function executeQueuedRun(args: ExecuteRunArgs): Promise<ExecuteRun
           console.error('[run-executor] event-stream subscriber crashed', e);
         }
       })();
+      // Wave-X — for composite runs the events() iterator is closed
+      // immediately (children are separate Runs). The actual work
+      // happens inside run.wait(). If runComposite throws (orchestrator
+      // gate failure, child spawn failure, etc.) we want the error
+      // surfaced so an operator can see what failed.
+      void (async () => {
+        try {
+          await (run as unknown as { wait?: () => Promise<unknown> }).wait?.();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`[run-executor] run ${runId} wait() threw: ${msg}`);
+          await markRunFailed(deps.db, runId, msg).catch(() => {});
+        }
+      })();
     })
     .catch(async (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[run-executor] run ${runId} runAgent rejected: ${msg}`);
       // Best-effort. If the run row already terminated we leave it
       // alone; otherwise stamp a failed row so the operator sees what
       // went wrong.
       await markRunFailed(deps.db, runId, msg).catch((bookErr) => {
         console.error('[run-executor] markRunFailed itself failed', bookErr);
       });
-      console.error(`[run-executor] run ${runId} failed: ${msg}`);
     });
 
   return { status: 'started' };

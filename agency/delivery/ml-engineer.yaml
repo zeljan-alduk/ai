@@ -14,7 +14,7 @@ role:
   pattern: worker
 
 model_policy:
-  capability_requirements: [tool-use, 200k-context, reasoning, extended-thinking, structured-output]
+  capability_requirements: [tool-use, 128k-context, reasoning, extended-thinking, structured-output]
   privacy_tier: sensitive
   primary:
     capability_class: reasoning-medium

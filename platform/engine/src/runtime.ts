@@ -507,8 +507,12 @@ export class PlatformRuntime implements Runtime {
       }
       // Build a synthetic supervisor run-id so the orchestrator's
       // events land on a real Run row (and so children can link via
-      // parent_run_id).
-      const supervisorId = randomUUID() as RunId;
+      // parent_run_id). Wave-X — honour caller-supplied opts.runId so
+      // the API↔engine bridge can pin events onto its pre-recorded
+      // queued row (same fix as the leaf-spawn path; without this the
+      // composite branch silently writes to a sibling row and the
+      // API's GET /v1/runs/:id never sees status flip from queued).
+      const supervisorId = (opts?.runId ?? (randomUUID() as RunId)) as RunId;
       const rootRunId: RunId = opts?.root ?? opts?.parent ?? supervisorId;
       this.runMeta.set(supervisorId, { rootRunId, compositeStrategy: spec.composite.strategy });
       if (this.runStore) {
