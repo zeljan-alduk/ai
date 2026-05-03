@@ -18,12 +18,20 @@
 import { cn } from '@/lib/cn';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-type Scale = 4 | 8 | 16;
+type Scale = 1 | 4 | 8 | 16;
+
+const SCALE_LABELS: Record<Scale, string> = {
+  1: 'Enhance',
+  4: 'Upscale ×4',
+  8: 'Upscale ×8',
+  16: 'Upscale ×16',
+};
 
 const SCALE_HINTS: Record<Scale, string> = {
-  4: '×4 native — single Real-ESRGAN pass.',
-  8: '×8 — two chained passes (×4 → ×2). Roughly 4× the wall time of ×4.',
-  16: '×16 — two chained ×4 passes. Slow on big inputs; great on small ones.',
+  1: 'Restore the face, keep the dimensions. Fast — typically 5–15 s.',
+  4: 'Restore + Real-ESRGAN ×4 super-resolution. 15–30 s on a portrait.',
+  8: '×8 — AI ×4 then Lanczos ×2 on top. Roughly 1.2× the wall time of ×4.',
+  16: '×16 — AI ×4 then Lanczos ×4 on top. Slow on big inputs; great on small ones.',
 };
 
 interface DoneEvent {
@@ -41,7 +49,7 @@ interface DoneEvent {
 }
 
 export function PicenhancerClient() {
-  const [scale, setScale] = useState<Scale>(4);
+  const [scale, setScale] = useState<Scale>(1);
   const [origUrl, setOrigUrl] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultBlobUrl, setResultBlobUrl] = useState<string | null>(null);
@@ -255,31 +263,31 @@ export function PicenhancerClient() {
 
   return (
     <div className="mt-8 space-y-6">
-      {/* Scale picker */}
+      {/* Action picker — Enhance is default; Upscale modes are opt-in. */}
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-[11px] uppercase tracking-[0.09em] text-fg-muted">
-          Scale
+          Action
         </span>
         <div
           role="group"
-          aria-label="Upscale factor"
+          aria-label="Enhancement mode"
           className="inline-flex overflow-hidden rounded-md border border-border bg-bg-elevated"
         >
-          {([4, 8, 16] as const).map((s) => (
+          {([1, 4, 8, 16] as const).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setScale(s)}
               aria-pressed={scale === s}
               className={cn(
-                'min-w-touch px-4 py-2 font-mono text-[13px] font-semibold transition-colors border-r border-border last:border-r-0',
+                'min-w-touch px-3 py-2 font-mono text-[12px] font-semibold transition-colors border-r border-border last:border-r-0',
                 scale === s
                   ? 'bg-accent/15 text-accent'
                   : 'text-fg-muted hover:text-fg hover:bg-bg-subtle',
               )}
               disabled={busy}
             >
-              ×{s}
+              {SCALE_LABELS[s]}
             </button>
           ))}
         </div>

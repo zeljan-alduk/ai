@@ -111,11 +111,16 @@ app.get('/out/:name', async (c) => {
  *   ×8 = x4 + ×2; ×16 = x4 + x4. Type stays narrow because the binary
  *   only accepts 2 or 4 directly.
  */
-type PassS = 2 | 4 | 8 | 16;
-function planPasses(scale: 4 | 8 | 16): readonly { readonly s: PassS }[] {
+type PassS = 1 | 2 | 4 | 8 | 16;
+function planPasses(scale: 1 | 4 | 8 | 16): readonly { readonly s: PassS }[] {
   if (ENGINE === 'aiplus') return [{ s: scale }];
-  if (scale === 4) return [{ s: 4 }];
-  if (scale === 8) return [{ s: 4 }, { s: 2 }];
+  // sharp / realesrgan engines don't support scale=1 (enhance-only) —
+  // they always do at least an x4 SR pass. Treat scale=1 as a no-op
+  // upscale (still runs through SR) so the engine semantics match the
+  // user's intent of "do something to the image".
+  const effective = scale === 1 ? 4 : scale;
+  if (effective === 4) return [{ s: 4 }];
+  if (effective === 8) return [{ s: 4 }, { s: 2 }];
   return [{ s: 4 }, { s: 4 }];
 }
 
@@ -124,8 +129,11 @@ app.post('/enhance', async (c) => {
   const file = form.file as File | undefined;
   if (!file) return c.text('missing file', 400);
 
-  const rawScale = Number((form.scale as string | undefined) ?? '4');
-  const scale: 4 | 8 | 16 = rawScale === 8 ? 8 : rawScale === 16 ? 16 : 4;
+  // Default scale = 1 (enhance only — no upscale, output same dims as
+  // input). 4 / 8 / 16 enable Real-ESRGAN x4 + Lanczos extension.
+  const rawScale = Number((form.scale as string | undefined) ?? '1');
+  const scale: 1 | 4 | 8 | 16 =
+    rawScale === 16 ? 16 : rawScale === 8 ? 8 : rawScale === 4 ? 4 : 1;
 
   const buf = Buffer.from(await file.arrayBuffer());
   const id = randomUUID();
@@ -199,7 +207,7 @@ app.post('/enhance', async (c) => {
         if (ENGINE === 'aiplus') {
           // pass.s carries the full target scale (4/8/16). One pass.
           const result = await runAiPlus(
-            currentInput, outPath, pass.s as 4 | 8 | 16, onProgress,
+            currentInput, outPath, pass.s as 1 | 4 | 8 | 16, onProgress,
           );
           faces = result.faces;
         } else if (ENGINE === 'realesrgan') {
@@ -346,7 +354,7 @@ async function runRealesrgan(
 async function runAiPlus(
   input: string,
   output: string,
-  scale: 4 | 8 | 16,
+  scale: 1 | 4 | 8 | 16,
   onProgress?: (pct: number) => void,
 ): Promise<{ readonly faces: number; readonly ms: number }> {
   return new Promise((resolve, reject) => {

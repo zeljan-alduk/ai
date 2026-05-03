@@ -50,9 +50,9 @@ export default function PicenhancerLivePage() {
           .
         </p>
         <p className="mt-3 text-[13px] text-accent">
-          🔒 Real-ESRGAN x4 generative super-resolution + GFPGAN v1.4 face restore on detected
-          faces, run entirely on this server via PyTorch CPU. No cloud, no third-party API, no
-          telemetry, $0. Allow 10–30 s for portraits.
+          🔒 GFPGAN v1.4 face restoration (default) + optional Real-ESRGAN x4 upscale, run
+          entirely on this server via PyTorch CPU. No cloud, no third-party API, no telemetry,
+          $0. Enhance ≈ 5–15 s; upscale modes ≈ 15–30 s.
         </p>
       </header>
 
