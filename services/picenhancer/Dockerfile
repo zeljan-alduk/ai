@@ -33,13 +33,25 @@ RUN apt-get update \
       ca-certificates curl libgl1 libglib2.0-0 \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir \
+RUN pip install --no-cache-dir --upgrade pip
+
+# All deps in one pip resolve so the torch pin survives basicsr's
+# unconstrained torch dep (otherwise pip uninstalls torch==2.0.1+cpu
+# and reinstalls torch==2.11.0 from PyPI to satisfy basicsr's setup.py,
+# which then breaks because torchvision >= 0.17 removed
+# transforms.functional_tensor that basicsr 1.4.2 imports).
+RUN pip install --no-cache-dir \
       --index-url https://download.pytorch.org/whl/cpu \
-      "torch==2.0.1+cpu" \
- && pip install --no-cache-dir \
+      --extra-index-url https://pypi.org/simple \
+      "torch==2.0.1+cpu" "torchvision==0.15.2+cpu" \
       "numpy<2" "Pillow>=10,<11" \
-      "opencv-python-headless==4.10.0.84" "basicsr==1.4.2"
+      "basicsr==1.4.2"
+
+# Belt-and-suspenders: patch basicsr's functional_tensor import in case
+# pip resolution decides to upgrade torchvision in a future build.
+# torchvision 0.17+ moved rgb_to_grayscale to transforms.functional.
+RUN sed -i 's|from torchvision.transforms.functional_tensor import rgb_to_grayscale|from torchvision.transforms.functional import rgb_to_grayscale|' \
+    /usr/local/lib/python3.11/site-packages/basicsr/data/degradations.py 2>/dev/null || true
 
 # Pre-download the upstream Real-ESRGAN x4plus checkpoint (~64 MB).
 RUN curl -fsSL -o RealESRGAN_x4plus.pth \
