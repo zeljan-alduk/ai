@@ -25,9 +25,12 @@ FROM python:3.11-slim-bookworm AS converter
 
 WORKDIR /work
 
-# Just curl + the torch CPU stack needed for the conversion script.
+# curl + torch CPU stack + the OpenCV native deps that basicsr pulls in
+# transitively. libgl1 + libglib2.0-0 are the libGL.so.1 / libgthread
+# providers — without them `import cv2` blows up at import time.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl libgl1 libglib2.0-0 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --upgrade pip \
@@ -35,7 +38,8 @@ RUN pip install --no-cache-dir --upgrade pip \
       --index-url https://download.pytorch.org/whl/cpu \
       "torch==2.0.1+cpu" \
  && pip install --no-cache-dir \
-      "numpy<2" "basicsr==1.4.2" "Pillow>=10,<11"
+      "numpy<2" "Pillow>=10,<11" \
+      "opencv-python-headless==4.10.0.84" "basicsr==1.4.2"
 
 # Pre-download the upstream Real-ESRGAN x4plus checkpoint (~64 MB).
 RUN curl -fsSL -o RealESRGAN_x4plus.pth \
