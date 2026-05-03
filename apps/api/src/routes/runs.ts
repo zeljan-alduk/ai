@@ -56,6 +56,7 @@ import {
 import type { Deps } from '../deps.js';
 import { normalizeTag, normalizeTags } from '../lib/tag-normalize.js';
 import { HttpError, notFound, validationError } from '../middleware/error.js';
+import { executeQueuedRun } from '../jobs/run-executor.js';
 import { emitActivity } from '../notifications.js';
 import { getDefaultProjectIdForTenant, getProjectBySlug } from '../projects-store.js';
 // Wave-16 — per-tenant monthly run quota. enforceMonthlyQuota throws
@@ -213,6 +214,26 @@ export function runsRoutes(deps: Deps): Hono {
         ...(projectId !== null ? { projectId } : {}),
       },
     }).catch((err) => console.error('[notifications] emitActivity failed', err));
+    // Wave-X — kick off the engine inline if API_INLINE_EXECUTOR=true.
+    // Fire-and-forget: the 202 ships before the model call starts.
+    // Engine RunStore writes events + final status to the same `runs`
+    // / `run_events` rows /v1/runs reads. When the env knob is unset
+    // (default), the executor is a no-op and the run row stays queued
+    // exactly as before — nothing in the legacy path changes.
+    void executeQueuedRun({
+      deps,
+      tenantId,
+      runId: id,
+      agentName: spec.identity.name,
+      agentVersion: spec.identity.version,
+      inputs: parsed.data.inputs,
+      projectId,
+    }).catch((err) => {
+      // executeQueuedRun handles its own persistence; this catch is
+      // belt-and-braces so an unexpected throw can't crash the API.
+      console.error('[runs] executeQueuedRun unexpected error', err);
+    });
+
     const body = CreateRunResponse.parse({
       run: {
         id,

@@ -8,6 +8,7 @@ import type {
   CallContext,
   CheckpointId,
   CompletionRequest,
+  Delta,
   Message,
   MessagePart,
   ModelGateway,
@@ -429,11 +430,32 @@ export class LeafAgentRun implements InternalAgentRun {
         let endUsage: import('@aldo-ai/types').UsageRecord | undefined;
         let endModel: import('@aldo-ai/types').ModelDescriptor | undefined;
 
+        // Wave-X — pass the spec's primary + fallback capability classes
+        // as routing hints so the gateway can pick the right model.
+        // The bare `gateway.complete(req, ctx)` shortcut defaults to
+        // `reasoning-medium` when no hints arrive (see comment at
+        // platform/gateway/src/gateway.ts:115), which silently breaks
+        // any agent whose primary class isn't `reasoning-medium`. Detect
+        // GatewayEx (presence of completeWith) and call it; fall back
+        // for tests that mock only the narrow ModelGateway interface.
+        const gw = this.deps.modelGateway as ModelGateway & {
+          completeWith?: (
+            req: CompletionRequest,
+            ctx: CallContext,
+            hints: { primaryClass: string; fallbackClasses?: readonly string[] },
+          ) => AsyncIterable<Delta>;
+        };
+        const primaryClass = this.spec.modelPolicy.primary.capabilityClass;
+        const fallbackClasses = this.spec.modelPolicy.fallbacks.map((f) => f.capabilityClass);
+        const stream = gw.completeWith
+          ? gw.completeWith(req, ctxWithSignal as CallContext, {
+              primaryClass,
+              ...(fallbackClasses.length > 0 ? { fallbackClasses } : {}),
+            })
+          : this.deps.modelGateway.complete(req, ctxWithSignal as CallContext);
+
         try {
-          for await (const delta of this.deps.modelGateway.complete(
-            req,
-            ctxWithSignal as CallContext,
-          )) {
+          for await (const delta of stream) {
             if (this.cancelled) break;
             if (delta.textDelta !== undefined) textAccum += delta.textDelta;
             if (delta.toolCall !== undefined) toolCalls.push(delta.toolCall);

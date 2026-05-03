@@ -1,0 +1,59 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+identity:
+  name: local-summarizer
+  version: 0.1.0
+  description: "Three-bullet summarizer pinned to local hardware. Demonstrates strict-local routing (privacy_tier sensitive, capability_class local-reasoning, zero cost)."
+  owner: local-test@aldo-tech-labs
+  tags: [demo, local, privacy, summarization]
+
+role:
+  team: support
+  reports_to: principal
+  pattern: worker
+
+model_policy:
+  capability_requirements: [streaming]
+  privacy_tier: sensitive
+  primary:
+    capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.0
+    tokens_in_max: 4000
+    tokens_out_max: 800
+  latency:
+    p95_ms: 30000
+  decoding:
+    mode: free
+    temperature: 0.2
+
+prompt:
+  system_file: prompts/local-summarizer.system.md
+  variables: {}
+
+tools:
+  mcp: []
+  permissions:
+    network: none
+    filesystem: none
+
+memory:
+  read:  [private]
+  write: [private]
+  retention:
+    private: 30d
+
+spawn:
+  allowed: []
+
+inputs:
+  schema_ref: schemas/local_summarizer_brief.json
+
+outputs:
+  artefact:
+    json_schema: schemas/local_summarizer_artefact.json
+
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: false

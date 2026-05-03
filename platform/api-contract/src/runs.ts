@@ -113,6 +113,18 @@ export const RunEvent = z.object({
     'composite.child_failed',
     'composite.usage_rollup',
     'composite.iteration',
+    /**
+     * Wave-X: per-call usage record emitted by the gateway through
+     * the engine's RunStore (provider id, model id, tokens in/out,
+     * cost USD). Surfaced once the API↔engine bridge actually
+     * executes runs in-process.
+     */
+    'usage',
+    /** Engine's terminal "ran to completion" signal. Wave-X bridge. */
+    'run.terminated_by',
+    /** Tool schema fallback warning (engine wave-3 introspection). */
+    'tool.schema_fallback',
+    'tool.schema_introspection_failed',
   ]),
   at: z.string(),
   payload: z.unknown(),

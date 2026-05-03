@@ -156,6 +156,16 @@ export interface SpawnOpts {
    * project assignment as its parent.
    */
   readonly projectId?: string;
+  /**
+   * Wave-X: pin the runtime's run id to a caller-supplied value
+   * instead of generating a fresh UUID. The API's POST /v1/runs
+   * pre-records a queued row with its own id; the bridge passes
+   * that id here so the engine writes events + status onto the same
+   * row the API client is polling, instead of a new sibling row.
+   * Optional: when omitted, spawn() generates as before — the
+   * existing CLI / orchestrator paths are unaffected.
+   */
+  readonly runId?: RunId;
 }
 
 /**
@@ -395,7 +405,7 @@ export class PlatformRuntime implements Runtime {
     }
 
     const spec = await this.registry.load(ref);
-    const id = randomUUID() as RunId;
+    const id = (opts?.runId ?? (randomUUID() as RunId)) as RunId;
     // Capture the root + strategy linkage so collectUsage / debug
     // tooling can retrieve it without round-tripping the run store.
     const rootRunId: RunId = opts?.rootRunId ?? parent ?? id;
@@ -482,7 +492,13 @@ export class PlatformRuntime implements Runtime {
   async runAgent(
     ref: AgentRef,
     inputs: unknown,
-    opts?: { readonly parent?: RunId; readonly root?: RunId; readonly projectId?: string },
+    opts?: {
+      readonly parent?: RunId;
+      readonly root?: RunId;
+      readonly projectId?: string;
+      /** Wave-X: pin the leaf run id (forwarded to spawn() via SpawnOpts). */
+      readonly runId?: RunId;
+    },
   ): Promise<AgentRun> {
     const spec = await this.registry.load(ref);
     if (spec.composite !== undefined) {
@@ -526,14 +542,15 @@ export class PlatformRuntime implements Runtime {
       this.composites.set(supervisorId, wrapped);
       return wrapped;
     }
-    // Single-agent path. Compose the SpawnOpts so the rootRunId
-    // and the wave-17 projectId are both forwarded when the caller
-    // supplied them.
+    // Single-agent path. Compose the SpawnOpts so the rootRunId,
+    // wave-17 projectId, and wave-X pinned runId are all forwarded
+    // when the caller supplied them.
     const spawnOpts: SpawnOpts | undefined =
-      opts?.root !== undefined || opts?.projectId !== undefined
+      opts?.root !== undefined || opts?.projectId !== undefined || opts?.runId !== undefined
         ? {
             ...(opts.root !== undefined ? { rootRunId: opts.root } : {}),
             ...(opts.projectId !== undefined ? { projectId: opts.projectId } : {}),
+            ...(opts.runId !== undefined ? { runId: opts.runId } : {}),
           }
         : undefined;
     return this.spawn(ref, inputs, opts?.parent, spawnOpts);
