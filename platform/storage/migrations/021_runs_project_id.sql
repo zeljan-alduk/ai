@@ -57,6 +57,23 @@ ALTER TABLE runs
   ADD COLUMN IF NOT EXISTS project_id TEXT
     REFERENCES projects(id) ON DELETE CASCADE;
 
+-- Self-heal Default project for any tenant that owns runs but is
+-- missing its project row (same gap that 020's self-heal closes for
+-- registered_agents). Idempotent (WHERE NOT EXISTS).
+INSERT INTO projects (id, tenant_id, slug, name, description)
+SELECT DISTINCT
+  '00000000-0000-0000-0000-' || RIGHT(t.id, 12) AS id,
+  t.id                                          AS tenant_id,
+  'default'                                     AS slug,
+  'Default'                                     AS name,
+  'Auto-created during 021_runs_project_id retrofit (backfill self-heal).' AS description
+FROM tenants t
+JOIN runs r ON r.tenant_id = t.id
+WHERE NOT EXISTS (
+  SELECT 1 FROM projects p
+  WHERE p.tenant_id = t.id AND p.slug = 'default'
+);
+
 -- Backfill from the formula matching 019's seed. No JOIN needed: the
 -- default project's id is `'00000000-0000-0000-0000-' + RIGHT(tenant_id, 12)`
 -- by construction. Cheap and audit-legible.

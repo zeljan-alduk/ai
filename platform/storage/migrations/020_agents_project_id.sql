@@ -72,6 +72,30 @@ ALTER TABLE registered_agents
     REFERENCES projects(id) ON DELETE CASCADE;
 
 -- ---------------------------------------------------------------------------
+-- 1b. Self-heal: ensure every tenant that owns a registered_agents row
+--     has the Default project that step 2's backfill is about to point
+--     at. Migration 019 seeded existing tenants, but a tenant that
+--     signed up between 019 running and the wave-MVP auth-routes
+--     Default-project seeder shipping can be missing. Re-running 019's
+--     seed shape here for any such tenant prevents an FK violation
+--     during the backfill below. Idempotent (WHERE NOT EXISTS).
+-- ---------------------------------------------------------------------------
+
+INSERT INTO projects (id, tenant_id, slug, name, description)
+SELECT DISTINCT
+  '00000000-0000-0000-0000-' || RIGHT(t.id, 12) AS id,
+  t.id                                          AS tenant_id,
+  'default'                                     AS slug,
+  'Default'                                     AS name,
+  'Auto-created during 020_agents_project_id retrofit (backfill self-heal).' AS description
+FROM tenants t
+JOIN registered_agents a ON a.tenant_id = t.id
+WHERE NOT EXISTS (
+  SELECT 1 FROM projects p
+  WHERE p.tenant_id = t.id AND p.slug = 'default'
+);
+
+-- ---------------------------------------------------------------------------
 -- 2. Backfill: every existing agent → its tenant's Default project.
 --
 -- Formula matches the seed in 019_projects.sql so the join-free SQL
