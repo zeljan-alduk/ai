@@ -32,36 +32,30 @@ RUN apt-get update \
 WORKDIR /opt/picenhancer
 
 # --- Python deps ------------------------------------------------------
-# Install into a venv at /opt/picenhancer/venv so the system Python
-# stays clean and we can reference the interpreter directly.
+# Venv to comply with PEP 668 (Debian 12 protects system Python).
 RUN python3 -m venv /opt/picenhancer/venv
 ENV PATH="/opt/picenhancer/venv/bin:${PATH}"
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# torch CPU only — pull from the dedicated CPU index to avoid the
-# 2 GB CUDA wheel. Pin to a known-good combo with realesrgan + gfpgan.
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir \
+# torch CPU only. Pin to 2.0.1 + tv 0.15.2 — the last combo where
+# torchvision still ships `transforms.functional_tensor`, which
+# basicsr 1.4.2 imports. Newer torchvision removed it and breaks
+# basicsr at import time. Pin avoids the runtime patch.
+RUN pip install --no-cache-dir --verbose \
       --index-url https://download.pytorch.org/whl/cpu \
-      "torch==2.4.1+cpu" "torchvision==0.19.1+cpu" \
- && pip install --no-cache-dir \
-      "numpy<2" "Pillow>=10" "opencv-python-headless==4.10.0.84" \
+      "torch==2.0.1+cpu" "torchvision==0.15.2+cpu"
+
+# Numerics + image I/O. numpy<2 because basicsr/realesrgan haven't
+# adopted the numpy 2.0 ABI yet.
+RUN pip install --no-cache-dir \
+      "numpy<2" "Pillow>=10,<11" "opencv-python-headless"
+
+# Real-ESRGAN + GFPGAN + their basicsr/facexlib deps. Last published
+# versions; well-tested with torch 2.0.1.
+RUN pip install --no-cache-dir \
       "basicsr==1.4.2" "facexlib==0.3.0" \
       "realesrgan==0.3.0" "gfpgan==1.3.8" \
       "tqdm" "lmdb" "yapf"
-
-# basicsr 1.4.2 imports torchvision.transforms.functional_tensor which
-# was removed in torchvision 0.17+. Patch the one offending line so the
-# import stops crashing. (Upstream basicsr is unmaintained as of 2024.)
-RUN python3 - <<'PY'
-import basicsr.data.degradations as d, pathlib, re
-p = pathlib.Path(d.__file__)
-src = p.read_text()
-src = src.replace(
-    'from torchvision.transforms.functional_tensor import rgb_to_grayscale',
-    'from torchvision.transforms.functional import rgb_to_grayscale',
-)
-p.write_text(src)
-PY
 
 # --- Pre-download model weights --------------------------------------
 # Bake into the image so the first request doesn't pay a 400 MB

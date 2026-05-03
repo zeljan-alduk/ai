@@ -71,17 +71,31 @@ jobs:
             exit 1
           fi
 
-          # Webhook returns 200 on success, 5xx on failure. --fail-with-body
-          # gives us a non-zero exit and the body in stderr if the deploy
-          # script reports a failure.
-          curl -sS --fail-with-body --max-time 600 \
+          # Webhook returns 200 on success, 5xx on failure. We intentionally
+          # don't use --fail/--fail-with-body so we can always print the
+          # response body (which contains log_tail on failure) before
+          # propagating the exit code via http_code.
+          HTTP_CODE=$(curl -sS --max-time 900 \
             -X POST https://ai.aldo.tech/_admin/deploy \
             -H "Authorization: Bearer ${DEPLOY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"branch\":\"${BRANCH}\"}" \
-            -o /tmp/deploy.json
-          cat /tmp/deploy.json
+            -o /tmp/deploy.json \
+            -w '%{http_code}')
+          echo "HTTP $HTTP_CODE from webhook"
+          # Pretty-print the JSON so log_tail (multi-line build output)
+          # is readable in the GitHub Actions log instead of one big
+          # escaped string.
+          if command -v jq >/dev/null && [[ -s /tmp/deploy.json ]]; then
+            jq -r '"-- status: \(.status // "?")  exit: \(.exit // "?")  sha: \(.sha // "?")\n" + (if .log_tail then "-- log tail (last ~16 KB) --\n" + .log_tail else "" end)' /tmp/deploy.json || cat /tmp/deploy.json
+          else
+            cat /tmp/deploy.json
+          fi
           echo
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::deploy webhook returned $HTTP_CODE"
+            exit 1
+          fi
 
       - name: Public smoke (API health + homepage + webhook)
         run: |

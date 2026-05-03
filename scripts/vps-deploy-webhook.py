@@ -154,7 +154,24 @@ class Handler(BaseHTTPRequestHandler):
             _last["sha"] = _git_sha()
 
             code = 200 if proc.returncode == 0 else 500
-            return self._json(code, dict(_last))
+            body = dict(_last)
+            # On failure, include the last ~80 lines of the deploy log so
+            # the GitHub Actions caller can see the actual build error
+            # without needing shell access to the VPS. The webhook is
+            # already token-gated so this isn't a new exposure surface.
+            if proc.returncode != 0:
+                try:
+                    with LOG_FILE.open("rb") as logf:
+                        # Read last ~16 KB; that comfortably covers
+                        # 80 lines of typical docker/pip output.
+                        logf.seek(0, 2)
+                        size = logf.tell()
+                        logf.seek(max(0, size - 16384))
+                        tail = logf.read().decode("utf-8", errors="replace")
+                    body["log_tail"] = tail
+                except Exception as e:  # noqa: BLE001
+                    body["log_tail_error"] = str(e)
+            return self._json(code, body)
         except Exception as exc:  # pragma: no cover — defensive
             _last["status"] = "error"
             _last["exit"] = -1
