@@ -53,6 +53,7 @@ const PUBLIC_BOUNDED: ReadonlyArray<string> = [
   // outbound sales kit, customer-facing pitch deck.
   '/vs',
   '/changelog',
+  '/roadmap',
   '/sales',
   '/deck',
   // In-house status page — public, no auth.

@@ -58,6 +58,7 @@ const MARKETING_PATHS: ReadonlyArray<string> = [
   '/design-partner',
   '/docs',
   '/changelog',
+  '/roadmap',
   '/sales',
   '/vs',
   '/status',
