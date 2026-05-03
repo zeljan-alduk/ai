@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@aldo-ai/storage": "workspace:*",
-    "hono": "^4.6.0"
+    "hono": "^4.12.16"
   },
   "devDependencies": {
     "@electric-sql/pglite": "~0.4.4",
