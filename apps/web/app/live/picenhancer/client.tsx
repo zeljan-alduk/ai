@@ -36,6 +36,7 @@ interface DoneEvent {
   enhancedDims: { w: number; h: number };
   enhancedBytes: number;
   enhanceMs: number;
+  engine?: 'realesrgan' | 'imagemagick';
 }
 
 export function PicenhancerClient() {
@@ -423,6 +424,11 @@ export function PicenhancerClient() {
               <figure className="overflow-hidden rounded-lg border border-border bg-bg">
                 <figcaption className="border-b border-border bg-bg-elevated px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-fg-muted">
                   Enhanced (×{final?.scale ?? scale})
+                  {final?.engine && (
+                    <span className="ml-2 normal-case tracking-normal text-fg-faint">
+                      · {final.engine === 'realesrgan' ? 'Real-ESRGAN AI' : 'Lanczos + sharpen'}
+                    </span>
+                  )}
                 </figcaption>
                 {resultBlobUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */

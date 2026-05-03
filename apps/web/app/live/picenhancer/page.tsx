@@ -50,17 +50,17 @@ export default function PicenhancerLivePage() {
           .
         </p>
         <p className="mt-3 text-[13px] text-accent">
-          🔒 Your image is processed entirely on the local runtime. Real-ESRGAN runs on Apple
-          Silicon Metal. No cloud, no telemetry, $0.
+          🔒 Your image is processed entirely on this server. No cloud, no third-party API, no
+          telemetry, $0.
         </p>
       </header>
 
       <PicenhancerClient />
 
       <footer className="mt-12 border-t border-border pt-5 text-[12px] text-fg-muted">
-        Stack: <code className="font-mono text-fg">realesrgan-ncnn-vulkan</code> (GPU when
-        present, software Vulkan otherwise) + Hono backend, proxied through Next.js.
-        Source briefs + agents:{' '}
+        Stack: ImageMagick Lanczos + perceptual unsharp (default; sub-second) — or Real-ESRGAN
+        AI mode opt-in on a GPU host (set <code className="font-mono text-fg">PIXMEND_ENGINE</code>).
+        Hono backend, proxied through Next.js. Source briefs + agents:{' '}
         <Link href="/examples#picenhancer" className="text-accent underline-offset-2 hover:underline">
           /examples
         </Link>

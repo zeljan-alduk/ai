@@ -41,6 +41,16 @@ const HOST = process.env.PIXMEND_HOST ?? '127.0.0.1';
 // `sips` on macOS, `identify` (ImageMagick) on Linux. The production
 // Docker image installs imagemagick and sets PIXMEND_DIMS_CMD=identify.
 const DIMS_CMD = process.env.PIXMEND_DIMS_CMD ?? 'sips';
+// Upscale engine. `realesrgan` runs the AI binary (great on a GPU host
+// or Apple Silicon Metal); `imagemagick` runs `convert -filter Lanczos
+// -unsharp` (sub-second; ships fine on a CPU-only VPS). Default is
+// `imagemagick` because the production VPS has no GPU and software
+// Vulkan via llvmpipe is too slow to be useful (40+ s before the first
+// progress tick on a 200x150 image). Local dev on a Mac sets
+// PIXMEND_ENGINE=realesrgan to exercise the AI path.
+type Engine = 'realesrgan' | 'imagemagick';
+const ENGINE: Engine =
+  process.env.PIXMEND_ENGINE === 'realesrgan' ? 'realesrgan' : 'imagemagick';
 
 const ALDO_API = process.env.ALDO_API_BASE ?? 'http://localhost:3001';
 const ALDO_TOKEN = process.env.ALDO_TOKEN ?? '';
@@ -146,7 +156,7 @@ app.post('/enhance', async (c) => {
         model,
       });
       try {
-        await runRealesrgan(currentInput, outPath, model, pass.s, (pct) => {
+        const onProgress = (pct: number) => {
           // Map per-pass 0..100 into the global 0..100 so the UI bar
           // moves monotonically across all passes.
           const global = ((i + pct / 100) / passes.length) * 100;
@@ -159,7 +169,12 @@ app.post('/enhance', async (c) => {
             globalPct: Math.round(global),
             label: passLabel,
           });
-        });
+        };
+        if (ENGINE === 'realesrgan') {
+          await runRealesrgan(currentInput, outPath, model, pass.s, onProgress);
+        } else {
+          await runImageMagick(currentInput, outPath, pass.s, onProgress);
+        }
       } catch (err) {
         await send({
           type: 'error',
@@ -188,6 +203,7 @@ app.post('/enhance', async (c) => {
       enhanceMs,
       scale,
       model,
+      engine: ENGINE,
     });
   });
 });
@@ -276,6 +292,68 @@ async function runRealesrgan(
   });
 }
 
+/**
+ * Lanczos resize + perceptual unsharp via ImageMagick `convert`.
+ * Sub-second for typical inputs; the only path that's actually
+ * usable on a CPU-only VPS today. Quality is "very good" for photos
+ * and screenshots, less impressive for tiny pixelated sources where
+ * a real super-resolution model would invent detail.
+ *
+ * Emits two synthetic progress ticks (10% on spawn, 100% on close)
+ * so the UI bar still animates — the actual work is too fast to
+ * stream meaningful intermediate progress.
+ */
+async function runImageMagick(
+  input: string,
+  output: string,
+  s: 2 | 4,
+  onProgress?: (pct: number) => void,
+): Promise<void> {
+  const pct = Math.round(s * 100); // 200 or 400, ImageMagick's % syntax
+  // -filter Lanczos: high-quality reconstruction kernel, the standard
+  //   for upscaling. Sharper than Mitchell, less ringy than sinc.
+  // -unsharp 0x1.0+1.0+0.02: gentle sharpen — radius=0 (auto), sigma=1,
+  //   amount=1, threshold=0.02 (skip near-flat regions). Keeps gradients
+  //   clean while restoring perceived detail on edges.
+  // -strip: drop EXIF + colour profile chunks for a smaller PNG out.
+  const args = [
+    input,
+    '-filter', 'Lanczos',
+    '-resize', `${pct}%`,
+    '-unsharp', '0x1.0+1.0+0.02',
+    '-strip',
+    output,
+  ];
+  // ImageMagick on Debian is usually `magick convert`; older versions
+  // and Alpine are just `convert`. Try `magick` first, fall back.
+  const cmd = process.env.PIXMEND_IM_CMD ?? 'magick';
+  await new Promise<void>((resolve, reject) => {
+    if (onProgress) onProgress(10);
+    const tryRun = (bin: string, fallback?: string): void => {
+      const argv = bin === 'magick' ? ['convert', ...args] : args;
+      const p = spawn(bin, argv, { stdio: ['ignore', 'ignore', 'pipe'] });
+      let stderr = '';
+      p.stderr.on('data', (d) => (stderr += d));
+      p.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'ENOENT' && fallback) {
+          tryRun(fallback);
+          return;
+        }
+        reject(err);
+      });
+      p.on('close', (code) => {
+        if (code === 0) {
+          if (onProgress) onProgress(100);
+          resolve();
+        } else {
+          reject(new Error(`imagemagick exited ${code}: ${stderr.slice(0, 400)}`));
+        }
+      });
+    };
+    tryRun(cmd, cmd === 'magick' ? 'convert' : undefined);
+  });
+}
+
 async function readDims(path: string): Promise<{ readonly w: number; readonly h: number }> {
   return new Promise((resolve, reject) => {
     if (DIMS_CMD === 'identify') {
@@ -314,6 +392,7 @@ function guessKind(name: string): string {
 
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`picenhancer listening on http://${HOST}:${info.port}`);
-  console.log(`bin=${BIN}  models=${MODELS}  dims=${DIMS_CMD}`);
+  console.log(`engine=${ENGINE}  dims=${DIMS_CMD}`);
+  if (ENGINE === 'realesrgan') console.log(`bin=${BIN}  models=${MODELS}`);
   console.log(`ALDO API: ${ALDO_API}  | strategist: ${ENHANCE_SHARPER_ID || '(none)'}`);
 });
