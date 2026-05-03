@@ -55,8 +55,20 @@ def main() -> int:
     model.load_state_dict(state_dict, strict=True)
     model.eval()
 
-    wrapped = GFPGANWrap(model)
-    dummy = torch.randn(1, 3, 512, 512)
+    # Force every parameter + buffer to float32. Without this some
+    # internal buffers stay float64 and torch.jit.trace materializes
+    # them as double constants, producing an ONNX graph onnxruntime
+    # rejects with "Type Error: Type parameter (T) of Optype (Conv)
+    # bound to different types (tensor(double) and tensor(float)".
+    model = model.float()
+    for buf in model.buffers():
+        if buf.dtype == torch.float64:
+            buf.data = buf.data.float()
+
+    wrapped = GFPGANWrap(model).float()
+    # Use torch.zeros instead of randn so the trace is deterministic
+    # and any folded shape constants are stable.
+    dummy = torch.zeros(1, 3, 512, 512, dtype=torch.float32)
 
     # Trace first so the StyleGAN2 ModulatedConv2d's dynamic kernel
     # reshape (which torch.onnx can't symbolically export) gets baked
