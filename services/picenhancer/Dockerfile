@@ -3,88 +3,35 @@
 # Container image for the picenhancer Hono server (the live runtime
 # behind ai.aldo.tech/live/picenhancer).
 #
-# Engine: `aiplus` by default — Real-ESRGAN x4 generative SR via
-# ONNX Runtime CPU (no PyTorch in the runtime image, no GPU/Vulkan).
-# Tile-based inference with overlap to bound peak memory and avoid
-# seam artefacts. Lanczos extension on top for ×8 / ×16.
+# Engine: `sharp` (libvips Lanczos-3 + perceptual sharpen) by default.
+# Sub-second on a CPU-only VPS, ships fine without any GPU stack.
 #
-# Two-stage build:
-#   1. converter — installs torch+CPU briefly to load the upstream
-#      .pth checkpoint and export it to .onnx with dynamic shapes.
-#      Throwaway image; only the produced .onnx file is COPY'd
-#      forward.
-#   2. runtime   — node:22-bookworm-slim + python3 + onnxruntime CPU
-#      + numpy + Pillow + the .onnx model + the Hono server. ~400 MB
-#      total vs. ~2 GB for a torch-bundled image.
+# AI-plus engine (Real-ESRGAN x4 ONNX + GFPGAN face restore) is the
+# next iteration; held back from this image until the build pipeline is
+# debugged on the VPS. The Hono server still understands aiplus +
+# realesrgan engines via PIXMEND_ENGINE — they just need the
+# corresponding tooling baked in.
 #
-# `sharp` (libvips Lanczos-3) and `realesrgan` (ncnn-vulkan binary)
-# are kept as opt-in alternatives via PIXMEND_ENGINE.
+# Build context = repo root (set by docker-compose `build.context`).
 
-# ===================== STAGE 1: convert .pth -> .onnx =====================
-FROM python:3.11-slim-bookworm AS converter
-
-WORKDIR /work
-
-# Just curl + the torch CPU stack needed for the conversion script.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl \
- && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir \
-      --index-url https://download.pytorch.org/whl/cpu \
-      "torch==2.0.1+cpu" \
- && pip install --no-cache-dir \
-      "numpy<2" "basicsr==1.4.2" "Pillow>=10,<11"
-
-# Pre-download the upstream Real-ESRGAN x4plus checkpoint (~64 MB).
-RUN curl -fsSL -o RealESRGAN_x4plus.pth \
-      https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth \
- && ls -lh RealESRGAN_x4plus.pth
-
-COPY services/picenhancer/scripts/convert_to_onnx.py .
-RUN python convert_to_onnx.py RealESRGAN_x4plus.pth realesrgan_x4plus.onnx \
- && ls -lh realesrgan_x4plus.onnx
-
-
-# ============================ STAGE 2: runtime ============================
 FROM node:22-bookworm-slim
 
-# OS deps:
-#   ca-certificates    — outbound HTTPS for any future model fetches
-#   python3 / pip /
-#     venv             — host the ONNX inference script
-#   libgomp1           — OpenMP runtime onnxruntime links against
+# ca-certificates for HTTPS; sharp ships its own libvips prebuilt
+# binary inside the npm package (linux-x64 / linux-arm64 / darwin-arm64
+# all covered) so we don't need any system-level image libraries.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      ca-certificates \
-      python3 python3-pip python3-venv \
-      libgomp1 \
+ && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/picenhancer
 
-# Venv (PEP 668 protects system Python on Debian 12).
-RUN python3 -m venv /opt/picenhancer/venv
-ENV PATH="/opt/picenhancer/venv/bin:${PATH}"
-
-# Lean Python deps. onnxruntime CPU wheel is ~50 MB.
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir \
-      "onnxruntime==1.17.3" "numpy<2" "Pillow>=10,<11"
-
-# Carry only the produced .onnx forward — no torch in the runtime image.
-COPY --from=converter /work/realesrgan_x4plus.onnx /opt/picenhancer/models/realesrgan_x4plus.onnx
-
-# Sanity: the runtime can load the model. Catches a mismatched
-# onnxruntime opset at build time rather than the first user request.
-RUN python3 -c "import onnxruntime as ort; ort.InferenceSession('/opt/picenhancer/models/realesrgan_x4plus.onnx', providers=['CPUExecutionProvider']); print('ok')"
-
-# Hono server + UI shell + Python script.
 COPY services/picenhancer/package.json ./
 RUN npm install --omit=dev --no-fund --no-audit
 COPY services/picenhancer/server.ts ./
 COPY services/picenhancer/public ./public
+# Python scripts ship with the image so a future `aiplus` engine can
+# enable without a Dockerfile rebuild — just install Python + onnxruntime
+# + the model weights.
 COPY services/picenhancer/scripts ./scripts
 
 ENV NODE_ENV=production \
@@ -94,10 +41,7 @@ ENV NODE_ENV=production \
     PIXMEND_PUB=/opt/picenhancer/public \
     PIXMEND_HOST=0.0.0.0 \
     PIXMEND_PORT=4000 \
-    PIXMEND_ENGINE=aiplus \
-    PIXMEND_PYTHON=/opt/picenhancer/venv/bin/python3 \
-    PIXMEND_AIPLUS_SCRIPT=/opt/picenhancer/scripts/enhance.py \
-    PIXMEND_MODELS_DIR=/opt/picenhancer/models
+    PIXMEND_ENGINE=sharp
 
 # Persistent input/output directories. docker-compose mounts a named
 # volume here to keep in-flight uploads + outputs across restarts.
