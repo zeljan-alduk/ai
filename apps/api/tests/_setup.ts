@@ -223,6 +223,11 @@ export interface SeedRunOptions {
    * an explicit value so the run lands in a known project.
    */
   readonly projectId?: string | null;
+  /**
+   * Wave-19 — thread this run is part of. Optional; when omitted the
+   * row's thread_id is SQL NULL (mirrors a pre-026 write path).
+   */
+  readonly threadId?: string | null;
   readonly status?: string;
   readonly parentRunId?: string | null;
   readonly startedAt: string;
@@ -245,8 +250,8 @@ export interface SeedRunOptions {
 
 export async function seedRun(db: SqlClient, opts: SeedRunOptions): Promise<void> {
   await db.query(
-    `INSERT INTO runs (id, tenant_id, project_id, agent_name, agent_version, parent_run_id, started_at, ended_at, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    `INSERT INTO runs (id, tenant_id, project_id, agent_name, agent_version, parent_run_id, started_at, ended_at, status, thread_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       opts.id,
       // Default to the seeded tenant — the test harness binds its
@@ -262,6 +267,8 @@ export async function seedRun(db: SqlClient, opts: SeedRunOptions): Promise<void
       opts.startedAt,
       opts.endedAt ?? null,
       opts.status ?? 'completed',
+      // Wave-19 — explicit thread_id when supplied; otherwise SQL NULL.
+      opts.threadId ?? null,
     ],
   );
   if (opts.usage !== undefined) {

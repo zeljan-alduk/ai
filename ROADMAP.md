@@ -1,7 +1,7 @@
 # ALDO AI — ROADMAP
 
 > Prioritized backlog. Ordered by **what unblocks the first paying customer**, not by code-architectural elegance.
-> **Last updated:** 2026-05-02 (Wave-3 — 7-agent competitive-gap closing pass landed on top of Wave-MVP)
+> **Last updated:** 2026-05-03 (Wave-4 — 6-agent frontend competitive-surface push landed on top of Wave-3)
 > **Sibling:** [`STATUS.md`](./STATUS.md) (what's true today) · [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) (history)
 >
 > Read [`STATUS.md`](./STATUS.md) first. Effort estimates are mine, in elapsed engineering time. Items needing a non-engineering decision (legal, vendor account, customer signature) are flagged ⚠️.
@@ -14,9 +14,34 @@ The Wave-MVP push (2026-05-02) shipped 10 parallel slices that cleared
 Tier 1 + the picker/termination/MCP slices of Tier 2. The Wave-3 push
 (same day, 7 parallel slices) closed the named competitive gaps the
 deep-scan called out and the half-shipped debt Wave-MVP left behind.
-Below is the honest "done vs awaits human" decomposition. Anything in
-the **awaits user** column is purely a credentials/ops blocker; the
-engineering is in.
+The Wave-4 push (2026-05-03, 6 parallel slices) closed the remaining
+visible-surface gaps against Vellum / LangSmith Hub (prompts), LangSmith
+threads + spend + trace search, Braintrust experiments (N-way compare),
+and Linear/Vercel/Braintrust (command palette) — purely frontend +
+contract work, no platform-shape changes. Below is the honest
+"done vs awaits human" decomposition. Anything in the **awaits user**
+column is purely a credentials/ops blocker; the engineering is in.
+
+### Wave-4 deliverables (2026-05-03, on top of Wave-3)
+
+- [x] **Prompts as first-class entities** — migration 024 (`prompts` + `prompt_versions` tables; `prompt_versions.parent_version_id` self-FK for fork trees) + 11 endpoints under `/v1/prompts` (CRUD, list versions, create version with optional fork point, diff, /test via injectable PromptRunner seam, used-by) + `/prompts` list / detail (three-pane history rail · body with `{{var}}` highlighting · metadata) / new / edit pages with Playground / Variables / Diff / Used-by tabs. Agent contract gains additive `promptRef: { id, version }`. 29 vitest + 1 playwright. **Closes Vellum (entire product) + LangSmith Hub.** v0 PromptRunner is a deterministic-echo stub — engine wiring is a follow-up (Known issue).
+- [x] **Threads + annotations + sharing** — migration 026 (`runs.thread_id` nullable + 2 indexes) + threads-store + 3 routes (`GET /v1/threads`, `GET /v1/threads/:id`, `GET /v1/threads/:id/timeline`) + `/threads` list + `/threads/[id]` chat-style transcript. CommentsThread relocated from page-bottom into a new "Annotations" run-detail tab; new `<RunThumbs>` 👍/👎 island in run header backed by a sentinel-bodied `__header_thumbs__` annotation. RunSummary contract gains `threadId` + `annotationCounts` (additive, suppressed when zero). `/share/<slug>` already shipped (migration 016 + argon2id-hashed password + 5/hr rate limit + audit log) — surfaced more prominently. 12 vitest. **Closes LangSmith threads + run sharing.**
+- [x] **N-way run comparison** — `/runs/compare` extended from 2-way (`?a=&b=`) to N-way (`?ids=a,b,c,…`); soft cap MAX_RUNS=6; not-found / 403 ids render as a badged column instead of erroring; pure-SVG stack bars (input/output tokens, cost, latency) + per-row median-deviation diff highlighting + termination-reason row + tool-call args-diff (same tool/same args = emerald, different args = amber); auto-detected fork-lineage banner across every parent→child edge in the set; Permalink + Show-only-diffs + Show-only-metrics URL-driven toggles. 20 new vitest + 3 snapshot pins (2/3/4-run cases). **Closes Braintrust experiments compare.**
+- [x] **Tags + filters + saved views on /runs** — migration 025 (re-asserts existing 010 TEXT[] tags column + GIN index, adds (tenant_id) INCLUDE (tags) composite for popular-tags hot path; idempotent additive). 4 new endpoints (`GET /v1/runs/tags/popular`, `POST /v1/runs/:id/tags` replace, `POST /v1/runs/:id/tags/add` idempotent append, `DELETE /v1/runs/:id/tags/:tag` idempotent remove). Tag normalization (lowercase / trim / `[a-z0-9-]` / 1–32 chars / max 32 per run) lives in `apps/api/src/lib/tag-normalize.ts`. RunsToolbar gains sticky bar, status pills, time-range presets, model multi-select, tag chip picker w/ autocomplete, active-filter chips, "Save current as view" round-trip. Per-row inline tag editor on /runs list with optimistic update + rollback. 28 vitest + 1 playwright. **Closes LangSmith trace search + saved searches.** Decision logged: TEXT[] kept over JSONB to avoid wire-shape break (existing readers + bulk action + `&&` overlap reads through GIN already).
+- [x] **Cost + spend dashboard** — `/observability/spend` route + `/v1/spend?project=&window=&since=&until=&groupBy=` aggregation over `usage_records ⋈ runs` (tenant + optional project scope; window picker 24h/7d/30d/90d/custom; ≤24h hourly buckets, >24h daily). Returns totals + 4 cards (today / WTD / MTD with delta + projected end-of-month / active runs) + dense (zero-filled) timeseries + ONE breakdown axis per call (capability / agent / project; the page issues 3 parallel calls). 30s polling, dark/light semantic tokens, pure-SVG bar chart + donut + horizontal bars (no chart library), CSV export, budget-alert panel reading existing `/v1/alerts`. 24 vitest + 1 playwright. **Closes LangSmith spend.** No SQL migration — `usage_records` (001) + `runs.project_id` (021) carry every column.
+- [x] **Command palette ⌘K + keyboard shortcuts** — cmdk-driven palette with 11 result groups (Recents → Actions → Pages → Agents → Runs → Datasets → Evaluators → Prompts → Models → Settings → Docs), 7 actions ("Compare runs…", "Fork template…", "Connect a repo…", "New prompt…", "New dataset…", "Toggle dark mode", "Sign out"), 29-route static nav (every Wave-MVP/3/4 page), per-group keyword weighting, highlightMatch, localStorage recents w/ 10/type cap, sub-prompt mode for compare-runs (accumulate ≥2 picks → `?ids=…`) + fork-template, live-fetch agents/runs/datasets/evaluators/prompts/models on first open w/ 60s in-memory cache + 200ms debounce on docs search. Keyboard-shortcut router with g-chords (g a/r/e/p/d/s/h), `/` focuses search, `?` opens overlay; isTypingTarget guard suppresses chords inside form inputs. Sidebar "⌘K / Ctrl K" hint button under the project picker. Side-fixed a `sidebar.tsx` duplicate-function biome error in this slice. 33 vitest + 4 playwright. **Closes Linear + Vercel + Braintrust palette parity.**
+
+#### Closed competitive surfaces (Wave-4)
+
+| Surface | Closes |
+|---|---|
+| `/prompts` (list + detail + edit + playground + diff + used-by) | Vellum (entire product) + LangSmith Hub |
+| `/threads` + `/threads/[id]` + Annotations tab + RunThumbs | LangSmith threads + LangSmith inline thumbs |
+| `/share/<slug>` (existed, now surfaced) | LangSmith run sharing |
+| `/runs/compare?ids=…` (N-way ≤6) | Braintrust experiments compare |
+| Tags + filters + saved views | LangSmith trace search + saved searches |
+| `/observability/spend` | LangSmith spend |
+| Command palette ⌘K + keyboard shortcuts | Linear + Vercel + Braintrust palette parity |
 
 ### Wave-3 deliverables (2026-05-02, on top of Wave-MVP)
 

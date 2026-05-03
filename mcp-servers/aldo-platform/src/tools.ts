@@ -23,7 +23,7 @@
  * LLM-agnostic — no provider names anywhere in this surface.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { type RestClient, RestError } from './client.js';
 

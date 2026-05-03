@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`palette grouped-output snapshots > "agents" query — Agents nav top, then anything else with agent in the text 1`] = `
+[
+  {
+    "group": "nav",
+    "href": "/agents",
+    "id": "nav:agents",
+    "label": "Agents",
+  },
+]
+`;
+
+exports[`palette grouped-output snapshots > empty query — recents + actions + nav surface in the right order 1`] = `
+[
+  {
+    "group": "recent",
+    "href": "/agents/tech-lead",
+    "id": "recent:agent:tech-lead",
+    "label": "tech-lead",
+  },
+  {
+    "group": "recent",
+    "href": "/runs/abcd1234",
+    "id": "recent:run:abcd1234",
+    "label": "tech-lead · abcd1234",
+  },
+  {
+    "group": "actions",
+    "href": "/runs/compare",
+    "id": "action:compare-runs",
+    "label": "Compare runs…",
+  },
+  {
+    "group": "actions",
+    "href": "/gallery",
+    "id": "action:fork-template",
+    "label": "Fork template…",
+  },
+  {
+    "group": "actions",
+    "href": "/integrations/git/connect",
+    "id": "action:connect-repo",
+    "label": "Connect a repo…",
+  },
+  {
+    "group": "actions",
+    "href": "/prompts/new",
+    "id": "action:new-prompt",
+    "label": "New prompt…",
+  },
+  {
+    "group": "actions",
+    "href": "/datasets/new",
+    "id": "action:new-dataset",
+    "label": "New dataset…",
+  },
+  {
+    "group": "actions",
+    "href": "#theme",
+    "id": "action:toggle-theme",
+    "label": "Toggle dark mode",
+  },
+  {
+    "group": "actions",
+    "href": "/api/auth/logout",
+    "id": "action:signout",
+    "label": "Sign out",
+  },
+  {
+    "group": "nav",
+    "href": "/",
+    "id": "nav:home",
+    "label": "Home",
+  },
+  {
+    "group": "nav",
+    "href": "/projects",
+    "id": "nav:projects",
+    "label": "Projects",
+  },
+  {
+    "group": "nav",
+    "href": "/agents",
+    "id": "nav:agents",
+    "label": "Agents",
+  },
+]
+`;

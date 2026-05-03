@@ -9,6 +9,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
+  AddRunTagRequest,
   BulkRunActionRequest,
   BulkRunActionResponse,
   CreateRunRequest,
@@ -17,8 +18,11 @@ import {
   GetRunTreeResponse,
   ListRunsQuery,
   ListRunsResponse,
+  PopularTagsResponse,
+  ReplaceRunTagsRequest,
   RunSearchRequest,
   RunSearchResponse,
+  RunTagsResponse,
   type RunTreeNode,
 } from '@aldo-ai/api-contract';
 import { type RegisteredModel, createModelRegistry, createRouter } from '@aldo-ai/gateway';
@@ -35,17 +39,22 @@ import { z } from 'zod';
 import { getAuth, requireRole, requireScope } from '../auth/middleware.js';
 import {
   DEPTH_OVERFLOW_ID,
+  addRunTag,
   bulkRunAction,
   createRun,
   decodeCursor,
   getRun,
   listRunSubtree,
   listRuns,
+  popularTags,
   projectSubtreeRow,
+  removeRunTag,
+  replaceRunTags,
   resolveRunRoot,
   searchRuns,
 } from '../db.js';
 import type { Deps } from '../deps.js';
+import { normalizeTag, normalizeTags } from '../lib/tag-normalize.js';
 import { HttpError, notFound, validationError } from '../middleware/error.js';
 import { emitActivity } from '../notifications.js';
 import { getDefaultProjectIdForTenant, getProjectBySlug } from '../projects-store.js';
@@ -380,6 +389,125 @@ export function runsRoutes(deps: Deps): Hono {
       ...(parsed.data.tag !== undefined ? { tag: parsed.data.tag } : {}),
     });
     return c.json(BulkRunActionResponse.parse({ affected: result.affected }));
+  });
+
+  /**
+   * `GET /v1/runs/tags/popular?limit=50` — Wave-4 autocomplete source.
+   *
+   * Returns the top-N most-used tags in the caller's tenant + run
+   * counts. Sorted by count DESC then tag ASC (stable for ties).
+   * Cheap: tenant-scoped `unnest(tags)` + GROUP BY backed by the
+   * `idx_runs_tenant_tags` composite index from migration 025.
+   *
+   * Defined BEFORE `/v1/runs/:id` so Hono picks the more specific
+   * literal path first (otherwise `tags` would be matched as a run id).
+   */
+  app.get('/v1/runs/tags/popular', async (c) => {
+    const url = new URL(c.req.url);
+    const rawLimit = url.searchParams.get('limit');
+    const limit = (() => {
+      if (rawLimit === null) return 50;
+      const n = Number(rawLimit);
+      if (!Number.isFinite(n) || n <= 0) return 50;
+      return Math.min(Math.max(Math.floor(n), 1), 200);
+    })();
+    const tenantId = getAuth(c).tenantId;
+    const tags = await popularTags(deps.db, { tenantId, limit });
+    return c.json(PopularTagsResponse.parse({ tags: tags.map((t) => ({ ...t })) }));
+  });
+
+  /**
+   * `POST /v1/runs/:id/tags` — replace the run's tag list.
+   *
+   * Wave-4 inline editor commit path. Tags are normalized
+   * (lowercase / trim / [a-z0-9-] only / 1–32 chars / max 32 per
+   * run). A 422 with `code: invalid_tag` lists every rejection so
+   * the UI can render them inline.
+   */
+  app.post('/v1/runs/:id/tags', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'runs:write');
+    const idParsed = RunIdParam.safeParse({ id: c.req.param('id') });
+    if (!idParsed.success) throw validationError('invalid run id', idParsed.error.issues);
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      throw validationError('request body must be JSON');
+    }
+    const parsed = ReplaceRunTagsRequest.safeParse(raw);
+    if (!parsed.success) throw validationError('invalid replace-tags body', parsed.error.issues);
+    const norm = normalizeTags(parsed.data.tags);
+    if (!norm.ok) {
+      throw new HttpError(422, 'invalid_tag', 'one or more tags failed validation', {
+        errors: norm.errors,
+      });
+    }
+    const tenantId = getAuth(c).tenantId;
+    const tags = await replaceRunTags(deps.db, {
+      tenantId,
+      runId: idParsed.data.id,
+      tags: norm.tags,
+    });
+    if (tags === null) throw notFound(`run not found: ${idParsed.data.id}`);
+    return c.json(RunTagsResponse.parse({ runId: idParsed.data.id, tags: [...tags] }));
+  });
+
+  /**
+   * `POST /v1/runs/:id/tags/add` — append a single tag (idempotent).
+   */
+  app.post('/v1/runs/:id/tags/add', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'runs:write');
+    const idParsed = RunIdParam.safeParse({ id: c.req.param('id') });
+    if (!idParsed.success) throw validationError('invalid run id', idParsed.error.issues);
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      throw validationError('request body must be JSON');
+    }
+    const parsed = AddRunTagRequest.safeParse(raw);
+    if (!parsed.success) throw validationError('invalid add-tag body', parsed.error.issues);
+    const norm = normalizeTag(parsed.data.tag);
+    if (!norm.ok) {
+      throw new HttpError(422, 'invalid_tag', norm.reason, { input: norm.input });
+    }
+    const tenantId = getAuth(c).tenantId;
+    const tags = await addRunTag(deps.db, {
+      tenantId,
+      runId: idParsed.data.id,
+      tag: norm.tag,
+    });
+    if (tags === null) throw notFound(`run not found: ${idParsed.data.id}`);
+    return c.json(RunTagsResponse.parse({ runId: idParsed.data.id, tags: [...tags] }));
+  });
+
+  /**
+   * `DELETE /v1/runs/:id/tags/:tag` — remove a single tag.
+   *
+   * Idempotent — removing a tag the run never had returns 200 with
+   * the unchanged tag list (never 404 on the tag itself; 404 only
+   * when the run id is unknown).
+   */
+  app.delete('/v1/runs/:id/tags/:tag', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'runs:write');
+    const idParsed = RunIdParam.safeParse({ id: c.req.param('id') });
+    if (!idParsed.success) throw validationError('invalid run id', idParsed.error.issues);
+    const rawTag = decodeURIComponent(c.req.param('tag') ?? '');
+    const norm = normalizeTag(rawTag);
+    if (!norm.ok) {
+      throw new HttpError(422, 'invalid_tag', norm.reason, { input: norm.input });
+    }
+    const tenantId = getAuth(c).tenantId;
+    const tags = await removeRunTag(deps.db, {
+      tenantId,
+      runId: idParsed.data.id,
+      tag: norm.tag,
+    });
+    if (tags === null) throw notFound(`run not found: ${idParsed.data.id}`);
+    return c.json(RunTagsResponse.parse({ runId: idParsed.data.id, tags: [...tags] }));
   });
 
   /**

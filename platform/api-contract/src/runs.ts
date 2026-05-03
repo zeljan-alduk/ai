@@ -44,6 +44,27 @@ export const RunSummary = z.object({
    * post-021 write path produced.
    */
   projectId: z.string().nullish(),
+  /**
+   * Wave-19 — thread this run is part of (chat-style multi-turn
+   * grouping). NULL means "standalone run" (the default for every
+   * pre-026 row + every run a non-thread-aware writer produces).
+   * Migration 026 added the column nullable so the field is
+   * optional/additive on the wire.
+   */
+  threadId: z.string().nullish(),
+  /**
+   * Wave-19 — aggregate annotation counts hydrated by the list
+   * endpoint so the runs table can render a 👍 N / 👎 M / 💬 N pill
+   * per row without an N+1 trip. Optional/additive — pre-wave-19
+   * servers omit it; rows with zero annotations may also omit it.
+   */
+  annotationCounts: z
+    .object({
+      thumbsUp: z.number().int().nonnegative(),
+      thumbsDown: z.number().int().nonnegative(),
+      comments: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 
@@ -334,3 +355,53 @@ export const BulkRunActionResponse = z.object({
   affected: z.number().int().nonnegative(),
 });
 export type BulkRunActionResponse = z.infer<typeof BulkRunActionResponse>;
+
+// ---------------------------------------------------------------------------
+// Wave-4 — first-class per-run tags surface.
+//
+// Bulk add/remove via `/v1/runs/bulk` already exists (above). The
+// per-run endpoints below let an inline editor (popover with `+`)
+// add/remove a single tag without a bulk envelope. The `replace`
+// surface is the "edit-in-place" path the inline editor commits to
+// when the user closes the popover.
+//
+// LLM-agnostic: tags are opaque strings — never an enumeration of
+// provider names.
+
+/** Body for `POST /v1/runs/:id/tags` — replace the run's tag list. */
+export const ReplaceRunTagsRequest = z.object({
+  tags: z.array(z.string()).max(64),
+});
+export type ReplaceRunTagsRequest = z.infer<typeof ReplaceRunTagsRequest>;
+
+/** Body for `POST /v1/runs/:id/tags/add` — append a single tag. */
+export const AddRunTagRequest = z.object({
+  tag: z.string().min(1).max(64),
+});
+export type AddRunTagRequest = z.infer<typeof AddRunTagRequest>;
+
+/** Response shape for any single-run tag mutation. */
+export const RunTagsResponse = z.object({
+  runId: z.string(),
+  tags: z.array(z.string()),
+});
+export type RunTagsResponse = z.infer<typeof RunTagsResponse>;
+
+/**
+ * One row of `GET /v1/runs/tags/popular` — a tag string + the
+ * number of runs the caller's tenant has tagged with it.
+ *
+ * The endpoint returns the top-N most-used tags, sorted by count
+ * descending then tag name ascending (stable for ties). Used by the
+ * filter bar's autocomplete + the inline editor's suggestion list.
+ */
+export const PopularTag = z.object({
+  tag: z.string(),
+  count: z.number().int().nonnegative(),
+});
+export type PopularTag = z.infer<typeof PopularTag>;
+
+export const PopularTagsResponse = z.object({
+  tags: z.array(PopularTag),
+});
+export type PopularTagsResponse = z.infer<typeof PopularTagsResponse>;

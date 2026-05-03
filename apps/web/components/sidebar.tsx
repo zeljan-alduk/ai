@@ -20,6 +20,15 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     match: (p) => p === '/projects' || p.startsWith('/projects/'),
   },
   { href: '/runs', label: 'Runs', match: (p) => p === '/runs' || p.startsWith('/runs/') },
+  // Wave-19 — between Runs and Dashboards. A "thread" is a derived
+  // grouping over runs.thread_id (migration 026); useful for chat-style
+  // agents and any multi-turn workflow that produces multiple runs
+  // against the same correlation id.
+  {
+    href: '/threads',
+    label: 'Threads',
+    match: (p) => p === '/threads' || p.startsWith('/threads/'),
+  },
   // Wave-14 — between Runs and Agents per the brief.
   {
     href: '/dashboards',
@@ -32,6 +41,15 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     match: (p) => p === '/playground' || p.startsWith('/playground/'),
   },
   { href: '/agents', label: 'Agents', match: (p) => p === '/agents' || p.startsWith('/agents/') },
+  // Wave-4 (Tier-4) — prompts as first-class entities. Closes Vellum
+  // (entire product) + LangSmith Hub. Sits between Agents and Gallery
+  // — the same conceptual layer (versioned, project-scoped working
+  // artifacts).
+  {
+    href: '/prompts',
+    label: 'Prompts',
+    match: (p) => p === '/prompts' || p.startsWith('/prompts/'),
+  },
   // Wave-17 — gallery of importable agent templates (the AutoGen
   // Studio "Gallery" parallel; closes the discoverability gap).
   {
@@ -186,6 +204,7 @@ function SidebarBody({
           <ProjectPicker onPicked={onNavigate} />
         </div>
       ) : null}
+      {user ? <CommandPaletteHint /> : null}
       <nav aria-label="Primary" className="flex flex-col gap-0.5 p-2">
         {NAV.map((item) => {
           const active = item.match(pathname);
@@ -207,6 +226,11 @@ function SidebarBody({
               </Link>
               {evalSubLinkAfter ? (
                 <EvalSubLinks pathname={pathname} onNavigate={onNavigate} />
+              ) : null}
+              {/* Wave-4 — Spend sub-link under Observability so the cost
+                  dashboard is one click from the live KPI feed. */}
+              {item.href === '/observability' ? (
+                <ObservabilitySubLinks pathname={pathname} onNavigate={onNavigate} />
               ) : null}
             </div>
           );
@@ -262,6 +286,37 @@ function SidebarBody({
 }
 
 /**
+ * Wave-4 — sub-link rendered under the Observability row. Keeps the
+ * cost dashboard one click from the live KPI feed without bloating
+ * the top-level nav.
+ */
+function ObservabilitySubLinks({
+  pathname,
+  onNavigate,
+}: {
+  pathname: string;
+  onNavigate: () => void;
+}) {
+  const spendActive =
+    pathname === '/observability/spend' || pathname.startsWith('/observability/spend/');
+  return (
+    <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+      <Link
+        href="/observability/spend"
+        onClick={onNavigate}
+        aria-current={spendActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-touch items-center rounded px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          spendActive ? 'bg-fg text-fg-inverse' : 'text-fg-muted hover:bg-bg-subtle',
+        )}
+      >
+        Spend
+      </Link>
+    </div>
+  );
+}
+
+/**
  * Wave-16 — sub-link rendered under the Eval row. Always visible so
  * users can discover Evaluators from anywhere; highlights when active.
  */
@@ -299,6 +354,38 @@ function EvalSubLinks({
       >
         Playground
       </Link>
+    </div>
+  );
+}
+
+/**
+ * Wave-4 — small "⌘K" hint button under the project picker. Clicking
+ * it dispatches `aldo:cmdk:open`, which the CommandPalette listens
+ * for. Pure visual chrome; the palette is also reachable from the
+ * keyboard. Auto-detects platform to render the right glyph.
+ */
+function CommandPaletteHint() {
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    /Mac|iPad|iPhone|iPod/.test(navigator.platform || navigator.userAgent || '');
+  return (
+    <div className="border-b border-border px-3 py-2">
+      <button
+        type="button"
+        aria-label="Open command palette"
+        onClick={() => window.dispatchEvent(new CustomEvent('aldo:cmdk:open'))}
+        className="flex w-full items-center justify-between rounded-md border border-border bg-bg px-2.5 py-1.5 text-xs text-fg-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+      >
+        <span className="flex items-center gap-2">
+          <span aria-hidden className="text-fg-faint">
+            ⌕
+          </span>
+          <span>Search…</span>
+        </span>
+        <kbd className="font-mono text-[10px] tracking-wider text-fg-faint">
+          {isMac ? '⌘K' : 'Ctrl K'}
+        </kbd>
+      </button>
     </div>
   );
 }

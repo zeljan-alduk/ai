@@ -23,7 +23,14 @@ import { RunsList } from '@/components/runs/runs-list';
 import { RunsToolbar } from '@/components/runs/runs-toolbar';
 import { parseRunSearchQuery, serializeRunSearchQuery } from '@/components/runs/search-query';
 import { Card } from '@/components/ui/card';
-import { listAgents, listProjects, listSavedViews, searchRuns } from '@/lib/api';
+import {
+  listAgents,
+  listModels,
+  listProjects,
+  listSavedViews,
+  popularRunTags,
+  searchRuns,
+} from '@/lib/api';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -49,10 +56,12 @@ export default async function RunsPage({
   let runs: Awaited<ReturnType<typeof searchRuns>> | null = null;
   let agents: Awaited<ReturnType<typeof listAgents>> | null = null;
   let views: Awaited<ReturnType<typeof listSavedViews>> | null = null;
+  let popularTags: Awaited<ReturnType<typeof popularRunTags>> | null = null;
+  let modelsList: Awaited<ReturnType<typeof listModels>> | null = null;
   let projectName: string | undefined;
   let error: unknown = null;
   try {
-    [runs, agents, views, projectName] = await Promise.all([
+    [runs, agents, views, popularTags, modelsList, projectName] = await Promise.all([
       searchRuns({
         ...(query.q !== undefined ? { q: query.q } : {}),
         ...(query.status !== undefined ? { status: query.status } : {}),
@@ -78,6 +87,13 @@ export default async function RunsPage({
       }),
       listAgents({ limit: 200 }),
       listSavedViews({ surface: 'runs' }),
+      // Wave-4 — top-50 popular tags drive the filter-bar autocomplete
+      // and the inline tag editor's suggestion list. Cheap (one
+      // tenant-scoped GROUP BY against the GIN-indexed tags column).
+      popularRunTags({ limit: 50 }).catch(() => ({ tags: [] })),
+      // Wave-4 — model dropdown source. Cached per-process; fail-soft
+      // so a slow/unavailable models endpoint doesn't break the page.
+      listModels().catch(() => ({ models: [] })),
       projectSlug !== undefined
         ? listProjects()
             .then((r) => r.projects.find((p) => p.slug === projectSlug)?.name)
@@ -115,6 +131,8 @@ export default async function RunsPage({
           ) : null}
           <RunsToolbar
             agentNames={agents.agents.map((a) => a.name)}
+            modelIds={(modelsList?.models ?? []).map((m) => m.id)}
+            popularTags={(popularTags?.tags ?? []).map((t) => t.tag)}
             views={views.views}
             query={query}
             total={runs.total}
@@ -129,7 +147,7 @@ export default async function RunsPage({
               />
             )
           ) : (
-            <RunsList runs={runs.runs} />
+            <RunsList runs={runs.runs} popularTags={(popularTags?.tags ?? []).map((t) => t.tag)} />
           )}
           <Pagination cursor={query.cursor} nextCursor={runs.nextCursor} current={query} />
         </>

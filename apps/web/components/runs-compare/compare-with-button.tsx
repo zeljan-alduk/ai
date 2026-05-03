@@ -103,7 +103,7 @@ export function CompareWithButton({ currentRunId }: { currentRunId: string }) {
               filtered.map((r) => (
                 <Link
                   key={r.id}
-                  href={`/runs/compare?a=${encodeURIComponent(currentRunId)}&b=${encodeURIComponent(r.id)}`}
+                  href={`/runs/compare?ids=${encodeURIComponent(currentRunId)},${encodeURIComponent(r.id)}`}
                   className="flex items-center justify-between rounded border border-slate-200 bg-white px-2 py-1.5 text-xs hover:bg-slate-50"
                   onClick={() => setOpen(false)}
                 >

@@ -89,6 +89,20 @@ interface RunListRow {
    * before reaching this layer.
    */
   readonly project_id?: string | null;
+  /**
+   * Wave-19 (migration 026). Nullable; `NULL` means "standalone run,
+   * not part of a thread". Same additive shape as `project_id`.
+   */
+  readonly thread_id?: string | null;
+  /**
+   * Wave-19 — aggregate annotation reaction + comment counts hydrated
+   * by the list path via correlated subqueries. Optional — list paths
+   * that don't pull these (e.g. the subtree query) leave the column
+   * unset and the projector emits no `annotationCounts` field.
+   */
+  readonly thumbs_up?: string | number | null;
+  readonly thumbs_down?: string | number | null;
+  readonly comment_count?: string | number | null;
   readonly [k: string]: unknown;
 }
 
@@ -169,12 +183,35 @@ export async function listRuns(db: SqlClient, opts: ListRunsOptions): Promise<Li
       r.tags,
       r.archived_at,
       r.project_id,
+      r.thread_id,
       COALESCE(SUM(u.usd), 0)::text AS total_usd,
       (SELECT u2.provider FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,
       (SELECT u2.model FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_model,
-      EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id) AS has_children
+      EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id) AS has_children,
+      -- Wave-19 — annotation aggregate counts (thumbs_up / thumbs_down /
+      -- comment count). Correlated subqueries on (annotations,
+      -- annotation_reactions); both tables are tenant-scoped by the
+      -- annotations row so we filter on tenant_id once. NULL-safe via
+      -- COALESCE so the projector can distinguish "no annotations" from
+      -- "column not present".
+      (SELECT COUNT(*)::text FROM annotation_reactions ar
+         JOIN annotations a ON a.id = ar.annotation_id
+        WHERE a.tenant_id = r.tenant_id
+          AND a.target_kind = 'run'
+          AND a.target_id = r.id
+          AND ar.kind = 'thumbs_up')                       AS thumbs_up,
+      (SELECT COUNT(*)::text FROM annotation_reactions ar
+         JOIN annotations a ON a.id = ar.annotation_id
+        WHERE a.tenant_id = r.tenant_id
+          AND a.target_kind = 'run'
+          AND a.target_id = r.id
+          AND ar.kind = 'thumbs_down')                     AS thumbs_down,
+      (SELECT COUNT(*)::text FROM annotations a
+        WHERE a.tenant_id = r.tenant_id
+          AND a.target_kind = 'run'
+          AND a.target_id = r.id)                          AS comment_count
     FROM runs r
     LEFT JOIN usage_records u ON u.run_id = r.id
     WHERE ${where.join(' AND ')}
@@ -227,6 +264,34 @@ function rowToRunSummary(r: RunListRow): RunSummary {
   const projectIdRaw = (r as { project_id?: unknown }).project_id;
   const projectId =
     projectIdRaw === undefined ? undefined : projectIdRaw === null ? null : String(projectIdRaw);
+  // Wave-19: thread_id surfaces as `threadId`. Same additive pattern as
+  // projectId — `undefined` when the column isn't selected (pre-026
+  // server build), `null` when the run isn't part of a thread.
+  const threadIdRaw = (r as { thread_id?: unknown }).thread_id;
+  const threadId =
+    threadIdRaw === undefined ? undefined : threadIdRaw === null ? null : String(threadIdRaw);
+  // Wave-19: annotation aggregate counts. Only emitted when at least
+  // one of the three is set; suppressing the field on the wire when
+  // every count is zero keeps payloads lean and avoids confusing
+  // pre-19 clients that don't know about the field.
+  const tu = r.thumbs_up;
+  const td = r.thumbs_down;
+  const cc = r.comment_count;
+  const anyCountsPresent = tu !== undefined || td !== undefined || cc !== undefined;
+  const annotationCounts = anyCountsPresent
+    ? {
+        thumbsUp: Number(tu ?? 0),
+        thumbsDown: Number(td ?? 0),
+        comments: Number(cc ?? 0),
+      }
+    : undefined;
+  // Suppress on the wire when every count is zero — keeps payloads
+  // lean for the >99% of rows that have no annotations.
+  const emitCounts =
+    annotationCounts !== undefined &&
+    (annotationCounts.thumbsUp > 0 ||
+      annotationCounts.thumbsDown > 0 ||
+      annotationCounts.comments > 0);
   return {
     id: r.id,
     agentName: r.agent_name,
@@ -245,6 +310,8 @@ function rowToRunSummary(r: RunListRow): RunSummary {
     ...(tags !== undefined ? { tags } : {}),
     ...(archivedAt !== undefined ? { archivedAt } : {}),
     ...(projectId !== undefined ? { projectId } : {}),
+    ...(threadId !== undefined ? { threadId } : {}),
+    ...(emitCounts && annotationCounts !== undefined ? { annotationCounts } : {}),
   };
 }
 
@@ -481,12 +548,30 @@ export async function searchRuns(
       r.ended_at,
       r.tags,
       r.archived_at,
+      r.thread_id,
       COALESCE(SUM(u.usd), 0)::text AS total_usd,
       (SELECT u2.provider FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_provider,
       (SELECT u2.model FROM usage_records u2
         WHERE u2.run_id = r.id ORDER BY u2.at DESC LIMIT 1) AS last_model,
-      EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id) AS has_children
+      EXISTS (SELECT 1 FROM runs c WHERE c.parent_run_id = r.id) AS has_children,
+      -- Wave-19 — annotation aggregate counts mirrored from listRuns.
+      (SELECT COUNT(*)::text FROM annotation_reactions ar
+         JOIN annotations a ON a.id = ar.annotation_id
+        WHERE a.tenant_id = r.tenant_id
+          AND a.target_kind = 'run'
+          AND a.target_id = r.id
+          AND ar.kind = 'thumbs_up')                       AS thumbs_up,
+      (SELECT COUNT(*)::text FROM annotation_reactions ar
+         JOIN annotations a ON a.id = ar.annotation_id
+        WHERE a.tenant_id = r.tenant_id
+          AND a.target_kind = 'run'
+          AND a.target_id = r.id
+          AND ar.kind = 'thumbs_down')                     AS thumbs_down,
+      (SELECT COUNT(*)::text FROM annotations a
+        WHERE a.tenant_id = r.tenant_id
+          AND a.target_kind = 'run'
+          AND a.target_id = r.id)                          AS comment_count
     FROM runs r
     LEFT JOIN usage_records u ON u.run_id = r.id
     WHERE ${where.join(' AND ')}
@@ -693,6 +778,120 @@ export async function bulkRunAction(
       return { affected: 0 };
     }
   }
+}
+
+// --- wave-4 per-run tag CRUD + popular-tags --------------------------------
+
+/**
+ * Replace a single run's tag list. Returns the new tag array on
+ * success or `null` when no row matches `(id, tenantId)` (so the
+ * route surfaces 404 — never `cross_tenant_access`).
+ */
+export async function replaceRunTags(
+  db: SqlClient,
+  opts: { readonly tenantId: string; readonly runId: string; readonly tags: readonly string[] },
+): Promise<readonly string[] | null> {
+  const res = await db.query<{ id: string; tags: unknown }>(
+    `UPDATE runs
+        SET tags = $3::text[]
+      WHERE id = $1
+        AND tenant_id = $2
+      RETURNING id, tags`,
+    [opts.runId, opts.tenantId, [...opts.tags]],
+  );
+  const row = res.rows[0];
+  if (row === undefined) return null;
+  return projectTags(row.tags);
+}
+
+/**
+ * Append a tag to a single run (no-op when already present). Returns
+ * the canonical tag array post-mutation, or `null` on no-such-run.
+ */
+export async function addRunTag(
+  db: SqlClient,
+  opts: { readonly tenantId: string; readonly runId: string; readonly tag: string },
+): Promise<readonly string[] | null> {
+  const res = await db.query<{ id: string; tags: unknown }>(
+    `UPDATE runs
+        SET tags = CASE
+                     WHEN tags @> ARRAY[$3]::text[] THEN tags
+                     ELSE array_append(tags, $3)
+                   END
+      WHERE id = $1
+        AND tenant_id = $2
+      RETURNING id, tags`,
+    [opts.runId, opts.tenantId, opts.tag],
+  );
+  const row = res.rows[0];
+  if (row === undefined) return null;
+  return projectTags(row.tags);
+}
+
+/**
+ * Remove one tag from a single run (no-op when not present). Returns
+ * the canonical tag array post-mutation, or `null` on no-such-run.
+ */
+export async function removeRunTag(
+  db: SqlClient,
+  opts: { readonly tenantId: string; readonly runId: string; readonly tag: string },
+): Promise<readonly string[] | null> {
+  const res = await db.query<{ id: string; tags: unknown }>(
+    `UPDATE runs
+        SET tags = array_remove(tags, $3)
+      WHERE id = $1
+        AND tenant_id = $2
+      RETURNING id, tags`,
+    [opts.runId, opts.tenantId, opts.tag],
+  );
+  const row = res.rows[0];
+  if (row === undefined) return null;
+  return projectTags(row.tags);
+}
+
+/**
+ * Top-N most-frequently-used tags in `tenantId`, plus their run
+ * counts. Sorted by count DESC then tag ASC (stable for ties).
+ *
+ * Implementation: `unnest(tags)` over the tenant's runs + GROUP BY.
+ * Cheap because the `idx_runs_tenant_tags` composite from migration
+ * 025 satisfies the tenant filter from an index; the `unnest` cost
+ * is bounded by `(rows-in-tenant * avg-tags-per-row)`, which is
+ * well under a million for the foreseeable MVP scale.
+ *
+ * Returns an empty array when the tenant has zero tagged runs.
+ */
+export async function popularTags(
+  db: SqlClient,
+  opts: { readonly tenantId: string; readonly limit: number },
+): Promise<ReadonlyArray<{ readonly tag: string; readonly count: number }>> {
+  const limit = Math.max(1, Math.min(opts.limit, 200));
+  const res = await db.query<{ tag: string; count: string }>(
+    `SELECT t AS tag, COUNT(*)::text AS count
+       FROM runs r, unnest(r.tags) AS t
+      WHERE r.tenant_id = $1
+      GROUP BY t
+      ORDER BY count DESC, tag ASC
+      LIMIT $2`,
+    [opts.tenantId, limit],
+  );
+  return res.rows.map((row) => ({ tag: row.tag, count: Number(row.count) }));
+}
+
+/** Coerce a TEXT[] / JSON-encoded value to a defensive readonly string[]. */
+function projectTags(raw: unknown): readonly string[] {
+  if (Array.isArray(raw)) return raw.filter((s): s is string => typeof s === 'string');
+  if (typeof raw === 'string') {
+    // pglite + Neon HTTP can round-trip TEXT[] as a JSON string in
+    // edge cases; tolerate it.
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) return parsed.filter((s): s is string => typeof s === 'string');
+    } catch {
+      // fall through
+    }
+  }
+  return [];
 }
 
 // --- wave-13 saved views ---------------------------------------------------

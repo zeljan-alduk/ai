@@ -1,0 +1,880 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildComparisonTable — snapshots > snapshot — 2 runs 1`] = `
+{
+  "columnIds": [
+    "snap-r1",
+    "snap-r2",
+  ],
+  "rows": [
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "status",
+      "kind": "meta",
+      "label": "Status",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "agent",
+      "kind": "meta",
+      "label": "Agent",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "startedAt",
+      "kind": "meta",
+      "label": "Started",
+    },
+    {
+      "cells": [
+        {
+          "tag": "divergent",
+          "value": "4,000",
+        },
+        {
+          "tag": "divergent",
+          "value": "6,000",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "durationMs",
+      "kind": "quantitative",
+      "label": "Duration (ms)",
+    },
+    {
+      "cells": [
+        {
+          "tag": "divergent",
+          "value": "$0.0021",
+        },
+        {
+          "tag": "divergent",
+          "value": "$0.0042  (+100% vs cheapest)",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "totalUsd",
+      "kind": "quantitative",
+      "label": "Cost (USD)",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "200",
+        },
+        {
+          "tag": "baseline",
+          "value": "200",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": true,
+      "key": "tokensIn",
+      "kind": "quantitative",
+      "label": "Input tokens",
+    },
+    {
+      "cells": [
+        {
+          "tag": "divergent",
+          "value": "100",
+        },
+        {
+          "tag": "divergent",
+          "value": "200",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "tokensOut",
+      "kind": "quantitative",
+      "label": "Output tokens",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "openai / gpt-4o",
+        },
+        {
+          "tag": "divergent",
+          "value": "openai / claude-3-5-sonnet",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "lastModel",
+      "kind": "text",
+      "label": "Model",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "terminationReason",
+      "kind": "text",
+      "label": "Termination reason",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "errorEvent",
+      "kind": "text",
+      "label": "Error",
+    },
+    {
+      "cells": [
+        {
+          "tag": "divergent",
+          "value": "1",
+        },
+        {
+          "tag": "divergent",
+          "value": "0",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "toolCallCount",
+      "kind": "quantitative",
+      "label": "Tool calls",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "A says hi",
+        },
+        {
+          "tag": "divergent",
+          "value": "B says hi",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "finalOutput",
+      "kind": "text",
+      "label": "Final output",
+    },
+  ],
+  "stackBars": [
+    {
+      "label": "1. snap-r1",
+      "raw": {
+        "cost": 0.0021,
+        "durationMs": 4000,
+        "tokensIn": 200,
+        "tokensOut": 100,
+      },
+    },
+    {
+      "label": "2. snap-r2",
+      "raw": {
+        "cost": 0.0042,
+        "durationMs": 6000,
+        "tokensIn": 200,
+        "tokensOut": 200,
+      },
+    },
+  ],
+}
+`;
+
+exports[`buildComparisonTable — snapshots > snapshot — 3 runs 1`] = `
+{
+  "columnIds": [
+    "snap3-a",
+    "snap3-b",
+    "snap3-c",
+  ],
+  "rows": [
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "status",
+      "kind": "meta",
+      "label": "Status",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "agent",
+      "kind": "meta",
+      "label": "Agent",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "startedAt",
+      "kind": "meta",
+      "label": "Started",
+    },
+    {
+      "cells": [
+        {
+          "tag": "divergent",
+          "value": "3,000",
+        },
+        {
+          "tag": "baseline",
+          "value": "5,000",
+        },
+        {
+          "tag": "divergent",
+          "value": "8,000",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "durationMs",
+      "kind": "quantitative",
+      "label": "Duration (ms)",
+    },
+    {
+      "cells": [
+        {
+          "tag": "divergent",
+          "value": "$0.0010",
+        },
+        {
+          "tag": "baseline",
+          "value": "$0.0050  (+400% vs cheapest)",
+        },
+        {
+          "tag": "divergent",
+          "value": "$0.0100  (+900% vs cheapest)",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "totalUsd",
+      "kind": "quantitative",
+      "label": "Cost (USD)",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "100",
+        },
+        {
+          "tag": "baseline",
+          "value": "100",
+        },
+        {
+          "tag": "baseline",
+          "value": "100",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": true,
+      "key": "tokensIn",
+      "kind": "quantitative",
+      "label": "Input tokens",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "50",
+        },
+        {
+          "tag": "baseline",
+          "value": "50",
+        },
+        {
+          "tag": "baseline",
+          "value": "50",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": true,
+      "key": "tokensOut",
+      "kind": "quantitative",
+      "label": "Output tokens",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "openai / gpt-4o-mini",
+        },
+        {
+          "tag": "baseline",
+          "value": "openai / gpt-4o-mini",
+        },
+        {
+          "tag": "baseline",
+          "value": "openai / gpt-4o-mini",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "lastModel",
+      "kind": "text",
+      "label": "Model",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "terminationReason",
+      "kind": "text",
+      "label": "Termination reason",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "errorEvent",
+      "kind": "text",
+      "label": "Error",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "0",
+        },
+        {
+          "tag": "baseline",
+          "value": "0",
+        },
+        {
+          "tag": "baseline",
+          "value": "0",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": true,
+      "key": "toolCallCount",
+      "kind": "quantitative",
+      "label": "Tool calls",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "hello world",
+        },
+        {
+          "tag": "baseline",
+          "value": "hello world",
+        },
+        {
+          "tag": "baseline",
+          "value": "hello world",
+        },
+      ],
+      "hasDiff": false,
+      "isMetric": false,
+      "key": "finalOutput",
+      "kind": "text",
+      "label": "Final output",
+    },
+  ],
+  "stackBars": [
+    {
+      "label": "1. snap3-a",
+      "raw": {
+        "cost": 0.001,
+        "durationMs": 3000,
+        "tokensIn": 100,
+        "tokensOut": 50,
+      },
+    },
+    {
+      "label": "2. snap3-b",
+      "raw": {
+        "cost": 0.005,
+        "durationMs": 5000,
+        "tokensIn": 100,
+        "tokensOut": 50,
+      },
+    },
+    {
+      "label": "3. snap3-c",
+      "raw": {
+        "cost": 0.01,
+        "durationMs": 8000,
+        "tokensIn": 100,
+        "tokensOut": 50,
+      },
+    },
+  ],
+}
+`;
+
+exports[`buildComparisonTable — snapshots > snapshot — 4 runs (one not-found) 1`] = `
+{
+  "columnIds": [
+    "snap4-a",
+    "snap4-b",
+    "snap4-c",
+    "snap4-missing",
+  ],
+  "rows": [
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+        {
+          "tag": "none",
+          "value": "completed",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "status",
+      "kind": "meta",
+      "label": "Status",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+        {
+          "tag": "none",
+          "value": "demo-agent 0.1.0",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "agent",
+      "kind": "meta",
+      "label": "Agent",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+        {
+          "tag": "none",
+          "value": "2026-05-03T10:00:00.000Z",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "startedAt",
+      "kind": "meta",
+      "label": "Started",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "5,000",
+        },
+        {
+          "tag": "baseline",
+          "value": "5,000",
+        },
+        {
+          "tag": "baseline",
+          "value": "5,000",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "durationMs",
+      "kind": "quantitative",
+      "label": "Duration (ms)",
+    },
+    {
+      "cells": [
+        {
+          "tag": "divergent",
+          "value": "$0.0010",
+        },
+        {
+          "tag": "baseline",
+          "value": "$0.0020  (+100% vs cheapest)",
+        },
+        {
+          "tag": "divergent",
+          "value": "$0.0030  (+200% vs cheapest)",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "totalUsd",
+      "kind": "quantitative",
+      "label": "Cost (USD)",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "100",
+        },
+        {
+          "tag": "baseline",
+          "value": "100",
+        },
+        {
+          "tag": "baseline",
+          "value": "100",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "tokensIn",
+      "kind": "quantitative",
+      "label": "Input tokens",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "50",
+        },
+        {
+          "tag": "baseline",
+          "value": "50",
+        },
+        {
+          "tag": "baseline",
+          "value": "50",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "tokensOut",
+      "kind": "quantitative",
+      "label": "Output tokens",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "openai / gpt-4o-mini",
+        },
+        {
+          "tag": "baseline",
+          "value": "openai / gpt-4o-mini",
+        },
+        {
+          "tag": "baseline",
+          "value": "openai / gpt-4o-mini",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "lastModel",
+      "kind": "text",
+      "label": "Model",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "terminationReason",
+      "kind": "text",
+      "label": "Termination reason",
+    },
+    {
+      "cells": [
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "errorEvent",
+      "kind": "text",
+      "label": "Error",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "0",
+        },
+        {
+          "tag": "baseline",
+          "value": "0",
+        },
+        {
+          "tag": "baseline",
+          "value": "0",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": true,
+      "key": "toolCallCount",
+      "kind": "quantitative",
+      "label": "Tool calls",
+    },
+    {
+      "cells": [
+        {
+          "tag": "baseline",
+          "value": "hello world",
+        },
+        {
+          "tag": "baseline",
+          "value": "hello world",
+        },
+        {
+          "tag": "baseline",
+          "value": "hello world",
+        },
+        {
+          "tag": "none",
+          "value": "not found",
+        },
+      ],
+      "hasDiff": true,
+      "isMetric": false,
+      "key": "finalOutput",
+      "kind": "text",
+      "label": "Final output",
+    },
+  ],
+  "stackBars": [
+    {
+      "label": "1. snap4-a",
+      "raw": {
+        "cost": 0.001,
+        "durationMs": 5000,
+        "tokensIn": 100,
+        "tokensOut": 50,
+      },
+    },
+    {
+      "label": "2. snap4-b",
+      "raw": {
+        "cost": 0.002,
+        "durationMs": 5000,
+        "tokensIn": 100,
+        "tokensOut": 50,
+      },
+    },
+    {
+      "label": "3. snap4-c",
+      "raw": {
+        "cost": 0.003,
+        "durationMs": 5000,
+        "tokensIn": 100,
+        "tokensOut": 50,
+      },
+    },
+    {
+      "label": "4. snap4-mi",
+      "raw": {
+        "cost": 0,
+        "durationMs": 0,
+        "tokensIn": 0,
+        "tokensOut": 0,
+      },
+    },
+  ],
+}
+`;

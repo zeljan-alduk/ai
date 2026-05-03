@@ -28,6 +28,7 @@ import { CostBreakdownChart } from '@/components/runs/cost-breakdown-chart';
 import { CostRollupCard } from '@/components/runs/cost-rollup-card';
 import { ReplayScrubber } from '@/components/runs/replay-scrubber';
 import { RunDetailTabs } from '@/components/runs/run-detail-tabs';
+import { RunThumbs } from '@/components/runs/run-thumbs';
 import { RunTree } from '@/components/runs/run-tree';
 import { SaveAsEvalRowButton } from '@/components/runs/save-as-eval-row-dialog';
 import { TimelineView } from '@/components/runs/timeline-view';
@@ -129,6 +130,16 @@ export default async function RunDetailPage({
         description="Trace, events, and replay. Click any bar to drill into a span."
         actions={
           <div className="flex items-center gap-2">
+            {/* Wave-19 — inline thumbs in the header. Mounted only when
+                we have an authenticated user (the underlying annotation
+                creates require write scope). */}
+            {currentUserId.length > 0 ? (
+              <RunThumbs
+                runId={id}
+                currentUserId={currentUserId}
+                initialAnnotations={initialAnnotations}
+              />
+            ) : null}
             {data ? <SaveAsEvalRowButton run={data.run} /> : null}
             <CompareWithButton currentRunId={id} />
             <ShareDialog targetKind="run" targetId={id} />
@@ -144,20 +155,15 @@ export default async function RunDetailPage({
       {error ? (
         <ErrorView error={error} context="this run" />
       ) : data ? (
-        <>
-          <RunDetailBody run={data.run} tree={tree} runId={id} agentComposite={agentComposite} />
-          {currentUserId.length > 0 && (
-            <div className="mt-6">
-              <CommentsThread
-                targetKind="run"
-                targetId={id}
-                currentUserId={currentUserId}
-                currentUserEmail={currentUserEmail}
-                initialAnnotations={initialAnnotations}
-              />
-            </div>
-          )}
-        </>
+        <RunDetailBody
+          run={data.run}
+          tree={tree}
+          runId={id}
+          agentComposite={agentComposite}
+          currentUserId={currentUserId}
+          currentUserEmail={currentUserEmail}
+          initialAnnotations={initialAnnotations}
+        />
       ) : null}
     </>
   );
@@ -168,11 +174,17 @@ function RunDetailBody({
   tree,
   runId,
   agentComposite,
+  currentUserId,
+  currentUserEmail,
+  initialAnnotations,
 }: {
   run: RunDetail;
   tree: RunTreeNode | null;
   runId: string;
   agentComposite: import('@aldo-ai/api-contract').CompositeWire | null;
+  currentUserId: string;
+  currentUserEmail: string;
+  initialAnnotations: readonly Annotation[];
 }) {
   const effectiveTree: RunTreeNode = tree ?? synthesiseTreeOfOne(run);
   const isChild = run.parentRunId !== null;
@@ -338,6 +350,26 @@ function RunDetailBody({
           ) : null
         }
         replay={replayPanel}
+        annotations={
+          currentUserId.length > 0 ? (
+            <CommentsThread
+              targetKind="run"
+              targetId={runId}
+              currentUserId={currentUserId}
+              currentUserEmail={currentUserEmail}
+              initialAnnotations={initialAnnotations}
+            />
+          ) : (
+            <Card>
+              <CardContent>
+                <EmptyState
+                  title="Sign in to comment."
+                  hint="Annotations are tied to your tenant identity — sign in to leave a thumbs vote or a comment."
+                />
+              </CardContent>
+            </Card>
+          )
+        }
       />
 
       <Card>

@@ -44,8 +44,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { serve } from '@hono/node-server';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { RestClient } from './client.js';
@@ -181,7 +181,7 @@ export function buildHttpApp(opts: HttpAppOpts = {}): Hono {
 
   // 404 for anything else — the transport is the only public surface.
   app.notFound((c) =>
-    c.json({ error: { code: 'not_found', message: 'no route ' + c.req.path } }, 404),
+    c.json({ error: { code: 'not_found', message: `no route ${c.req.path}` } }, 404),
   );
 
   return app;

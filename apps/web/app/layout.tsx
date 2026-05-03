@@ -5,6 +5,7 @@
 import '@/lib/api-server-init';
 
 import { CommandPalette } from '@/components/command-palette';
+import { KeyboardShortcutsRouter } from '@/components/keyboard-shortcuts-router';
 import { Sidebar, type SidebarUser } from '@/components/sidebar';
 import { TourProvider } from '@/components/tour/tour-provider';
 import { ApiClientError, getAuthMe } from '@/lib/api';
@@ -152,10 +153,19 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             </div>
           </TourProvider>
         )}
-        {/* Global Cmd-K palette — mounted everywhere except auth pages.
-            Auth pages already redirect on submit, so a hotkey navigation
-            mid-flow would be confusing. */}
-        {pathname === '/login' || pathname === '/signup' ? null : <CommandPalette />}
+        {/* Global Cmd-K palette + keyboard-shortcut router — mounted
+            everywhere except auth pages. Auth pages already redirect
+            on submit, so a hotkey navigation mid-flow would be
+            confusing. The router handles g-prefix chords ("g a", "g r",
+            …), the `?` overlay, and the `/` focus-search shortcut.
+            The palette owns Cmd-K / Ctrl-K because it holds the
+            open/close state for the dialog. */}
+        {pathname === '/login' || pathname === '/signup' ? null : (
+          <>
+            <CommandPalette />
+            <KeyboardShortcutsRouter />
+          </>
+        )}
       </body>
     </html>
   );

@@ -14,7 +14,13 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
 import type { ReactNode } from 'react';
 
-export type RunDetailTab = 'timeline' | 'events' | 'tree' | 'composition' | 'replay';
+export type RunDetailTab =
+  | 'timeline'
+  | 'events'
+  | 'tree'
+  | 'composition'
+  | 'replay'
+  | 'annotations';
 
 export function RunDetailTabs({
   defaultTab = 'timeline',
@@ -23,6 +29,7 @@ export function RunDetailTabs({
   tree,
   composition,
   replay,
+  annotations,
 }: {
   defaultTab?: RunDetailTab;
   timeline: ReactNode;
@@ -37,8 +44,14 @@ export function RunDetailTabs({
    */
   composition: ReactNode;
   replay: ReactNode;
+  /**
+   * Wave-19 — annotations + comments tab. Always rendered (a fresh run
+   * surface is the canonical "be the first to comment" empty state).
+   */
+  annotations?: ReactNode;
 }) {
   const showComposition = composition !== null;
+  const showAnnotations = annotations !== undefined && annotations !== null;
   return (
     <Tabs defaultValue={defaultTab}>
       <TabsList>
@@ -47,12 +60,14 @@ export function RunDetailTabs({
         <TabsTrigger value="tree">Tree</TabsTrigger>
         {showComposition ? <TabsTrigger value="composition">Composition</TabsTrigger> : null}
         <TabsTrigger value="replay">Replay</TabsTrigger>
+        {showAnnotations ? <TabsTrigger value="annotations">Annotations</TabsTrigger> : null}
       </TabsList>
       <TabsContent value="timeline">{timeline}</TabsContent>
       <TabsContent value="events">{events}</TabsContent>
       <TabsContent value="tree">{tree}</TabsContent>
       {showComposition ? <TabsContent value="composition">{composition}</TabsContent> : null}
       <TabsContent value="replay">{replay}</TabsContent>
+      {showAnnotations ? <TabsContent value="annotations">{annotations}</TabsContent> : null}
     </Tabs>
   );
 }

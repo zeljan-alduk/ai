@@ -127,7 +127,8 @@ describe('declarative termination (wave-17)', () => {
       // Second child emits the sentinel (lowercased — match must be CI).
       return {
         ok: true,
-        output: call === 2 ? { message: 'all done, please terminate now' } : { message: 'continue' },
+        output:
+          call === 2 ? { message: 'all done, please terminate now' } : { message: 'continue' },
         usage: usage('mock', 'm', 1, 1, 0),
       };
     });
@@ -222,13 +223,7 @@ describe('declarative termination (wave-17)', () => {
           name: 'sup',
           composite: makeComposite({
             strategy: 'parallel',
-            subagents: [
-              { name: 'a' },
-              { name: 'b' },
-              { name: 'c' },
-              { name: 'd' },
-              { name: 'e' },
-            ],
+            subagents: [{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }, { name: 'e' }],
           }),
           termination: { maxTurns: 2 },
         }),
@@ -241,6 +236,7 @@ describe('declarative termination (wave-17)', () => {
       expect(result.children.length).toBeLessThan(5);
       expect(decisions).toBe(1);
     } finally {
+      // biome-ignore lint/performance/noDelete: env var must be unset, not "undefined"-stringified
       if (original === undefined) delete process.env.ALDO_MAX_PARALLEL_CHILDREN;
       else process.env.ALDO_MAX_PARALLEL_CHILDREN = original;
     }

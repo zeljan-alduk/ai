@@ -54,6 +54,8 @@ import {
   type CreateDatasetRequest,
   type CreateEvaluatorRequest,
   type CreateProjectRequest,
+  type CreatePromptRequest,
+  type CreatePromptVersionRequest,
   type CreateSavedViewRequest,
   Dataset,
   DatasetExample,
@@ -61,6 +63,8 @@ import {
   Evaluator,
   GetAgentResponse,
   GetPlaygroundRunResponse,
+  GetPromptResponse,
+  GetPromptVersionResponse,
   GetRunResponse,
   GetRunTreeResponse,
   GetSubscriptionResponse,
@@ -75,6 +79,8 @@ import {
   ListModelsResponse,
   ListNotificationsResponse,
   ListProjectsResponse,
+  ListPromptVersionsResponse,
+  ListPromptsResponse,
   type ListRunsQuery,
   ListRunsResponse,
   ListSavedViewsResponse,
@@ -84,12 +90,17 @@ import {
   MarkNotificationReadResponse,
   type ObservabilityPeriod,
   ObservabilitySummary,
+  PopularTagsResponse,
   type PortalRequest,
   PortalResponse,
   Project,
+  PromptDiffResponse,
+  type PromptTestRequest,
+  PromptTestResponse,
   RunCompareResponse,
   type RunSearchRequest,
   RunSearchResponse,
+  RunTagsResponse,
   SavedView,
   type SavedViewSurface,
   type SavingsPeriod,
@@ -97,6 +108,9 @@ import {
   type SetSecretRequest,
   SetSecretResponse,
   type SignupRequest,
+  type SpendGroupBy,
+  SpendResponse,
+  type SpendWindow,
   type StartPlaygroundRunRequest,
   StartPlaygroundRunResponse,
   type SwitchTenantRequest,
@@ -108,6 +122,7 @@ import {
   type UpdateDesignPartnerApplicationRequest,
   type UpdateEvaluatorRequest,
   type UpdateProjectRequest,
+  type UpdatePromptRequest,
   type UpdateSavedViewRequest,
 } from '@aldo-ai/api-contract';
 import { z } from 'zod';
@@ -331,6 +346,33 @@ export function getRunTree(rootRunId: string) {
   return request(`/v1/runs/${encodeURIComponent(rootRunId)}/tree`, GetRunTreeResponse);
 }
 
+/* ------------------------------- Threads ------------------------------- */
+//
+// Wave-19 — chat-style multi-run grouping over runs.thread_id (migration 026).
+// `/threads` UI uses these to drive the list page and the per-thread chat
+// transcript view.
+
+export async function listThreadsApi(
+  query: { project?: string; cursor?: string; limit?: number } = {},
+) {
+  const { ListThreadsResponse } = await import('@aldo-ai/api-contract');
+  const q: Record<string, string | number | undefined> = {};
+  if (query.project !== undefined) q.project = query.project;
+  if (query.cursor !== undefined) q.cursor = query.cursor;
+  if (query.limit !== undefined) q.limit = query.limit;
+  return request('/v1/threads', ListThreadsResponse, { query: q });
+}
+
+export async function getThreadApi(id: string) {
+  const { GetThreadResponse } = await import('@aldo-ai/api-contract');
+  return request(`/v1/threads/${encodeURIComponent(id)}`, GetThreadResponse);
+}
+
+export async function getThreadTimelineApi(id: string) {
+  const { GetThreadTimelineResponse } = await import('@aldo-ai/api-contract');
+  return request(`/v1/threads/${encodeURIComponent(id)}/timeline`, GetThreadTimelineResponse);
+}
+
 /**
  * `GET /v1/runs/compare?a=&b=` — wave-13 convenience endpoint.
  *
@@ -380,6 +422,44 @@ export function bulkRunAction(req: BulkRunActionRequest) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(req),
   });
+}
+
+/**
+ * Wave-4 — `GET /v1/runs/tags/popular` — top-N most-used tags in
+ * the caller's tenant + run counts. Drives the filter-bar autocomplete
+ * + the inline editor's suggestion list.
+ */
+export function popularRunTags(opts: { limit?: number } = {}) {
+  return request('/v1/runs/tags/popular', PopularTagsResponse, {
+    query: { limit: opts.limit ?? 50 },
+  });
+}
+
+/** Wave-4 — `POST /v1/runs/:id/tags` — replace the run's tag list. */
+export function replaceRunTags(runId: string, tags: ReadonlyArray<string>) {
+  return request(`/v1/runs/${encodeURIComponent(runId)}/tags`, RunTagsResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ tags: [...tags] }),
+  });
+}
+
+/** Wave-4 — `POST /v1/runs/:id/tags/add` — append a single tag. */
+export function addRunTag(runId: string, tag: string) {
+  return request(`/v1/runs/${encodeURIComponent(runId)}/tags/add`, RunTagsResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ tag }),
+  });
+}
+
+/** Wave-4 — `DELETE /v1/runs/:id/tags/:tag` — remove a single tag. */
+export function removeRunTag(runId: string, tag: string) {
+  return request(
+    `/v1/runs/${encodeURIComponent(runId)}/tags/${encodeURIComponent(tag)}`,
+    RunTagsResponse,
+    { method: 'DELETE' },
+  );
 }
 
 /* ------------------------------- Saved views --------------------------- */
@@ -477,6 +557,30 @@ export function getModelSavings(query: { period?: SavingsPeriod } = {}) {
  */
 export function getObservabilitySummary(query: { period?: ObservabilityPeriod } = {}) {
   return request('/v1/observability/summary', ObservabilitySummary, { query });
+}
+
+/* ------------------------------- Spend ---------------------------------- */
+
+/**
+ * `GET /v1/spend?project=&window=&since=&until=&groupBy=` — Wave-4
+ * cost + spend analytics. One round-trip returns totals + four
+ * top-row cards (today / WTD / MTD / active runs) + a dense (zero-
+ * filled) timeseries + ONE breakdown axis. The `/observability/spend`
+ * page issues 3 calls in parallel (one per breakdown axis) and keeps
+ * the cards/timeseries from the first.
+ *
+ * LLM-agnostic: every breakdown key is opaque (model id, capability
+ * class, agent name, project slug). The contract carries no provider
+ * brand strings.
+ */
+export function getSpend(query: {
+  project?: string;
+  window?: SpendWindow;
+  since?: string;
+  until?: string;
+  groupBy?: SpendGroupBy;
+}) {
+  return request('/v1/spend', SpendResponse, { query });
 }
 
 /* ------------------------------- Secrets -------------------------------- */
@@ -1184,4 +1288,100 @@ export function getPlaygroundRun(id: string, init?: { signal?: AbortSignal }) {
     GetPlaygroundRunResponse,
     init?.signal !== undefined ? { signal: init.signal } : {},
   );
+}
+
+/* ------------------------------- Prompts ------------------------------ */
+//
+// Wave-4 (Tier-4) — prompts as first-class entities. Closes Vellum +
+// LangSmith Hub. Versioned prompt bodies, diff, playground; agent
+// specs gain an additive `promptRef` slot in the spec contract.
+
+export function listPrompts(query: { project?: string } = {}) {
+  const q: Record<string, string | number | undefined> = {};
+  if (query.project !== undefined) q.project = query.project;
+  return request('/v1/prompts', ListPromptsResponse, { query: q });
+}
+
+export function getPrompt(id: string) {
+  return request(`/v1/prompts/${encodeURIComponent(id)}`, GetPromptResponse);
+}
+
+export function createPrompt(req: CreatePromptRequest) {
+  return request('/v1/prompts', GetPromptResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function updatePrompt(id: string, req: UpdatePromptRequest) {
+  return request(`/v1/prompts/${encodeURIComponent(id)}`, GetPromptResponse, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export async function deletePrompt(id: string): Promise<void> {
+  const url = buildUrl(`/v1/prompts/${encodeURIComponent(id)}`);
+  const headers = await buildRequestHeaders(undefined);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers,
+    cache: 'no-store',
+    credentials: typeof window === 'undefined' ? 'omit' : 'include',
+  });
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text();
+    let parsedErr: unknown;
+    try {
+      parsedErr = JSON.parse(text);
+    } catch {
+      parsedErr = undefined;
+    }
+    const apiErr = ApiError.safeParse(parsedErr);
+    throw new ApiClientError(
+      res.status >= 500 ? 'http_5xx' : 'http_4xx',
+      apiErr.success ? apiErr.data.error.message : `DELETE failed: ${res.status}`,
+      {
+        status: res.status,
+        ...(apiErr.success
+          ? { code: apiErr.data.error.code, details: apiErr.data.error.details }
+          : {}),
+      },
+    );
+  }
+}
+
+export function listPromptVersions(id: string) {
+  return request(`/v1/prompts/${encodeURIComponent(id)}/versions`, ListPromptVersionsResponse);
+}
+
+export function getPromptVersion(id: string, version: number) {
+  return request(
+    `/v1/prompts/${encodeURIComponent(id)}/versions/${version}`,
+    GetPromptVersionResponse,
+  );
+}
+
+export function createPromptVersion(id: string, req: CreatePromptVersionRequest) {
+  return request(`/v1/prompts/${encodeURIComponent(id)}/versions`, GetPromptVersionResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export function getPromptDiff(id: string, from: number, to: number) {
+  return request(`/v1/prompts/${encodeURIComponent(id)}/diff`, PromptDiffResponse, {
+    query: { from, to },
+  });
+}
+
+export function testPrompt(id: string, req: PromptTestRequest) {
+  return request(`/v1/prompts/${encodeURIComponent(id)}/test`, PromptTestResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
 }

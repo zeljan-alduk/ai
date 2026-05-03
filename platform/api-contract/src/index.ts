@@ -35,3 +35,9 @@ export * from './quotas.js';
 export * from './domains.js';
 // Wave-17 — projects (foundation only; entity scoping retrofits next).
 export * from './projects.js';
+// Wave-4 (Tier-4) — prompts as first-class entities (Vellum + LangSmith Hub gap).
+export * from './prompts.js';
+// Wave-19 — threads (derived grouping over runs.thread_id).
+export * from './threads.js';
+// Wave-4 — cost + spend analytics (LangSmith spend / Braintrust experiments cost view parity).
+export * from './spend.js';

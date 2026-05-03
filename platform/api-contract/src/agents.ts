@@ -110,6 +110,22 @@ export const CompositeWire = z.object({
 export type CompositeWire = z.infer<typeof CompositeWire>;
 
 /**
+ * Wave-4 (Tier-4) — additive `promptRef` slot on the agent spec.
+ *
+ * Lets an agent point at a versioned prompt entity (see `prompts.ts`)
+ * instead of inlining the prompt body in the YAML. The runtime reads
+ * the body from the prompts-store at agent-load time and caches it
+ * for the run. Pre-wave-4 specs that inline the prompt continue to
+ * work — `promptRef` is purely additive on top of the existing
+ * `prompt: { system_file: ... }` slot.
+ */
+export const PromptRefWire = z.object({
+  id: z.string().min(1),
+  version: z.number().int().positive(),
+});
+export type PromptRefWire = z.infer<typeof PromptRefWire>;
+
+/**
  * Wave-17 — declarative termination conditions.
  *
  * The runtime always honours `iterative.terminate` (a YAML expression)
@@ -236,6 +252,17 @@ export const AgentDetail = AgentSummary.extend({
    * only so we can ship the spec + UI now.
    */
   termination: TerminationWire.nullish(),
+  /**
+   * Wave-4 (Tier-4) — additive `promptRef` slot. When present, the
+   * runtime resolves the prompt body from the prompts-store
+   * (apps/api/src/prompts-store.ts) at agent-load time. Coexists with
+   * the existing inline `prompt.system_file` slot — agents can carry
+   * either, neither, or both (the engine prefers `promptRef` when
+   * both are present so the migration path is a one-liner on the
+   * spec). Pre-wave-4 servers simply omit the field; clients fall
+   * through to the inline-prompt UX.
+   */
+  promptRef: PromptRefWire.nullish(),
 });
 export type AgentDetail = z.infer<typeof AgentDetail>;
 

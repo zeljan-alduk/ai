@@ -55,12 +55,15 @@ import { observabilityRoutes } from './routes/observability.js';
 import { openApiRoutes } from './routes/openapi.js';
 import { playgroundRoutes } from './routes/playground.js';
 import { projectsRoutes } from './routes/projects.js';
+import { promptsRoutes } from './routes/prompts.js';
 import { quotasRoutes } from './routes/quotas.js';
 import { runsCompareRoutes } from './routes/runs-compare.js';
 import { runsRoutes } from './routes/runs.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { sharesRoutes } from './routes/shares.js';
+import { spendRoutes } from './routes/spend.js';
 import { tenantsRoutes } from './routes/tenants.js';
+import { threadsRoutes } from './routes/threads.js';
 import { viewsRoutes } from './routes/views.js';
 
 export interface BuildAppOptions {
@@ -227,6 +230,9 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', agentsRoutes(deps));
   app.route('/', modelsRoutes(deps));
   app.route('/', observabilityRoutes(deps));
+  // Wave-4 — cost + spend analytics: totals + cards + timeseries +
+  // breakdowns by capability/agent/project. Backs `/observability/spend`.
+  app.route('/', spendRoutes(deps));
   app.route('/', debuggerRoutes(deps));
   app.route('/', evalRoutes(deps, deps.evalDeps !== undefined ? { evalDeps: deps.evalDeps } : {}));
   // Wave-3 (Tier-3.1) — eval scorer playground. Closes the Braintrust
@@ -274,6 +280,12 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   // Wave-17 — projects (entity foundation; agents/runs/datasets not
   // yet scoped by project_id — that's the follow-up retrofit).
   app.route('/', projectsRoutes(deps));
+  // Wave-19 — threads (chat-style multi-run grouping over runs.thread_id).
+  app.route('/', threadsRoutes(deps));
+  // Wave-4 (Tier-4) — prompts as first-class entities. Closes Vellum
+  // (entire product) + LangSmith Hub. Versioned prompt bodies, diff,
+  // playground; agent specs gain an additive `promptRef` slot.
+  app.route('/', promptsRoutes(deps));
 
   app.onError(errorHandler);
   app.notFound((c) =>
