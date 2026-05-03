@@ -4990,3 +4990,9 @@ Out of scope (per brief):
 - services/picenhancer/package.json: added `"sharp": "^0.33.5"` to dependencies.
 - apps/web/app/live/picenhancer/client.tsx + page.tsx: After-figure caption label "Lanczos + sharpen" → "Lanczos-3 (libvips)". Footer copy now says "sharp (libvips) Lanczos-3" instead of ImageMagick. Engine type union updated to `'realesrgan' | 'sharp'`.
 - /tmp/pixmend-stack: ran `npm install sharp` so the local dev server (which still defaults to PIXMEND_ENGINE=realesrgan via its env) doesn't crash on the import statement when realesrgan isn't installed.
+
+2026-05-03 19:00 | engineer | picenhancer end-to-end working in production + two cosmetic polish fixes
+- VERIFIED LIVE: User uploaded their own photo to ai.aldo.tech/live/picenhancer with x8 selected. 644x578 (418 KB) → 5152x4624 (9.1 MB) in 6.2 s server-side / 6.4 s wall-clock. $0. engine=sharp. Both passes done, both images visible, download link works. Page is fully functional.
+- apps/web/app/live/picenhancer/client.tsx polish:
+  1. Reset walltimeMs to null at the start of each new submit() so the LATENCY card doesn't show a stale value while the new SSE stream is in flight.
+  2. Progress label "Real-ESRGAN pass X/Y" → "Upscale pass X/Y" (engine-neutral, since the default engine is sharp/libvips, not Real-ESRGAN). The After-figure caption already shows the real engine.

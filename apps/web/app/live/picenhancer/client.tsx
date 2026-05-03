@@ -78,6 +78,9 @@ export function PicenhancerClient() {
       setBusy(true);
       setFinal(null);
       setResultUrl(null);
+      // Reset prior-run wall-clock so the LATENCY card doesn't show a
+      // stale value while the new request streams.
+      setWalltimeMs(null);
       if (lastOrigUrl.current) URL.revokeObjectURL(lastOrigUrl.current);
       if (lastBlobUrl.current) URL.revokeObjectURL(lastBlobUrl.current);
       const ou = URL.createObjectURL(f);
@@ -154,7 +157,7 @@ export function PicenhancerClient() {
               activeIdx = (ev.pass as number) - 1;
               doneIdx = (ev.pass as number) - 1;
               setProgress({
-                label: `Real-ESRGAN pass ${ev.pass}/${ev.of} · ×${ev.s} · ${ev.model}`,
+                label: `Upscale pass ${ev.pass}/${ev.of} · ×${ev.s}`,
                 pct: ((doneIdx) / totalPasses) * 100,
                 indeterminate: false,
                 totalPasses,
@@ -163,7 +166,7 @@ export function PicenhancerClient() {
               });
             } else if (type === 'enhance' && ev.status === 'progress') {
               setProgress({
-                label: `Real-ESRGAN pass ${ev.pass}/${ev.of} · ${ev.pct}% of pass`,
+                label: `Upscale pass ${ev.pass}/${ev.of} · ${ev.pct}% of pass`,
                 pct: Number(ev.globalPct),
                 indeterminate: false,
                 totalPasses,
