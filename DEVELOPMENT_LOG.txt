@@ -5208,3 +5208,41 @@ What's deferred (for follow-up commits):
 - protected_paths predicate — v0 collapses to 'always'; a path-aware predicate (e.g. fs.write to a protected glob → require approval, fs.write elsewhere → don't) lands when an operator demand surfaces.
 - Postgres-backed ApprovalController for multi-replica deployments.
 - WebSocket push for live "your approval is needed" UX (the run-event SSE stream already carries the events, so the existing live-tail already shows them).
+
+2026-05-04T09:52Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §10: assistant retargeted onto IterativeAgentRun.
+
+The assistant chat panel (`/v1/assistant/stream`) was a stub-streamer with hand-rolled SSE — one gateway call, text deltas, done. With #1 shipped, retargeting it onto the iterative loop turns the assistant into the most valuable dogfood customer for the loop primitive: every Sprint-1 tool (fs read/list/search/stat) becomes addressable from the chat panel without a new abstraction.
+
+Phase A — synthetic AgentSpec builder (~150 LoC):
+- apps/api/src/lib/assistant-agent-spec.ts — `buildAssistantAgentSpec({ tenantId, toolsEnv?, ... })` returns a real AgentSpec at request time. Default tool ACL is read-only (aldo-fs.fs.read/list/search/stat). Operators opt into write/exec via `ASSISTANT_TOOLS` env (comma-separated refs); refs not in `ALLOWED_OVERRIDE_TOOLS` are silently dropped — implicit privilege escalation isn't available. iteration: maxCycles 12, contextWindow 128k, summaryStrategy rolling-window, terminator on `<turn-complete>`. modelPolicy: privacy_tier internal, primary reasoning-medium with local-reasoning fallback, $0.25/run cap.
+- apps/api/src/runtime-bootstrap.ts — buildAgentRegistry now intercepts ref.name === '__assistant__' and returns the synthetic spec; falls through to the tenant agent store for everything else. Per-tenant runtime gets a fresh synthetic spec on every load (cheap; no caching needed).
+- apps/api/tests/assistant-agent-spec.test.ts — 13 tests (defaults + env override + privilege-escalation refusal + dedup + iteration overrides + sanity).
+
+Phase B — route swap (~150 LoC swapped, ~150 LoC new helper):
+- apps/api/src/routes/assistant.ts — hand-rolled streamer + the inline catalog/registry build are gone. The route now: (1) pulls the per-tenant runtime via getOrBuildRuntimeAsync; (2) calls runtime.runAgent({ name: '__assistant__' }, { messages, systemPrompt }); (3) translates engine RunEvents to SSE frames via the new pure helper; (4) emits a terminal `done` frame with rolled-up tokens/usd/latency.
+- apps/api/src/lib/assistant-sse-frames.ts — pure RunEvent → SSE-frame translator extracted from the route. Frame shape preserves backward compat (`{ type: 'delta' }`, `{ type: 'done' }`) and adds a new `{ type: 'tool', name, callId, args, result, isError }` for tool calls. Older clients ignore unknown types (web SSE parsing is permissive).
+- platform/engine/src/iterative-run.ts — extended `seedMessages` to recognise a `{ messages: [...], systemPrompt? }` input shape. When present, the loop seeds with the actual conversation + the supplied system prompt instead of JSON-stringifying inputs into a single user message. Pre-§10 callers passing strings keep their legacy seeding (regression-tested).
+- apps/api/tests/assistant-sse-frames.test.ts — 17 unit tests on the translator (assistant text → delta, tool_call+tool_result pairing, telemetry fold, ignored types, redaction, done-frame shape).
+- platform/engine/tests/iterative-chat-input.test.ts — 4 integration tests proving the chat-shape input round-trips through the loop: full conversation reaches the gateway in its first CompletionRequest; system prompt overrides the spec-rendered one; bogus roles are dropped; pre-§10 string inputs unchanged.
+
+Phase C — threads + persistence:
+- apps/api/src/routes/assistant.ts — request body now optionally accepts `threadId`. After runAgent returns, the route fires a best-effort `UPDATE runs SET thread_id = $1 WHERE id = $2 AND tenant_id = $3` so the wave-19 threads UI groups conversation turns. Non-fatal: `console.warn` on failure; the conversation still renders on /runs/<id> via the cycle tree (§9 Phase D). The done frame echoes threadId back so the panel can persist it.
+- Engine-side `runAgent` doesn't carry thread_id (engine is tenant-agnostic; thread_id is an API-side organisational concept). The UPDATE-after pattern keeps the engine API unchanged while still landing the wire-19 grouping.
+- The web `assistant-panel.tsx` already reads SSE frames; storing the active threadId in localStorage and resuming on reload is a straightforward UI follow-up (the wire is already there). Out of scope for this session.
+
+Verification:
+- tsc clean across @aldo-ai/api + @aldo-ai/engine.
+- §10 tests: 13 spec + 17 frame-translator + 4 chat-shape integration = 34 new passing tests, <1s wall clock.
+- §9 regression: 41 iterative engine tests still green (the seedMessages extension didn't break the legacy seeding path).
+- The route's new path replaces a stub that wasn't covered by integration tests, so there's no preexisting test to regress.
+
+Risks:
+1. The `__assistant__` agent name is a magic string; an operator's tenant-authored agent with the same name would be shadowed. Fix is to namespace it explicitly when this becomes a real concern (e.g. `__platform__/assistant`).
+2. Latency is dominated by the model; the iterative loop's bookkeeping adds a few ms per cycle. Acceptable per §10 plan's risk note.
+3. The default tool ACL is read-only — but a sloppy ASSISTANT_TOOLS env that lists fs.write would expose it without per-tenant gating. Documented in code; the v1 follow-up is per-tenant ACL config.
+
+What's deferred:
+- Web `assistant-panel.tsx` rendering of the new `tool` frame (delta + done already work; tool frames currently flow through but render as "unknown" — visually a small inline tile is the next UI ticket).
+- Per-tenant ACL config for the assistant's tool set (env-only today).
+- Tenant-specific system_prompt_override on the synthetic spec.
+- Resume-on-reload from localStorage threadId.

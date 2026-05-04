@@ -763,6 +763,54 @@ function now(): string {
 }
 
 function seedMessages(spec: AgentSpec, inputs: unknown): readonly Message[] {
+  // MISSING_PIECES §10 — chat-shape inputs from the assistant route.
+  // When the caller hands us `{ messages: [...] }` (and optionally a
+  // `systemPrompt`), use them directly so a multi-turn conversation
+  // flows in unmangled. Pre-§10 callers continue to JSON-stringify
+  // their inputs into a single user message — that path is unchanged.
+  if (
+    inputs !== null &&
+    typeof inputs === 'object' &&
+    Array.isArray((inputs as { messages?: unknown }).messages)
+  ) {
+    const chat = inputs as {
+      messages: ReadonlyArray<{ role?: unknown; content?: unknown }>;
+      systemPrompt?: unknown;
+    };
+    const seeded: Message[] = [];
+    const sysText =
+      typeof chat.systemPrompt === 'string' && chat.systemPrompt.length > 0
+        ? chat.systemPrompt
+        : renderSystemPrompt(spec);
+    seeded.push({
+      role: 'system',
+      content: [{ type: 'text', text: sysText }],
+    });
+    for (const m of chat.messages) {
+      if (m === null || typeof m !== 'object') continue;
+      const role = m.role;
+      const content = m.content;
+      if (role !== 'user' && role !== 'assistant' && role !== 'system' && role !== 'tool') {
+        continue;
+      }
+      if (typeof content === 'string') {
+        seeded.push({
+          role: role as 'user' | 'assistant' | 'system' | 'tool',
+          content: [{ type: 'text', text: content }],
+        });
+      } else if (Array.isArray(content)) {
+        // Trust the caller's shape — they've already produced
+        // MessagePart-shaped objects (e.g. resuming a chat with prior
+        // tool_call/tool_result parts).
+        seeded.push({
+          role: role as 'user' | 'assistant' | 'system' | 'tool',
+          content: content as Message['content'],
+        });
+      }
+    }
+    return seeded;
+  }
+
   const system: Message = {
     role: 'system',
     content: [{ type: 'text', text: renderSystemPrompt(spec) }],

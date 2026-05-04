@@ -74,6 +74,7 @@ import {
   RealHistoryCompressor,
 } from '@aldo-ai/engine';
 import { Supervisor } from '@aldo-ai/orchestrator';
+import { ASSISTANT_AGENT_NAME, buildAssistantAgentSpec } from './lib/assistant-agent-spec.js';
 import { createMcpToolHost } from './mcp/tool-host.js';
 import type {
   AgentRef,
@@ -250,6 +251,20 @@ function finalizeProviderState(enabledModels: readonly ParsedModel[]): ProviderS
 function buildAgentRegistry(deps: Deps, tenantId: string): AgentRegistry {
   return {
     async load(ref: AgentRef): Promise<AgentSpec> {
+      // MISSING_PIECES §10 — synthetic spec for the assistant. The
+      // assistant chat panel is part of the platform itself, not a
+      // tenant-authored YAML, so we build the spec at request time
+      // from the same per-tenant env that the API process sees.
+      // This keeps the tool ACL operator-controlled (ASSISTANT_TOOLS)
+      // while letting the engine treat the assistant exactly like
+      // any other iterative agent.
+      if (ref.name === ASSISTANT_AGENT_NAME) {
+        const built = buildAssistantAgentSpec({
+          tenantId,
+          toolsEnv: deps.env.ASSISTANT_TOOLS,
+        });
+        return built.spec;
+      }
       const detail = await deps.agentStore.get(tenantId, ref.name);
       if (detail === null) {
         throw new Error(`agent not found in tenant ${tenantId}: ${ref.name}`);

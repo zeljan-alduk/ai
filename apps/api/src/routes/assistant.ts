@@ -1,74 +1,42 @@
 /**
- * `/v1/assistant/stream` — MVP chat assistant.
+ * `/v1/assistant/stream` — chat assistant.
  *
- * One model, one column, SSE-streamed text deltas. Reuses the same
- * stub-streamer-→-real-gateway-later pattern as playground.ts so when
- * the streaming wire lands the assistant inherits real model output
- * for free.
+ * MISSING_PIECES §10 / Phase B — this route now drives the assistant
+ * through `IterativeAgentRun` against a synthetic per-request
+ * `AgentSpec` (built by `lib/assistant-agent-spec.ts`). The hand-rolled
+ * stub-streamer is gone; tool calls + multi-cycle reasoning + replay
+ * + billing telemetry come along as side effects.
  *
- * Deliberately minimal scope today:
- *   - Plain Q&A. The assistant explains the platform, points at docs,
- *     answers questions about the user's own context if surfaced via
- *     the system prompt, but does NOT call tools yet.
- *   - Tool calls + iterative loops require the IterativeAgentRun
- *     primitive (MISSING_PIECES.md #1) which lives in the engine.
- *     This route will delegate to it once it ships.
+ * Wire shape: the SSE frame schema is preserved so the existing web
+ * `assistant-panel.tsx` keeps working. We translate engine `RunEvent`s
+ * into the same `{ type: 'delta' }` / `{ type: 'done' }` frames the
+ * panel already understands, and add a new `{ type: 'tool' }` frame
+ * for tool calls that older clients ignore (web SSE parsing is
+ * permissive on unknown `type`s).
  *
- * Privacy: assistant runs at `tenant` privacy tier (cloud allowed if
- * the tenant has cloud keys, local-only otherwise). Capability class:
- * `reasoning`. The router enforces both fail-closed.
+ * Privacy: the synthetic spec runs at `internal` privacy tier
+ * (cloud allowed if the tenant has cloud keys, local-reasoning
+ * fallback otherwise). The router enforces fail-closed.
  *
  * Feature flag: ASSISTANT_ENABLED env on the API. When false, the
  * route returns 404. The frontend reads NEXT_PUBLIC_ASSISTANT_ENABLED
  * to decide whether to render the chat panel.
  */
 
-import { type RegisteredModel, createModelRegistry, createRouter } from '@aldo-ai/gateway';
-import type { PrivacyTier, ProviderLocality } from '@aldo-ai/types';
+import type { ToolCallPart } from '@aldo-ai/types';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { getAuth } from '../auth/middleware.js';
 import type { Deps } from '../deps.js';
+import { ASSISTANT_AGENT_NAME, ASSISTANT_SYSTEM_PROMPT } from '../lib/assistant-agent-spec.js';
+import {
+  type AssistantTelemetry,
+  buildDoneFrame,
+  translateEvent,
+} from '../lib/assistant-sse-frames.js';
 import { HttpError, validationError } from '../middleware/error.js';
-import { loadModelCatalog } from './models.js';
-
-interface CatalogModel {
-  readonly id: string;
-  readonly provider: string;
-  readonly locality: string;
-  readonly capabilityClass: string;
-  readonly provides?: readonly string[];
-  readonly privacyAllowed?: readonly string[];
-  readonly cost?: { readonly usdPerMtokIn?: number; readonly usdPerMtokOut?: number };
-  readonly latencyP95Ms?: number;
-  readonly effectiveContextTokens?: number;
-}
-
-const SYSTEM_PROMPT = `You are the ALDO AI assistant.
-
-You help users navigate and operate the ALDO control plane. You can answer
-questions about agents, runs, prompts, evaluators, the gateway, privacy
-tiers, MCP servers, and how to use the platform.
-
-Honesty rules:
-- If you don't know something specific to the user's tenant (their runs,
-  agents, prompts), say so — don't guess.
-- If something on the platform is documented as planned-but-not-yet,
-  say "that's planned" and point at the roadmap.
-- Keep replies short and direct. Default to 2-4 sentences. Expand when
-  asked.
-
-Capabilities you have today:
-- Q&A about the platform.
-- Discussing user briefs and helping plan.
-
-Capabilities coming next (when the IterativeAgentRun engine primitive
-lands — see MISSING_PIECES.md):
-- Tool calls: list runs, read prompts, search docs, enhance images via
-  picenhancer.
-- Approval-gated write actions.
-`;
+import { getOrBuildRuntimeAsync } from '../runtime-bootstrap.js';
 
 const AssistantStreamRequest = z.object({
   messages: z
@@ -80,69 +48,18 @@ const AssistantStreamRequest = z.object({
     )
     .min(1)
     .max(50),
+  /**
+   * MISSING_PIECES §10 / Phase C — optional thread id supplied by the
+   * client. When present the engine writes `runs.thread_id` so the
+   * conversation surfaces in the wave-19 threads UI alongside agent
+   * runs. Omit on first turn — the client can store the assigned run
+   * id locally or wait for the `done` frame's `threadId` field.
+   */
+  threadId: z.string().min(1).optional(),
 });
 
-interface AssistantStreamerOpts {
-  readonly model: RegisteredModel;
-  readonly system: string;
-  readonly messages: ReadonlyArray<{ role: 'user' | 'assistant'; content: string }>;
-  readonly signal: AbortSignal;
-}
-
-type AssistantStreamChunk =
-  | { readonly kind: 'delta'; readonly text: string }
-  | {
-      readonly kind: 'usage';
-      readonly tokensIn: number;
-      readonly tokensOut: number;
-      readonly usd: number;
-      readonly latencyMs: number;
-    };
-
-interface AssistantStreamer {
-  stream(opts: AssistantStreamerOpts): AsyncIterable<AssistantStreamChunk>;
-}
-
-/**
- * Default streamer — same shape as the playground stub. Yields a short
- * deterministic completion so the SSE shape is exercised end-to-end.
- * Real gateway streaming lands later (the same wave that lights up the
- * playground's real adapters; this route picks it up automatically).
- */
-const defaultStreamer: AssistantStreamer = {
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async *stream(opts) {
-    const start = Date.now();
-    const last = opts.messages[opts.messages.length - 1];
-    const userText = last?.content ?? '';
-    const reply =
-      `[${opts.model.id}] ` +
-      'I am the ALDO assistant — chat shape is wired end-to-end via SSE. ' +
-      'Real model dispatch lands when the gateway streaming adapter ships ' +
-      '(same wave as the playground real-stream wire). You asked: ' +
-      `"${userText.slice(0, 80)}${userText.length > 80 ? '…' : ''}".`;
-    // Emit two chunks so the UI sees a real streaming pattern, not a
-    // single big delta.
-    const half = Math.ceil(reply.length / 2);
-    yield { kind: 'delta', text: reply.slice(0, half) };
-    yield { kind: 'delta', text: reply.slice(half) };
-    yield {
-      kind: 'usage',
-      tokensIn: estimateTokens(userText),
-      tokensOut: estimateTokens(reply),
-      usd: 0,
-      latencyMs: Date.now() - start,
-    };
-  },
-};
-
-export interface AssistantDeps {
-  readonly streamer?: AssistantStreamer;
-}
-
-export function assistantRoutes(deps: Deps, aDeps: AssistantDeps = {}): Hono {
+export function assistantRoutes(deps: Deps): Hono {
   const app = new Hono();
-  const streamer = aDeps.streamer ?? defaultStreamer;
   // Default OFF — opt-in per deployment until tools + persistence ship.
   const enabled = (deps.env.ASSISTANT_ENABLED ?? 'false').toLowerCase();
   const isEnabled = enabled === 'true' || enabled === '1' || enabled === 'yes';
@@ -164,27 +81,8 @@ export function assistantRoutes(deps: Deps, aDeps: AssistantDeps = {}): Hono {
     }
     const tenantId = getAuth(c).tenantId;
 
-    // Pick a model: cheapest reasoning-class model the tenant's privacy
-    // posture allows. Same router as everything else on the platform.
-    const catalog = await loadModelCatalog(deps.env);
-    const registry = createModelRegistry(
-      catalog.models.flatMap((m) => {
-        const r = catalogEntryToRegisteredModel(m);
-        return r === null ? [] : [r];
-      }),
-    );
-    void createRouter(registry); // build to validate; selection below uses registry directly
-    // Privacy: 'internal' = tenant's own data, may use cloud if the tenant
-    // has allowed it; 'sensitive' would force local-only (override via the
-    // tenant's privacy posture in the future). 'reasoning' is the
-    // capability class.
-    const eligible = registry
-      .list()
-      .filter((m) => m.capabilityClass === 'reasoning' && m.privacyAllowed.includes('internal'))
-      .slice()
-      .sort((a, b) => a.cost.usdPerMtokIn - b.cost.usdPerMtokIn);
-    const model = eligible[0];
-    if (!model) {
+    const bundle = await getOrBuildRuntimeAsync(deps, tenantId);
+    if (bundle === null) {
       throw new HttpError(
         503,
         'no_model',
@@ -192,32 +90,78 @@ export function assistantRoutes(deps: Deps, aDeps: AssistantDeps = {}): Hono {
       );
     }
 
-    const ac = new AbortController();
     return streamSSE(c, async (sse) => {
+      const startedAt = Date.now();
+      const telemetry: AssistantTelemetry = {
+        tokensIn: 0,
+        tokensOut: 0,
+        usd: 0,
+        lastModel: null,
+      };
+      const toolCalls = new Map<string, ToolCallPart>();
+      const threadId = parsed.data.threadId ?? null;
+
       try {
-        for await (const chunk of streamer.stream({
-          model,
-          system: SYSTEM_PROMPT,
-          messages: parsed.data.messages,
-          signal: ac.signal,
-        })) {
-          if (chunk.kind === 'delta') {
-            await sse.writeSSE({
-              data: JSON.stringify({ type: 'delta', text: chunk.text }),
+        const run = await bundle.runtime.runAgent(
+          { name: ASSISTANT_AGENT_NAME },
+          {
+            messages: parsed.data.messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            systemPrompt: ASSISTANT_SYSTEM_PROMPT,
+          },
+        );
+
+        // MISSING_PIECES §10 / Phase C — link this run to its thread.
+        // The engine writes the runs row via PostgresRunStore but
+        // doesn't carry thread_id (engine is tenant-agnostic), so we
+        // patch it here. Best-effort: the conversation still renders
+        // on /runs/<id> if the update fails; only the threads-page
+        // grouping degrades.
+        if (threadId !== null) {
+          void deps.db
+            .query('UPDATE runs SET thread_id = $1 WHERE id = $2 AND tenant_id = $3', [
+              threadId,
+              run.id,
+              tenantId,
+            ])
+            .catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              // Non-fatal — log to stderr; production would route this
+              // through the structured logger.
+              console.warn(`assistant: failed to set thread_id on run ${run.id}: ${msg}`);
             });
-          } else if (chunk.kind === 'usage') {
+        }
+
+        for await (const ev of run.events()) {
+          for (const frame of translateEvent(ev, { toolCalls, telemetry })) {
+            await sse.writeSSE({ data: JSON.stringify(frame) });
+          }
+          if (ev.type === 'run.completed' || ev.type === 'run.cancelled' || ev.type === 'error') {
             await sse.writeSSE({
-              data: JSON.stringify({
-                type: 'done',
-                tokensIn: chunk.tokensIn,
-                tokensOut: chunk.tokensOut,
-                usd: chunk.usd,
-                latencyMs: chunk.latencyMs,
-                model: model.id,
-              }),
+              data: JSON.stringify(
+                buildDoneFrame(telemetry, {
+                  runId: run.id,
+                  latencyMs: Date.now() - startedAt,
+                  threadId,
+                }),
+              ),
             });
+            return;
           }
         }
+        // Defensive: iterator closed without a terminal event. Emit a
+        // `done` so the panel doesn't hang waiting forever.
+        await sse.writeSSE({
+          data: JSON.stringify(
+            buildDoneFrame(telemetry, {
+              runId: run.id,
+              latencyMs: Date.now() - startedAt,
+              threadId,
+            }),
+          ),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await sse.writeSSE({
@@ -225,46 +169,9 @@ export function assistantRoutes(deps: Deps, aDeps: AssistantDeps = {}): Hono {
         });
       }
     });
-    // tenantId is intentionally captured but not yet used; persistence
-    // as a Run lands with the IterativeAgentRun primitive.
-    void tenantId;
   });
 
   return app;
-}
-
-/**
- * Translate a catalog model into the gateway's RegisteredModel shape.
- * Same logic as playground.ts; duplicated here to avoid coupling the
- * routes. When MISSING_PIECES #1 lands the assistant route delegates
- * to the engine and this helper goes away.
- */
-function catalogEntryToRegisteredModel(m: CatalogModel): RegisteredModel | null {
-  if (m.locality !== 'cloud' && m.locality !== 'on-prem' && m.locality !== 'local') return null;
-  const privacyAllowed = (m.privacyAllowed ?? []).filter(
-    (p): p is PrivacyTier => p === 'public' || p === 'internal' || p === 'sensitive',
-  );
-  return {
-    id: m.id,
-    provider: m.provider,
-    providerKind: 'openai-compat',
-    locality: m.locality as ProviderLocality,
-    capabilityClass: m.capabilityClass,
-    provides: [...(m.provides ?? [])],
-    privacyAllowed,
-    cost: {
-      usdPerMtokIn: m.cost?.usdPerMtokIn ?? 0,
-      usdPerMtokOut: m.cost?.usdPerMtokOut ?? 0,
-    },
-    effectiveContextTokens: m.effectiveContextTokens ?? 0,
-    ...(m.latencyP95Ms !== undefined ? { latencyP95Ms: m.latencyP95Ms } : {}),
-  };
-}
-
-function estimateTokens(s: string): number {
-  // Conservative ~4 chars/token average for English. The gateway has
-  // its own per-adapter estimator; this stub doesn't need precision.
-  return Math.max(1, Math.ceil(s.length / 4));
 }
 
 declare module '../deps.js' {
