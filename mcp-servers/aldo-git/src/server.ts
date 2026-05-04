@@ -15,13 +15,22 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { GitError, type GitPolicy } from './policy.js';
+import { addInputSchema, addOutputSchema, gitAdd } from './tools/add.js';
 import {
   branchListInputSchema,
   branchListOutputSchema,
   gitBranchList,
 } from './tools/branch-list.js';
+import { checkoutInputSchema, checkoutOutputSchema, gitCheckout } from './tools/checkout.js';
+import { commitInputSchema, commitOutputSchema, gitCommit } from './tools/commit.js';
 import { diffInputSchema, diffOutputSchema, gitDiff } from './tools/diff.js';
+import { fetchInputSchema, fetchOutputSchema, gitFetch } from './tools/fetch.js';
+import { ghPrCreate, ghPrCreateInputSchema, ghPrCreateOutputSchema } from './tools/gh-pr-create.js';
+import { ghPrList, ghPrListInputSchema, ghPrListOutputSchema } from './tools/gh-pr-list.js';
+import { ghPrView, ghPrViewInputSchema, ghPrViewOutputSchema } from './tools/gh-pr-view.js';
 import { gitLog, logInputSchema, logOutputSchema } from './tools/log.js';
+import { gitPull, pullInputSchema, pullOutputSchema } from './tools/pull.js';
+import { gitPush, pushInputSchema, pushOutputSchema } from './tools/push.js';
 import {
   gitRemoteList,
   remoteListInputSchema,
@@ -82,6 +91,84 @@ export function createAldoGitServer(opts: CreateServerOpts): McpServer {
     inputSchema: remoteListInputSchema,
     outputSchema: remoteListOutputSchema,
     handler: (input) => gitRemoteList(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'git.add',
+    description:
+      'Stage one or more working-tree paths. Refuses bare wildcards and "."; each path must exist inside the repo root.',
+    inputSchema: addInputSchema,
+    outputSchema: addOutputSchema,
+    handler: (input) => gitAdd(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'git.checkout',
+    description:
+      'Switch HEAD to an existing branch, or create a new one with create=true. Refuses to switch onto a dirty working tree unless allowDirty=true.',
+    inputSchema: checkoutInputSchema,
+    outputSchema: checkoutOutputSchema,
+    handler: (input) => gitCheckout(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'git.commit',
+    description:
+      'Create a commit on the current branch. Refuses commits onto protected branches and detached HEAD; --amend / --no-verify are not exposed.',
+    inputSchema: commitInputSchema,
+    outputSchema: commitOutputSchema,
+    handler: (input) => gitCommit(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'git.fetch',
+    description: 'Fetch refs from a configured remote. Remote must be in policy.allowedRemotes.',
+    inputSchema: fetchInputSchema,
+    outputSchema: fetchOutputSchema,
+    handler: (input) => gitFetch(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'git.pull',
+    description:
+      'Pull from a configured remote with --ff-only. Diverged history fails explicitly rather than producing a merge commit.',
+    inputSchema: pullInputSchema,
+    outputSchema: pullOutputSchema,
+    handler: (input) => gitPull(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'git.push',
+    description:
+      'Push the current branch (or a named one) to a configured remote. force=with-lease requires the #9 approval primitive; plain --force is not exposed.',
+    inputSchema: pushInputSchema,
+    outputSchema: pushOutputSchema,
+    handler: (input) => gitPush(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'gh.pr.create',
+    description:
+      'Open a pull request via the GitHub CLI. Body is passed via --body-file so multi-KB descriptions are safe.',
+    inputSchema: ghPrCreateInputSchema,
+    outputSchema: ghPrCreateOutputSchema,
+    handler: (input) => ghPrCreate(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'gh.pr.list',
+    description: 'List pull requests filtered by state.',
+    inputSchema: ghPrListInputSchema,
+    outputSchema: ghPrListOutputSchema,
+    handler: (input) => ghPrList(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'gh.pr.view',
+    description: 'Read a PR\'s metadata, body, mergeable status, and reviews.',
+    inputSchema: ghPrViewInputSchema,
+    outputSchema: ghPrViewOutputSchema,
+    handler: (input) => ghPrView(policy, input),
   });
 
   return server;

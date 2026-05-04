@@ -5521,3 +5521,13 @@ Phase A landed: new mcp-servers/aldo-git package modelled on aldo-shell. Five re
 Tests: 37 vitest cases green across three files — tests/policy.test.ts (20) for the policy gates, tests/parsers.test.ts (10) pure-parser unit tests, tests/tools-readonly.test.ts (7) integration against a real `git init` fixture (skipped when git not on PATH). pnpm --filter @aldo-ai/mcp-git typecheck clean.
 
 Phases B (write ops + protected-branch denial), C (remote ops + force-push gating), D (gh PR ops), E (tool-host opt-in wiring), F (end-to-end agency dry-run + post-mortem) are queued. Phase F is the one §12 named as the actual inflection — that's where we move from "loop primitive ships" to "agency primitive ships".
+
+2026-05-04T23:49Z — engineer (claude opus 4.7, 1M ctx) — aldo-git Phases B+C+D landed.
+
+Phase B (write ops): git.add (rejects ".", "*", "**", "-"-prefixed, paths that escape repo root, paths that don't exist), git.checkout (refuses dirty tree without allowDirty; supports create + startPoint), git.commit (refuses protected-branch commits, refuses detached HEAD, schema-layer disallows --amend / --no-verify by simply not exposing them).
+
+Phase C (remote ops): git.fetch / git.pull (--ff-only hard-coded — diverged history fails with a clean error rather than a merge commit) / git.push (force=no default; force=with-lease returns NEEDS_APPROVAL until #9 wires; plain --force is unreachable from the schema; rejects unknown remotes via assertRemoteAllowed).
+
+Phase D (gh PR ops): gh.pr.create (body via --body-file tmpfile to dodge argv limits; parses URL + number from stdout), gh.pr.list (--json, normalises author.login → author string), gh.pr.view (parses mergeable + reviews). All three covered by stub-binary tests using a fake `gh` script in PATH; real GitHub testing belongs in Phase F.
+
+Test count: 61/61 green across 6 files (policy: 20, parsers: 10, tools-readonly: 7, tools-write: 10, tools-remote: 8, tools-gh: 6). Typecheck clean. Phase E (tool-host opt-in) and Phase F (agency dry-run) are next.
