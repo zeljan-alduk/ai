@@ -5482,3 +5482,32 @@ ROADMAP.md: new Wave-Iter section above Wave-4 listing the five #1 / #4 / #9 / �
 Verification: tsc clean across @aldo-ai/cli + @aldo-ai/web; 93 §11 vitest cases pass + 1 smoke skipped (no ALDO_TEST_LOCAL_MODEL); 382 web tests still green. Existing pre-existing CLI flakes (bootstrap-persistence + cli.test.ts mcp-ls) unchanged on stashed pre-change tree.
 
 Wave-Iter total (across 9 commits 6c9f3c1..67d5b81 + this commit): ~250 new tests across engine/registry/types/api-contract/api/eval/web/cli; the iterative loop is now the platform's single canonical primitive for tool-using agents, addressable from POST /v1/runs, /v1/assistant/stream, and `aldo code --tui`.
+
+2026-05-04T13:51Z — engineer (claude opus 4.7, 1M ctx) — DOCS + OpenAPI surface updates for Wave-Iter.
+
+The platform's documentation surfaces (in-tree markdown, on-site docs, OpenAPI / Scalar / Redoc) didn't yet reflect the §9/§10/§11 work. This commit closes that gap.
+
+OpenAPI / Scalar / Redoc:
+- platform/openapi/src/schemas.ts — registered descriptions for the new wire shapes (PendingApprovalWire, ListPendingApprovalsResponse, ApproveRunRequest, RejectRunRequest, ApprovalDecisionResponse, IterationWire, IterationTerminationConditionWire, IterationSummaryStrategyWire). Schema registration is automatic — the registry iterates every named export from @aldo-ai/api-contract — so adding the schemas only required adding the descriptions.
+- platform/openapi/src/operations/runs.ts — registered three new operations: GET /v1/runs/{id}/approvals, POST /v1/runs/{id}/approve, POST /v1/runs/{id}/reject. Each carries a description covering the engine contract (404 not_found / 503 runtime_unavailable / fail-closed synthesis when no controller is wired).
+- platform/openapi/tests/runs-ops.test.ts — 5 new assertions: each new path registered; ApproveRunRequest / RejectRunRequest bound to the right body refs; five approval components + three iteration components present in components.schemas.
+- /api/docs (Scalar) and /api/redoc render from buildOpenApiSpec at request time, so no static regeneration needed — the new schemas + paths surface automatically when the OpenAPI changes deploy.
+
+In-tree DOCS:
+- MISSING_PIECES.md §12 — gap-to-real-virtual-agency assessment. Honest decomposition: 3-5 days for a controlled supervised demo, 2-3 weeks for an unattended single-agent engagement, 6-10 weeks for an unattended multi-week commercial engagement. Eight load-bearing items ranked by weight: multi-agent coordination tested in production, cross-run memory (#6), aldo-git, customer-facing engagement surface, cost/budget governance, real eval suites, browser MCP (#7), vision capability (#8). Plus an explicit "what's NOT the blocker" call-out (engine quality, model quality, privacy posture, replay all sound).
+
+Web docs site (apps/web):
+- lib/docs/registry.ts — three new pages: concepts/iterative-loop, concepts/approval-gates, guides/aldo-code.
+- content/docs/concepts/iterative-loop.md — primitive reference: spec block schema, runtime invariants per cycle, tool-failure-doesn't-crash semantics, approval-gate composition, replay surfaces, when NOT to use iteration.
+- content/docs/concepts/approval-gates.md — full approval-gate doc: spec config (never/always/protected_paths), runtime contract (per-call await, AbortSignal handling), fail-closed posture, API surface, web banner + TUI dialog UX, replay/audit invariants.
+- content/docs/guides/aldo-code.md — author-facing TUI guide: install, headless mode, flags table, interactive layout + glyphs, approval prompts, slash commands, --resume, recommended cycle budgets, comparison vs Claude Code / OpenCode / Aider.
+- pnpm run generate-api-docs — regenerated 166 endpoint specs (gitignored). New approve/reject/approvals endpoints land.
+- pnpm run build-docs-search-index — search index covers 193 entries (was 190).
+
+Verification:
+- @aldo-ai/openapi: 92 tests pass (87 prior + 5 new). tsc clean.
+- @aldo-ai/web: 382 tests pass; tsc clean. Search index regenerated cleanly.
+
+Deferred:
+- Static API doc JSONs for approve/reject don't carry the Zod-schema match because the generator's naming heuristic ('<EndpointTitleCase>Request') doesn't match the contract names ('ApproveRunRequest'). Scalar + Redoc render the canonical OpenAPI which has the schemas attached, so this is cosmetic; generator naming-convention extension is its own commit.
+- Classic Swagger UI page — we ship Scalar at /api/docs and Redoc at /api/redoc plus the `aldo openapi dump` CLI; a third viewer would be redundant.

@@ -38,6 +38,24 @@ const DESCRIPTIONS: Record<string, string> = {
   ListAgentsResponse: 'Paginated list of agents.',
   CreateRunRequest: 'Body for `POST /v1/runs` — creates a new run.',
   CreateRunResponse: '`POST /v1/runs` response — the freshly-created run summary.',
+  // MISSING_PIECES #9 — approval-gate wire shapes.
+  PendingApprovalWire:
+    'A pending approval surfaced when an iterative agent\'s tool call hits a `tools.approvals: always` rule. The engine pauses until the approver POSTs `/v1/runs/:id/approve` or `/reject`.',
+  ListPendingApprovalsResponse:
+    'Body of `GET /v1/runs/:id/approvals` — every pending approval for the run, in request order.',
+  ApproveRunRequest:
+    'Body for `POST /v1/runs/:id/approve` — resolves the pending approval keyed by `callId` as approved. Optional free-form `reason` for audit.',
+  RejectRunRequest:
+    'Body for `POST /v1/runs/:id/reject` — resolves the pending approval as rejected. `reason` is REQUIRED so operators justify the denial.',
+  ApprovalDecisionResponse:
+    'Response for both `/approve` and `/reject` — echoes the decision (approver, reason, at) so the caller can render the audit row.',
+  // MISSING_PIECES §9 — iteration block on agent specs (additive).
+  IterationWire:
+    'Wave-Iter — leaf-loop iteration block on an agent spec. Distinct from `composite.iteration` (multi-agent supervisor); this one drives `IterativeAgentRun`.',
+  IterationTerminationConditionWire:
+    'Discriminated union of declarative termination matchers — text-includes | tool-result | budget-exhausted. The loop fires the FIRST match in spec order.',
+  IterationSummaryStrategyWire:
+    'rolling-window | periodic-summary — picks how `IterativeAgentRun` compresses history when token utilisation crosses 80% of `contextWindow`.',
 };
 
 /**

@@ -117,6 +117,20 @@ export const STATIC_DOC_PAGES: ReadonlyArray<DocPage> = [
       'Every node boundary is a checkpoint. Edit-and-resume any step against a different model.',
   },
   {
+    slug: 'concepts/iterative-loop',
+    section: 'concepts',
+    title: 'Iterative agent loop',
+    summary:
+      'Agents that loop until done — declarative termination conditions, parallel tool dispatch, history compression. The single canonical primitive for tool-using agents.',
+  },
+  {
+    slug: 'concepts/approval-gates',
+    section: 'concepts',
+    title: 'Approval gates',
+    summary:
+      'Per-tool spec config that suspends the loop on destructive boundaries until a human approves. Fail-closed: misconfigured approvals never silently dispatch.',
+  },
+  {
     slug: 'concepts/agency',
     section: 'concepts',
     title: 'Reference agency',
@@ -183,6 +197,13 @@ export const STATIC_DOC_PAGES: ReadonlyArray<DocPage> = [
     title: 'MCP server',
     summary:
       'Drive ALDO AI from Claude Desktop, Cursor, Claude Code, or any MCP-compatible client.',
+  },
+  {
+    slug: 'guides/aldo-code',
+    section: 'guides',
+    title: 'aldo code (interactive coding TUI)',
+    summary:
+      "The platform's terminal coding companion. Streamed conversation, inline tool tiles, modal approval prompts, slash commands, and cross-session resume — built on `IterativeAgentRun`.",
   },
   {
     slug: 'sdks/python',

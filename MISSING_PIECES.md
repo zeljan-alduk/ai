@@ -1317,3 +1317,207 @@ Here's the revised post-Sprint-1 plan that integrates them:
 After Sprint 4 the platform stops being the artefact under construction
 and starts being the engine that builds new artefacts. That's the
 inflection.
+
+---
+
+## 12. Gap to a real virtual-agency engagement (assessed 2026-05-04, post-Wave-Iter)
+
+After the Wave-Iter sweep (§9 + Sprint 3 + §10 + §11 Phases A–F all
+shipped on `claude/ai-agent-orchestrator-hAmzy`), the natural question
+is: **how close is the platform to actually being hired as a virtual
+agency on a real customer project, end-to-end, mostly unsupervised?**
+
+Honest answer: **3–5 days for a controlled demo, 6–10 weeks for an
+unattended commercial engagement.** The blocker isn't engine quality
+— `IterativeAgentRun` is sound, has 240+ tests, and ships in three
+addressable surfaces (API, assistant chat panel, `aldo code` TUI).
+The blockers are coordination, memory, customer-facing surface, and
+operational glue. This section names them.
+
+### What's ready today
+
+The **single-task** loop works against frontier and local models.
+A user runs `aldo code --tui "build me X"`, the loop reads / writes /
+executes / iterates / pauses on destructive boundaries for human
+approval, and the session resumes across days. Replay on
+`/runs/<id>` shows exactly what the agent did per cycle. Eval rubric
+scores the final output via the existing string-based evaluators.
+
+That is roughly **Aider / Claude Code parity for one agent on one
+brief**, with the LLM-agnostic + privacy-tier + replay differentiation.
+For a controlled supervised demo on a small project, this is enough.
+
+### What's missing for an unsupervised multi-day agency engagement
+
+The list below is ranked by load-bearing weight (most important first).
+Effort estimates are mine, in elapsed engineering time for one
+engineer.
+
+#### 12.1 Multi-agent orchestration tested in production (2–3 weeks)
+
+The wave-9 composite orchestrator
+(`composite.strategy: sequential | parallel | debate | iterative`)
+exists and has been tested with mocked subagents. The reference
+agency tree (`agency/direction/principal.yaml` →
+`architect.yaml` → `tech-lead.yaml` → `code-reviewer.yaml` /
+`backend-engineer.yaml`) is configured but has **never been run
+end-to-end against a real brief**.
+
+A real agency project requires the supervisor's input/output
+projection grammar (`composite.subagents[].inputMap` evaluator) +
+the `composite.iteration.terminate` predicate runtime + cross-agent
+state handoff working in production, not just in unit tests.
+
+**Out:** unsupervised 5-step coordination
+(intake → architect → engineer → review → ship).
+**Effort:** 2–3 weeks if the existing primitives hold up; longer if
+real briefs surface design gaps the unit-tested composite missed.
+
+#### 12.2 Memory across runs (#6, deferred per ROADMAP) — 1 week
+
+Each `aldo code` session has a JSON sidecar; agency runs don't share
+state. A multi-day project (Monday: scaffold → Wednesday: review →
+Friday: ship) needs the `parent_run_id` linkage + project-scoped
+memory store called out in §3 #6.
+
+Concretely: the architect's "decided on Postgres + Hono" decision in
+run `r123` has to be visible to the engineer in run `r456` two days
+later without the user re-explaining. Right now there's no shared
+memory plane between sibling runs.
+
+**Out:** continuity across the agency's working sessions.
+**Effort:** 1 week. The platform side is small — `MemoryStore` shape
+already exists in `@aldo-ai/engine`; the wiring is the work.
+
+#### 12.3 `aldo-git` MCP server (Sprint 4, deferred) — 3 days
+
+The agent can write files but can't `git commit`, branch, or open a
+PR. Approval gates (#9) make this safe to build now (force-push gets
+gated as a `protected_paths`-equivalent operation).
+
+Without this, the agency's output is *files on disk* — not *PR opened
+on the customer's repo*. That's the difference between a demo and an
+engagement.
+
+**Out:** the agency leaves git-shaped artefacts in the customer's
+repo, not just patches on disk.
+**Effort:** 3 days. The shell-exec MCP from Sprint 1 already covers
+80% of the surface; `aldo-git` adds typed tool-call shapes for
+common operations.
+
+#### 12.4 Customer-facing engagement surface — 1–2 weeks
+
+Today: an approver hits a banner on `/runs/<id>` and clicks Approve.
+Real agency engagement needs:
+
+- Customer can review the ticket queue.
+- Comment on architectural decisions before code starts.
+- Request changes mid-sprint.
+- Sign off on milestones.
+
+None of that surface exists. The threads UI is the closest analogue —
+it groups runs by `thread_id` — but it's not engagement-shaped (no
+sign-off, no milestone tracking, no SOW alignment).
+
+**Out:** a customer can log in, see what the agency is doing, and
+intervene without the platform owner relaying.
+**Effort:** 1–2 weeks of frontend + a small slice of API.
+
+#### 12.5 Cost / budget governance for unsupervised multi-day runs — 3 days
+
+A solo `aldo code` session has a `$2/run` cap. An agency engagement
+spans **100+ runs across a week**. The spend dashboard
+(`/observability/spend`) shows historicals; there's no
+*"stop the agency at $X total this engagement"* hard guardrail.
+
+For an unsupervised run, this matters: a stuck loop on Claude Opus
+at $75/Mtok-out can burn $200 in a single overnight session if no
+ceiling fires.
+
+**Out:** an engagement-level USD cap that hard-stops every active
+agency run when crossed, surfaced as a tenant-level setting.
+**Effort:** 3 days. The per-run budget already exists; this is a
+tenant-scope aggregation + shutoff signal.
+
+#### 12.6 Eval suites that catch real regressions — 1 week
+
+The eval rubric scores iterative runs (Phase F shipped that), but
+**the suites don't exist yet** for "did the agent actually deliver
+working software?" Examples that need writing:
+
+- `coverage_no_regress` — `pnpm test --coverage` lcov delta ≥ 0.
+- `bundle_size_budget` — `next build` First Load JS ≤ N kB.
+- `no_security_holes` — `pnpm audit` adds no high-severity rows.
+- `migration_safety` — DB migration is reversible + non-locking.
+
+This is a content problem, not a platform problem — someone has to
+write the evaluators. The infrastructure (`/v1/evaluators` CRUD,
+`runStoredEvaluator` dispatch) is already shipped.
+
+**Out:** the agency's promotion gate catches the failure modes a
+human reviewer would.
+**Effort:** 1 week of authoring + tuning against a representative
+sample of past runs.
+
+#### 12.7 Browser automation MCP (#7, deferred) — 1 week
+
+Picenhancer-class projects need to verify deploys, click through
+UIs, scrape docs. None of this works today. v0 Playwright wrapper
+behind an MCP server is enough for the obvious shapes.
+
+**Out:** the agency can verify "the page actually rendered" not just
+"the build passed."
+**Effort:** 1 week.
+
+#### 12.8 Vision capability (#8, deferred) — 3 days
+
+Designs come as Figma exports / mockup screenshots. Capability
+classes already include `vision`; what's missing is the spec wiring
++ a real agent declaring `requires: [vision]` + a frontier-vision
+model entry in the catalog (Claude / GPT-4o / Gemini 2.5 Pro
+all qualify).
+
+**Out:** the agency can take a Figma export as input.
+**Effort:** 3 days at the gateway + spec layer.
+
+### Summary scorecard
+
+| Goal | Current state | Effort to ship |
+|---|---|---|
+| Controlled supervised demo (small project, dev babysitting approvals) | **3–5 days away** — needs §12.3 (`aldo-git`) + a couple of §12.6 evals + a real run-through | 3–5 days |
+| Unattended single-engineer-replacement engagement (one agent, simple project, customer reviews PRs) | **2–3 weeks away** — adds §12.1 supervisor coordination + §12.2 memory | 2–3 weeks |
+| Unattended multi-week commercial engagement (full agency, customer touchpoints, hard cost cap) | **6–10 weeks away** — adds §12.4 surface + §12.5 governance + §12.6 real eval gates | 6–10 weeks |
+| Picenhancer-class engagement (figma → ship → verify) | **8–12 weeks away** — adds §12.7 browser + §12.8 vision | 8–12 weeks |
+
+### What's NOT the blocker
+
+- **Engine quality.** `IterativeAgentRun` has 240+ tests; the loop primitive is sound.
+- **Model quality.** Claude Sonnet 4.6 is competitive on real refactors; Qwen-Coder 32B is good enough for small files. The platform routes correctly to either.
+- **Privacy / compliance posture.** Privacy tiers are fail-closed; tenant key gating works; the audit trail (`run_events` + `routing.privacy_sensitive_resolved`) is real.
+- **Replay.** The `/runs/<id>` cycle tree shows every cycle, every tool call, every approval decision.
+
+### Honest call
+
+The platform is **mid-funnel**. The engine is past the hardest part
+(building a credible iterative-loop primitive that handles tool calls,
+approval, replay, and termination). The remaining work is **operational
+glue** — git, memory, customer surface, governance — none of which is
+research-scary, but all of which is needed before "we'll let the
+agency run unsupervised on a real project" stops being a demo
+disclaimer.
+
+The next leveraged chunk is §12.3 (`aldo-git`) + a working dry-run of
+the existing reference agency on a contrived but real project. That
+takes us from *"the loop primitive ships"* to *"the agency primitive
+ships."* Estimated 5 days, dependent on no design surprises in the
+composite orchestrator's input/output projection grammar.
+
+After that: §12.2 (memory) + §12.4 (engagement surface) is the path
+to a real first paying customer of the agency, not just the platform.
+
+Both are scope-controlled. The picenhancer-class ambition (§12.7 +
+§12.8) can ride the second engagement.
+
+---
+
+(end of MISSING_PIECES.md)

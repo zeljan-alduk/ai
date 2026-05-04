@@ -4,13 +4,17 @@
  */
 
 import {
+  ApprovalDecisionResponse,
+  ApproveRunRequest,
   BulkRunActionRequest,
   BulkRunActionResponse,
   CreateRunRequest,
   CreateRunResponse,
   GetRunResponse,
   GetRunTreeResponse,
+  ListPendingApprovalsResponse,
   ListRunsResponse,
+  RejectRunRequest,
   RunCompareResponse,
   RunSearchRequest,
   RunSearchResponse,
@@ -260,6 +264,63 @@ export function registerRunOperations(reg: OpenAPIRegistry): void {
       },
     },
     responses: { '200': jsonResponse('Resumed.', { type: 'object' }), '401': Resp401() },
+  });
+
+  // ─── MISSING_PIECES #9 — approval gates ────────────────────────────
+  // Iterative agents with `tools.approvals: always` (or
+  // `protected_paths`) suspend the loop on every gated tool call.
+  // The three routes below let an out-of-band approver list pending
+  // requests and resolve them.
+
+  reg.registerPath({
+    method: 'get',
+    path: '/v1/runs/{id}/approvals',
+    summary: 'List pending approvals for a run',
+    description:
+      "Lists every approval the engine is currently blocked on for this run. Empty when nothing is pending. The engine pauses the iterative loop on every tool call whose spec marks `tools.approvals: always`; an approver POSTs `/approve` or `/reject` (below) to resolve.",
+    tags: ['Runs'],
+    security: SECURITY_BOTH,
+    parameters: [pathParam('id', 'Run id.', '<run-id>')],
+    responses: {
+      '200': jsonResponse('Pending approvals (possibly empty).', ListPendingApprovalsResponse),
+      '401': Resp401(),
+    },
+  });
+
+  reg.registerPath({
+    method: 'post',
+    path: '/v1/runs/{id}/approve',
+    summary: 'Approve a pending tool call',
+    description:
+      "Resolves a pending approval as approved. The engine resumes the loop and dispatches the tool. The decision is auditable — both `tool.pending_approval` and `tool.approval_resolved` events land on the run-event log. Returns 404 when no pending approval matches `(runId, callId)`; 503 when the runtime / approval controller isn't wired for this tenant (typically because no providers are enabled).",
+    tags: ['Runs'],
+    security: SECURITY_BOTH,
+    parameters: [pathParam('id', 'Run id.', '<run-id>')],
+    request: { required: true, content: { 'application/json': { schema: ApproveRunRequest } } },
+    responses: {
+      '200': jsonResponse('Approval resolved.', ApprovalDecisionResponse),
+      '401': Resp401(),
+      '404': Resp404('approval'),
+      '422': Resp422(),
+    },
+  });
+
+  reg.registerPath({
+    method: 'post',
+    path: '/v1/runs/{id}/reject',
+    summary: 'Reject a pending tool call',
+    description:
+      "Resolves a pending approval as rejected. The engine appends a synthetic `tool_result` payload of `{ rejected: true, reason, approver }` and resumes the loop — the agent observes the rejection and decides what to do next (no exception thrown). `reason` is REQUIRED so operators justify the denial.",
+    tags: ['Runs'],
+    security: SECURITY_BOTH,
+    parameters: [pathParam('id', 'Run id.', '<run-id>')],
+    request: { required: true, content: { 'application/json': { schema: RejectRunRequest } } },
+    responses: {
+      '200': jsonResponse('Rejection resolved.', ApprovalDecisionResponse),
+      '401': Resp401(),
+      '404': Resp404('approval'),
+      '422': Resp422(),
+    },
   });
 
   reg.registerPath({
