@@ -41,7 +41,7 @@ import type {
   ToolResult,
 } from '@aldo-ai/types';
 
-interface McpServerSpec {
+export interface McpServerSpec {
   readonly command: string;
   readonly args: readonly string[];
   readonly env?: Readonly<Record<string, string>>;
@@ -51,8 +51,11 @@ interface McpServerSpec {
  * Default registry — known MCP servers shipped in this repo. An
  * operator can extend by passing additional entries to
  * createMcpToolHost({ servers }).
+ *
+ * Exported for tests so the env-gated branches (aldo-shell, aldo-git)
+ * can be asserted without spawning real MCP children.
  */
-function defaultServers(): Record<string, McpServerSpec> {
+export function defaultServers(): Record<string, McpServerSpec> {
   // Resolve the in-repo aldo-fs entry. This file is at
   // apps/api/src/mcp/tool-host.ts; the entry is at
   // mcp-servers/aldo-fs/src/index.ts (5 levels up).
@@ -115,6 +118,38 @@ function defaultServers(): Record<string, McpServerSpec> {
     servers['aldo-shell'] = {
       command: 'node',
       args: shellArgs,
+    };
+  }
+
+  // MISSING_PIECES.md §12.3 / §13 — opt-in git + gh MCP. Default OFF for
+  // the same reason as aldo-shell: an agent on a sensitive tenant should
+  // never get write access to a working tree without explicit operator
+  // action. Required env: ALDO_GIT_ENABLED=true and ALDO_GIT_ROOT=<abs>.
+  // Optional env passed through verbatim: ALDO_GIT_PROTECTED_BRANCHES,
+  // ALDO_GIT_ALLOWED_REMOTES, ALDO_GIT_DEFAULT_CWD, ALDO_GIT_BIN,
+  // ALDO_GH_BIN, ALDO_GIT_TIMEOUT_MS, ALDO_GIT_MAX_TIMEOUT_MS.
+  const gitEnabled = (process.env.ALDO_GIT_ENABLED ?? '').toLowerCase();
+  if (gitEnabled === 'true' || gitEnabled === '1' || gitEnabled === 'yes') {
+    const gitRoot = (process.env.ALDO_GIT_ROOT ?? '').trim() || repoRoot;
+    const aldoGitEntry = fileURLToPath(
+      new URL('../../../../mcp-servers/aldo-git/src/index.ts', import.meta.url),
+    );
+    const gitArgs = [tsxBin, aldoGitEntry, '--roots', gitRoot];
+    const passThroughGit = (envName: string, flag: string): void => {
+      const v = process.env[envName]?.trim();
+      if (v !== undefined && v.length > 0) gitArgs.push(flag, v);
+    };
+    passThroughGit('ALDO_GIT_PROTECTED_BRANCHES', '--protected-branches');
+    passThroughGit('ALDO_GIT_ALLOWED_REMOTES', '--allowed-remotes');
+    passThroughGit('ALDO_GIT_DEFAULT_CWD', '--default-cwd');
+    passThroughGit('ALDO_GIT_BIN', '--git-bin');
+    passThroughGit('ALDO_GH_BIN', '--gh-bin');
+    passThroughGit('ALDO_GIT_TIMEOUT_MS', '--timeout-ms');
+    passThroughGit('ALDO_GIT_MAX_TIMEOUT_MS', '--max-timeout-ms');
+    passThroughGit('ALDO_GIT_OUTPUT_TAIL', '--output-tail');
+    servers['aldo-git'] = {
+      command: 'node',
+      args: gitArgs,
     };
   }
 

@@ -5531,3 +5531,13 @@ Phase C (remote ops): git.fetch / git.pull (--ff-only hard-coded — diverged hi
 Phase D (gh PR ops): gh.pr.create (body via --body-file tmpfile to dodge argv limits; parses URL + number from stdout), gh.pr.list (--json, normalises author.login → author string), gh.pr.view (parses mergeable + reviews). All three covered by stub-binary tests using a fake `gh` script in PATH; real GitHub testing belongs in Phase F.
 
 Test count: 61/61 green across 6 files (policy: 20, parsers: 10, tools-readonly: 7, tools-write: 10, tools-remote: 8, tools-gh: 6). Typecheck clean. Phase E (tool-host opt-in) and Phase F (agency dry-run) are next.
+
+2026-05-04T23:52Z — engineer (claude opus 4.7, 1M ctx) — aldo-git Phase E: tool-host opt-in.
+
+apps/api/src/mcp/tool-host.ts: new aldo-git branch in defaultServers(), mirroring the aldo-shell pattern (default OFF; gated by ALDO_GIT_ENABLED + ALDO_GIT_ROOT). Pass-through env: ALDO_GIT_PROTECTED_BRANCHES, ALDO_GIT_ALLOWED_REMOTES, ALDO_GIT_DEFAULT_CWD, ALDO_GIT_BIN, ALDO_GH_BIN, ALDO_GIT_TIMEOUT_MS, ALDO_GIT_MAX_TIMEOUT_MS, ALDO_GIT_OUTPUT_TAIL — all forwarded as the matching CLI flags to aldo-mcp-git.
+
+Exported defaultServers + McpServerSpec for test introspection without spawning real MCP children.
+
+apps/api/tests/mcp-tool-host.test.ts (new): 8 cases covering the env-gated branches — aldo-fs always present, aldo-shell off-by-default + on-with-env, aldo-git off-by-default + on-with-env, env pass-through (--protected-branches, --allowed-remotes, --timeout-ms), accepting "true"/"1"/"yes" as on, falsy values as off.
+
+Verification: 521/521 apps/api tests green (was 513; 8 new tool-host tests added). Typecheck clean. The aldo-git MCP can now be wired into a running API by exporting ALDO_GIT_ENABLED=true and ALDO_GIT_ROOT=<abs>.
