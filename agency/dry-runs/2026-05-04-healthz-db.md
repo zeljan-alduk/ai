@@ -365,3 +365,95 @@ the dry-run):
   agent's `tools.mcp[].allow` already covers tool-shape gating; if
   a future agent should only read `org` but not `private`, the
   current MemoryStore design supports it via the agency YAML.
+
+---
+
+## 10. Update — 2026-05-05 (item 5.4 — driver harness shipped)
+
+The driver harness landed at `apps/api/tests/agency-dry-run/`:
+
+- `healthz-db.ts` — exports `runDryRun({mode})` and the canonical
+  brief constant. Loads all six brief-touching specs in parallel
+  (principal, architect, tech-lead, backend-engineer, code-reviewer,
+  security-auditor) via the existing `@aldo-ai/registry` `parseYaml`
+  + `readFile`. Wires a `StubRuntimeAdapter` (implementing
+  `SupervisorRuntimeAdapter`) into a real `Supervisor` from
+  `@aldo-ai/orchestrator`. Synthesises plausible per-agent outputs
+  (e.g. `{adr_document: {…}}` for architect) so input-map projections
+  see realistic shapes.
+- `healthz-db.test.ts` — 8 vitest cases. Asserts every spec loads,
+  the principal composite completes without throwing, the expected
+  `composite.*` events fire, the architect spawn lands, cost rolls
+  up non-zero, and the post-mortem renders with the right anchors.
+- `run.mjs` — minimal stdout dumper for human invocation. Output
+  archived at `agency/dry-runs/2026-05-05-healthz-db-stub.md`.
+
+### What the stub-mode run *did* prove
+
+- All six agency YAMLs validate against the registry schema
+  (`agentV1YamlSchema`) and translate to `AgentSpec` cleanly.
+- The composite orchestrator's `Supervisor.runComposite` resolves
+  the principal's subagent (architect), spawns the child, awaits
+  completion, rolls up usage, and returns the strategy result —
+  no exceptions, no schema mismatches.
+- The `composite.*` event surface (`child_started`,
+  `child_completed`, `usage_rollup`) emits in the expected order.
+- The post-mortem renderer turns the captured run-log into a
+  human-readable artefact suitable for archival.
+
+### What the stub-mode run *did not* prove
+
+- **Recursive composite expansion**. The stub adapter treats every
+  child as a leaf — it does not recurse into the architect's own
+  composite block (which would cascade architect → tech-lead →
+  backend-engineer). Verifying that requires either a real
+  `EngineRuntimeAdapter` (which calls back into `runComposite` when
+  a child spec carries a composite block) or a smarter stub that
+  detects nested composites and inlines them. The orchestrator's
+  `engine-integration.test.ts` suite already exercises that path
+  in isolation.
+- **Real model behaviour**. The stub synthesises outputs by agent
+  name; it does not call any provider. Live mode is reserved via
+  the `mode: 'live'` opt-in (currently throws "not yet wired").
+- **Real MCP server behaviour**. No `aldo-fs` write, no `aldo-shell`
+  exec, no `aldo-git` commit, no `aldo-memory` read happens. The
+  servers are independently tested (`pnpm --filter @aldo-ai/mcp-*
+  test`); the dry-run smoke verifies the orchestration layer above
+  them.
+- **PR creation on a real GitHub remote.** Live-mode work; the
+  stub doesn't drive `gh.pr.create`.
+
+### Honest call (2026-05-05, end of day)
+
+**The agency primitive ships in stub form** — every primitive the
+§12 ranking named is now wireable, the composite executes against
+the real YAML tree, and the post-mortem renders. **It does NOT yet
+ship in live form** — that needs a real `EngineRuntimeAdapter`
+hook-up, frontier or local model credentials, and a smoke run on a
+disposable worktree against a real `gh` auth state.
+
+**Estimated time to live mode**: 1–2 days.
+
+- The `EngineRuntimeAdapter` work — wiring the supervisor's
+  `spawnChild` to the engine's existing `runtime.spawn` so child
+  runs go through the gateway + tool host — is mostly the inverse
+  of the stub adapter. ½–1 day.
+- Cred + worktree setup, plus the contained smoke. ½–1 day.
+
+That moves us from **"the agency primitive ships in stub form"** to
+**"the agency primitive ships against a real customer-shaped repo."**
+
+### Revised time-to-real-dry-run table
+
+| Item | Effort | Status |
+|---|---|---|
+| 5.1 `repo-fs` alias | ½ d | ✅ shipped 2026-05-05 |
+| 5.3 `github` alias + 4 gh tools | 1 d | ✅ shipped 2026-05-05 |
+| 5.2 `aldo-memory` MCP (filesystem v0) | 3–5 d (came in at ~½ d) | ✅ shipped 2026-05-05 |
+| 5.4 Driver harness (stub mode) | 1 d | ✅ shipped 2026-05-05 |
+| 5.5 Live-mode `EngineRuntimeAdapter` + smoke | 1–2 d | ⏳ remaining |
+
+The whole §13 Phase G alignment trio + the §12.2 long pole + the
+driver harness collapsed to one calendar day. **The live-mode
+adapter is now the one item between stub and a real PR landing on
+a real remote.**

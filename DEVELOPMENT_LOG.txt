@@ -5595,3 +5595,28 @@ Out-of-scope (named in the post-mortem follow-on):
 - Memory-shape ACLs beyond tenant + scope. Tool allow-lists already cover the interesting cases.
 
 Net: the agency dry-run is now blocked on **only** the driver harness (item 5.4). That's ~1 day of work and will be tackled next.
+
+2026-05-05T00:18Z — engineer (claude opus 4.7, 1M ctx) — §13 / item 5.4 driver harness shipped (stub mode).
+
+apps/api/tests/agency-dry-run/ (new):
+- healthz-db.ts (~370 LoC) — exports HEALTHZ_DB_BRIEF + runDryRun({mode}). Loads all six brief-touching specs (principal, architect, tech-lead, backend-engineer, code-reviewer, security-auditor) via @aldo-ai/registry's parseYaml + readFile. Wires a StubRuntimeAdapter (implements SupervisorRuntimeAdapter) into a real Supervisor from @aldo-ai/orchestrator. Synthesises plausible per-agent outputs (architect → adr_document, engineer → artefact + tests_passed, reviewer → approve, etc.). Renders a markdown post-mortem from the captured run-log.
+- healthz-db.test.ts — 8 cases asserting every spec loads, composite completes, expected events fire, architect spawn lands, cost rolls up, post-mortem anchors render, live mode rejects, custom brief is honoured.
+- run.mjs — minimal stdout dumper for human invocation.
+
+Stub-mode run output archived at agency/dry-runs/2026-05-05-healthz-db-stub.md. Sample:
+- ✅ composite completed
+- 6/6 specs loaded
+- 1 architect spawn (the principal's only subagent)
+- composite.{child_started, child_completed, usage_rollup} all fired
+- $0.0320 synthetic spend / 4000 tokens-in / 800 tokens-out
+
+Verification:
+- @aldo-ai/api: 537/537 tests (was 529; +8 dry-run smoke), tsc clean.
+
+What the stub run did NOT prove:
+- Recursive composite expansion (architect → tech-lead → engineer + reviewer cascade). The stub treats every child as a leaf; recursing on nested composite blocks needs either a real EngineRuntimeAdapter or a smarter stub.
+- Real model behaviour. The stub synthesises by agent name.
+- Real MCP I/O (no aldo-fs write, no aldo-shell exec, no aldo-git commit, no aldo-memory read). Each MCP server is independently tested; the dry-run smoke verifies the orchestration layer above them.
+- A real PR on a real remote.
+
+Honest call: the agency primitive ships in stub form. Item 5.5 (live-mode EngineRuntimeAdapter) is the one item between this and "agency primitive ships against a real customer-shaped repo" — estimated 1-2 days. The whole §13 Phase G alignment trio + aldo-memory + driver harness collapsed to a single calendar day (2026-05-05).
