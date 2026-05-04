@@ -897,3 +897,423 @@ Realistic call: ship #1 first (5–7 days), then commit to #9 + #4 in a
 single sprint (estimated combined effort: ~5 days). Skip #6 (memory)
 until we see a multi-run workflow demand it; skip #7/#8 until UX
 iteration is on the table.
+
+---
+
+## 10. Execution plan — retarget the assistant onto #1 (drafted 2026-05-04)
+
+`/v1/assistant/stream` (`apps/api/src/routes/assistant.ts`) is wired
+today as a single-call SSE relay: one gateway call → text deltas →
+done. The route's own header explicitly defers tool calls + iteration
+to `IterativeAgentRun` (§3 #1). With #1 shipped per §9, the assistant
+becomes the most valuable dogfood customer for the loop primitive —
+every Sprint-1 tool (fs.write/delete/move/mkdir, shell.exec) becomes
+addressable from the chat panel without a new abstraction.
+
+This section is the plan to make that flip.
+
+**Goal**: replace the assistant route's stub-streamer-with-text-only
+shape with a thin adapter onto `IterativeAgentRun`, keeping the same
+SSE wire (so the web `assistant-panel.tsx` doesn't need a rewrite),
+gaining tool calls, replay, billing telemetry, and per-conversation
+persistence as side effects.
+
+**Target effort**: 1–2 working days *after* #1 has landed. Most of the
+weight is integration + careful UI mapping, not new platform code.
+
+### Phase A — Synthetic agent spec for the assistant (Day 1, AM)
+
+The assistant is not a YAML-defined agent today. The cleanest path
+forward is to build a synthetic `AgentSpec` at request time so
+`runtime.runAgent` doesn't need a special-case branch.
+
+**Files**:
+- `apps/api/src/lib/assistant-agent-spec.ts` (new, ~80 LoC) — exports
+  `buildAssistantAgentSpec(opts)`. Returns an `AgentSpec` with:
+  - `name: '__assistant__'`, `version: '0'`
+  - `capabilityClass: 'reasoning'`, `privacyTier: 'internal'`
+  - `prompt:` the existing `SYSTEM_PROMPT` literal lifted from
+    `routes/assistant.ts`
+  - `iteration: { maxCycles: 12, contextWindow: 128_000,
+    summaryStrategy: 'rolling-window', terminationConditions: [
+    { kind: 'text-includes', value: '<turn-complete>' } ] }`
+    — a chat turn is naturally short; 12 cycles handles the
+    longest reasonable tool-using exchange.
+  - `tools:` from the active tool host's `listTools()` filtered to a
+    safe per-tenant subset (defaults: `aldo-fs.fs.read`,
+    `aldo-fs.fs.list`, `aldo-fs.fs.search`, `aldo-fs.fs.stat`; opt-in
+    via env to add write + shell).
+- A new env contract: `ASSISTANT_TOOLS` env (comma-separated tool
+  refs) — explicit allowlist beats inferring from privacy posture.
+  Default is the read-only set above.
+
+**Tests**: 5 unit tests for the spec builder — defaults, env-driven
+tool list, overrides, sensible system-prompt defaults, structured
+shape validates against `@aldo-ai/api-contract`.
+
+**Acceptance**: `buildAssistantAgentSpec({ tenantId })` returns a spec
+that survives `AgentSpecSchema.parse`.
+
+**Commit**: `feat(api/assistant): synthetic AgentSpec builder for the assistant`
+
+### Phase B — Route swap (Day 1, PM)
+
+Replace the route's hand-rolled streamer with a `runtime.runAgent`
+call against the synthetic spec, mapping `RunEvent`s to the existing
+SSE frame shape the web panel already understands.
+
+**Files**:
+- `apps/api/src/routes/assistant.ts` (modify, ~80 LoC change):
+  - Remove `defaultStreamer` + the inline gateway/registry build.
+  - On request: `getOrBuildRuntimeAsync(deps, tenantId)` → use its
+    `runtime.runAgent({ spec: buildAssistantAgentSpec(...), inputs:
+    { messages: parsed.data.messages } })`.
+  - Iterate `RunEvent`s and translate to SSE frames:
+    - `model.response.textDelta` → `{ type: 'delta', text }`
+      (existing shape).
+    - `tool.results` → `{ type: 'tool', name, args, result }` (NEW
+      frame; web panel adds a renderer for it).
+    - `cycle.start` → ignored on the wire (debug-only via `?debug=1`).
+    - `run.completed` / `run.terminated_by` → existing
+      `{ type: 'done', tokensIn, tokensOut, usd, latencyMs, model }`.
+- `apps/web/components/assistant/assistant-panel.tsx` (modify, ~40
+  LoC): handle the new `tool` frame — render a small "Calling
+  fs.read…" tile inline; expand on click to show args + redacted
+  result. Existing delta-text rendering unchanged.
+
+**Tests**:
+- Existing assistant integration test (chat round-trip) still passes
+  against the real-runtime path with a stubbed gateway.
+- New test: `messages: [{ role: 'user', content: 'list /workspace' }]`
+  with a stubbed gateway that returns `{ toolCall: { tool:
+  'aldo-fs.fs.list', args: {...} } }` followed by a `<turn-complete>`
+  text on the next cycle — assert SSE frames include one `tool` event
+  + final `done` event.
+
+**Acceptance**:
+- 476 API tests still green + 1 new tool-frame test.
+- Manual: chat with `ASSISTANT_ENABLED=true` and `ASSISTANT_TOOLS`
+  including `aldo-fs.fs.read` answers a "what files are in apps/api/
+  src/routes/?" question by actually calling the tool.
+
+**Risk**: web SSE parsing is permissive on unknown frame `type`s
+(verified). Adding `tool` doesn't break older clients — they ignore
+the frame.
+
+**Commit**: `feat(api/assistant): retarget /v1/assistant/stream onto IterativeAgentRun`
+
+### Phase C — Persistence + threads linkage (Day 2)
+
+A chat is a multi-turn thread. Today the assistant is volatile (no
+DB persistence). Wire each `runtime.runAgent` invocation as a real
+`runs` row with a `thread_id` so the existing wave-19 threads UI
+shows the conversation alongside agent runs.
+
+**Files**:
+- `apps/api/src/routes/assistant.ts` (modify, ~30 LoC): take the
+  client-supplied `threadId` (optional; create one if missing). Pass
+  it to `runtime.runAgent` so the engine writes `runs.thread_id`.
+- `apps/web/components/assistant/assistant-panel.tsx` (modify):
+  store the active threadId in localStorage; resume on reload.
+- `apps/web/app/threads/[id]/page.tsx` (existing) — already shows runs
+  in a thread; assistant turns now appear there with the
+  `__assistant__` agent name, distinguishable by a small badge.
+
+**Tests**:
+- Chat round-trip persists to `runs` + `run_events`.
+- Spend dashboard sees the assistant's token + cost like any other
+  agent run.
+
+**Acceptance**: a chat thread is replayable via `/runs/<id>` with the
+cycle tree from §9 Phase D.
+
+**Commit**: `feat(api/assistant): persist chat turns as runs with thread_id`
+
+### Cross-cutting risks
+
+1. **Tool ACL surface for the assistant.** A loose `ASSISTANT_TOOLS`
+   env makes the assistant a write-capable agent without explicit
+   per-tenant gating. Ship default-read-only; require an explicit
+   env toggle for `aldo-fs.fs.write` and `aldo-shell.shell.exec`.
+2. **System prompt drift.** The system prompt in `assistant.ts:48`
+   is the source of truth today. Lifting it into
+   `assistant-agent-spec.ts` keeps it in one place, but a future
+   tenant-specific prompt override means we'll want a per-tenant
+   `system_prompt_override` (deferred — out of scope for this slice).
+3. **Latency regression.** `IterativeAgentRun`'s cycle bookkeeping
+   adds a few ms vs the current direct gateway call. Acceptable —
+   the user-visible TTFB is dominated by the model anyway.
+
+### Out of scope
+
+- Per-conversation memory across logical sessions (handled by §3 #6 —
+  `parent_run_id` + project-scoped memory store).
+- Approval-gated tool calls in the chat (handled by §3 #9 — the
+  assistant inherits the engine-level pause-and-prompt UX).
+
+### Sequencing summary
+
+| Phase | Days | Output | Depends on |
+|---|---|---|---|
+| A | 0.5 | Synthetic AgentSpec builder | §9 (#1 shipped) |
+| B | 0.5 | Route swap onto IterativeAgentRun | A |
+| C | 1 | Threads + replay persistence | B |
+
+After Phase C, the assistant is a fully-instrumented platform agent
+with replay, billing, eval-gating, and tool-using loops — for free.
+
+---
+
+## 11. Execution plan — `aldo code` interactive coding TUI (drafted 2026-05-04)
+
+ALDO already has a CLI (`apps/cli`, the `aldo` binary), but its
+commands are admin-shaped: `aldo run`, `aldo runs ls`,
+`aldo agent validate`, `aldo models ls`. The platform's headline
+demo — *the next picenhancer, built end-to-end inside ALDO* — needs a
+**Claude-Code-style interactive coding TUI** as its surface. This
+section is the plan to add it as a new subcommand: `aldo code`.
+
+**Goal**: a terminal session where the user types a natural-language
+brief, the agent loops through gateway calls + tool invocations
+(fs.write, shell.exec, aldo-git when shipped), the user sees progress
+streaming with approval prompts at destructive boundaries, and the
+session persists as a thread of replayable runs.
+
+**Target effort**: 5–10 working days for a competitive v0, after
+both #1 (loop primitive) and #9 (approval gates) ship.
+
+### Stack choices
+
+- **Renderer**: [`ink`](https://github.com/vadimdemedes/ink) (React
+  for CLIs). The CLI is already TypeScript + commander; ink integrates
+  cleanly without changing the bootstrap.
+- **Reuse**: the existing `apps/cli/src/bootstrap.ts` gateway/registry/
+  runtime wiring goes unchanged. The subcommand becomes a thin app
+  shell on top.
+- **No new platform code**: every capability the TUI needs is already
+  on the platform side once §9 + #9 ship.
+
+### Phase A — Headless loop (Day 1)
+
+Goal: a no-UI subcommand that proves the wiring before any pixels.
+
+**Files**:
+- `apps/cli/src/commands/code.ts` (new, ~120 LoC) — registers
+  `aldo code [brief]`. Loops:
+  1. Read the user brief (positional arg or stdin).
+  2. Build a synthetic `AgentSpec` (similar to §10 Phase A) named
+     `__cli_code__`, capability `coding-frontier` (or local fallback),
+     iteration block with `maxCycles: 50`.
+  3. Tool list defaults to fs read + write + shell.exec; configurable
+     via `--tools <ref,ref,ref>`.
+  4. Stream `RunEvent`s to stdout as plain JSON-Lines for now.
+  5. Exit when the run completes / terminates.
+- `apps/cli/src/commands/code-spec.ts` (new, ~60 LoC) — extracted
+  spec builder so the TUI in Phase B reuses it.
+
+**Tests**: integration test at `apps/cli/tests/code.test.ts` —
+sub-process the CLI with a stubbed gateway via `ALDO_LOCAL_DISCOVERY=
+none` + an in-memory fixture, assert exit-code 0 and JSONL frames.
+
+**Acceptance**: `aldo code "write hello.ts that logs 'hi'"` against a
+local model writes the file, runs typecheck (if asked), exits 0.
+
+**Commit**: `feat(cli): aldo code — headless iterative coding loop`
+
+### Phase B — `ink` TUI shell (Day 2–3)
+
+Goal: replace the JSONL output with a real interactive TUI.
+
+**Files**:
+- `apps/cli/src/commands/code/app.tsx` (new, ~250 LoC) — the ink
+  React app. Layout (top-to-bottom):
+  - **Conversation pane** (scrollable) — user messages + agent
+    responses, alternating bubbles like Claude Code's transcript.
+  - **Cycle indicator** — collapsible "Cycle 4 of 50" header with a
+    spinner during model calls.
+  - **Tool-call rows** — one row per pending/running/done tool call,
+    icon + tool name + truncated args + result preview. Inspired by
+    Claude Code's tool-card pattern.
+  - **Input box** (bottom) — multi-line, Enter to send, Shift+Enter
+    for newline, Ctrl+C to abort the in-flight run, Ctrl+D to exit.
+- `apps/cli/src/commands/code/components/Conversation.tsx`,
+  `ToolCall.tsx`, `Input.tsx`, `StatusLine.tsx` — splits ~50 LoC each.
+- `apps/cli/src/commands/code/state.ts` (new, ~80 LoC) — a small
+  reducer that consumes `RunEvent`s and produces UI state.
+
+**Tests**: ink-testing-library snapshots for:
+- Initial empty conversation.
+- One user turn → streaming agent response → final state.
+- Tool call landing during a streaming response renders inline.
+
+**Acceptance**: a real session against a local model produces a
+visually-coherent transcript with streaming text + tool rows.
+
+**Risk**: terminal width handling. ink ships with a `Static` component
+for already-rendered content; use it for completed turns to avoid
+re-layouts during long sessions.
+
+**Commit**: `feat(cli): aldo code — ink TUI shell`
+
+### Phase C — Approval prompts at destructive boundaries (Day 3–4)
+
+Depends on **#9 approval gates** being live. The engine pauses on
+`requires_approval: true` tool calls; the TUI surfaces those as
+modal-style approve/reject dialogs.
+
+**Files**:
+- `apps/cli/src/commands/code/components/ApprovalDialog.tsx` (new,
+  ~80 LoC) — full-width overlay with: tool name, args (syntax-
+  highlighted JSON), the agent's stated reason, big `[a]pprove` /
+  `[r]eject` / `[v]iew-full-args` keybinds.
+- `apps/cli/src/commands/code/state.ts` (modify): on
+  `tool.pending_approval` event, push a pending-approval to the UI;
+  on user input, POST `/v1/runs/:id/approve` (or call the engine
+  directly when running offline) and continue.
+
+**Tests**: snapshot a frame mid-approval; assert the dialog renders
+above the conversation.
+
+**Acceptance**: an `aldo code` session attempting `rm -rf workspace`
+pauses, shows the dialog, exits cleanly on reject.
+
+**Commit**: `feat(cli/code): approval-gated tool calls in the TUI`
+
+### Phase D — Slash commands + session controls (Day 4–5)
+
+**Files**:
+- `apps/cli/src/commands/code/slash-commands.ts` (new, ~150 LoC):
+  - `/help` — list commands.
+  - `/clear` — reset the conversation (keeps the model + tools).
+  - `/model <id>` — swap the gateway capability class mid-session.
+  - `/tools` — show the active tool list; `/tools add <ref>`,
+    `/tools rm <ref>`.
+  - `/save <path>` — write the transcript to a markdown file.
+  - `/exit` — same as Ctrl+D.
+- `apps/cli/src/commands/code/state.ts` (modify): handle slash-input
+  before passing to the agent.
+
+**Tests**: 5 unit tests, one per command, against the reducer.
+
+**Acceptance**: the test plan exercises every slash command end-to-end.
+
+**Commit**: `feat(cli/code): slash commands + session controls`
+
+### Phase E — Persistence + resume (Day 5–6)
+
+**Files**:
+- `apps/cli/src/commands/code/persistence.ts` (new, ~120 LoC) — write
+  every turn into the platform's runs DB via the runtime's existing
+  RunStore. Each `aldo code` session is a thread; opening
+  `aldo code --resume <thread-id>` loads prior turns into the UI.
+- `apps/cli/src/commands/code/app.tsx` (modify): on startup with
+  `--resume`, hydrate the conversation pane from the loaded thread.
+
+**Tests**: persistence round-trip against pglite — start a session,
+exit, resume, assert UI hydrates.
+
+**Acceptance**: a multi-day workflow (start Monday, resume Tuesday)
+preserves context and lets the user keep iterating.
+
+**Commit**: `feat(cli/code): session persistence + --resume`
+
+### Phase F — Polish + docs + smoke (Day 6–7)
+
+**Files**:
+- `docs/guides/aldo-code.md` (new) — author-facing guide: install,
+  configure, model selection, tool customisation, comparison to
+  Claude Code / OpenCode for users coming from those tools.
+- `apps/cli/tests/code-smoke.e2e.ts` (new) — full smoke against a
+  real local model (gated on Ollama availability — skipped in CI
+  without `ALDO_TEST_LOCAL_MODEL`).
+- `README.md` (modify) — add `aldo code` to the Quick start section.
+- `apps/cli/src/templates/code-config.example.ts` (new) — reference
+  config showing recommended cycle budgets, tool ACL, deny lists.
+
+**Acceptance**: a fresh checkout + `pnpm --filter @aldo-ai/cli build:bin`
++ `./aldo code "build a tic-tac-toe in TypeScript"` against a local
+Qwen-Coder produces a working file in under 5 minutes of wall-clock
+time. Demo-ready.
+
+**Commit**: `feat(cli/code): docs + smoke + bin polish`
+
+### Phase G — Optional: Bun-compiled single-binary distribution (Day 7+)
+
+The CLI's `package.json` already declares `build:bin: bun build … --compile`,
+so a single-file `aldo` executable is one command away. Use this for
+a homebrew formula and a `curl | sh` install path on the website.
+
+**Acceptance**: `brew install aldo` and `curl https://ai.aldo.tech/install.sh
+| sh` both leave the user with a working `aldo` binary that includes
+`aldo code`.
+
+**Commit**: `feat(cli): brew formula + curl|sh installer`
+
+### Cross-cutting risks
+
+1. **Local-model quality at coding tasks.** Qwen-Coder 14B/30B is
+   competitive at small files but struggles with multi-file refactors.
+   v0 ships honestly: works well within ~500 LoC; bigger tasks
+   recommend `--privacy tenant_keys` to use Claude/GPT via #4.
+2. **Terminal compatibility.** ink uses ANSI; some Windows terminals
+   render badly. Document `wezterm` / `ghostty` / Apple Terminal /
+   modern PowerShell as supported; flag `cmd.exe` as best-effort.
+3. **Race between user input and streaming.** If the user types while
+   the agent is mid-response, lock the input box and queue. Common
+   pattern; ink handles it.
+4. **Privacy posture leakage.** A user on `local-only` who slash-
+   commands `/model` to a cloud model breaks privacy. The TUI must
+   refuse `/model` swaps that violate the active privacy tier (the
+   gateway will reject anyway; the TUI surfaces the reason
+   pre-emptively).
+5. **Distribution churn.** A `curl | sh` installer is an attack
+   surface. Sign artefacts; document the verification steps; defer to
+   Phase G optional shipping until we have an SLSA-flavoured CI
+   release pipeline.
+
+### Out of scope (for this initiative)
+
+- VS Code / JetBrains extension parity — `aldo code` ships as the
+  ground truth; IDE extensions are a follow-on (existing
+  `extensions/vscode/` is a stub).
+- Multi-tenant collaboration in a single TUI session — out of scope;
+  pair-programming with humans + agents is its own initiative.
+- Cloud-hosted `aldo code` (a hosted IDE-grade experience like
+  claude.ai/code) — separate product surface, not in MISSING_PIECES.
+
+### Sequencing summary
+
+| Phase | Days | Output | Depends on |
+|---|---|---|---|
+| A | 1 | Headless loop | §9 (#1 shipped) |
+| B | 2 | ink TUI shell | A |
+| C | 1 | Approval prompts | B + #9 |
+| D | 1 | Slash commands | B |
+| E | 1 | Persistence + resume | B |
+| F | 1 | Docs + smoke | A–E |
+| G | 1+ | Single-binary distribution | F |
+
+After Phase F: **`aldo code` is the demo for the platform. The next
+picenhancer-class build runs end-to-end inside ALDO, no Claude Code
+session in the loop.** That's the stretch goal the doc opens with —
+this is what closes it.
+
+### Combined post-Sprint-1 sequencing (revised view)
+
+The original §4 sprint table was drafted before §10 + §11 existed.
+Here's the revised post-Sprint-1 plan that integrates them:
+
+| Phase | Pieces | Effort | Capability unlocked |
+|---|---|---|---|
+| Sprint 2 | **#1 IterativeAgentRun** (§9) | 5–7 days | Tool-using loops; replay; per-cycle scoring |
+| Sprint 3a | **§10 assistant retarget** | 1–2 days | Chat panel gains tools, replay, billing |
+| Sprint 3b | **#9 approval gates** + **#4 frontier-coding** | ~5 days | Safe writes; cloud-frontier reach |
+| Sprint 4 | **§11 `aldo code` Phases A–F** | 5–7 days | Demo-grade interactive coding TUI |
+| Sprint 5 | **#3.5 aldo-git** + **#6 memory** | ~7 days | Multi-run continuity; agents can ship code |
+| Sprint 6 | **#7 browser** + **#8 vision** | ~7 days | UX iteration via screenshots |
+| Sprint 7 | **§11 Phase G distribution** + hardening | ~5 days | brew/curl installers; production polish |
+
+**Total post-Sprint-1**: ~7 weeks of focused work (one engineer).
+After Sprint 4 the platform stops being the artefact under construction
+and starts being the engine that builds new artefacts. That's the
+inflection.
