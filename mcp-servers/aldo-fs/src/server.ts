@@ -17,7 +17,10 @@ import type { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { Acl } from './acl.js';
 import { FsError } from './acl.js';
+import { deleteInputSchema, deleteOutputSchema, fsDelete } from './tools/delete.js';
 import { fsList, listInputSchema, listOutputSchema } from './tools/list.js';
+import { fsMkdir, mkdirInputSchema, mkdirOutputSchema } from './tools/mkdir.js';
+import { fsMove, moveInputSchema, moveOutputSchema } from './tools/move.js';
 import { fsRead, readInputSchema, readOutputSchema } from './tools/read.js';
 import { fsSearch, searchInputSchema, searchOutputSchema } from './tools/search.js';
 import { fsStatTool, statInputSchema, statOutputSchema } from './tools/stat.js';
@@ -37,7 +40,9 @@ export interface CreateServerOpts {
  * Build (but do not start) an MCP server bound to the given ACL.
  * The caller attaches a transport via `server.connect(transport)`.
  *
- * TODO(v1): fs.delete, fs.move — both intentionally absent in v0.
+ * MISSING_PIECES.md #2 — fs.delete / fs.move / fs.mkdir landed alongside
+ * the protected-paths denylist on the ACL. Approval-gated writes wait
+ * on piece #9.
  */
 export function createMeridianFsServer(opts: CreateServerOpts): McpServer {
   const { acl, name = SERVER_NAME, version = SERVER_VERSION } = opts;
@@ -81,6 +86,31 @@ export function createMeridianFsServer(opts: CreateServerOpts): McpServer {
     inputSchema: searchInputSchema,
     outputSchema: searchOutputSchema,
     handler: (input) => fsSearch(acl, input),
+  });
+
+  registerTool(server, {
+    name: 'fs.delete',
+    description:
+      'Remove a file or directory under an allowed read-write root. Recursive removal is opt-in.',
+    inputSchema: deleteInputSchema,
+    outputSchema: deleteOutputSchema,
+    handler: (input) => fsDelete(acl, input),
+  });
+
+  registerTool(server, {
+    name: 'fs.move',
+    description: 'Rename or move a file/directory between two read-write paths.',
+    inputSchema: moveInputSchema,
+    outputSchema: moveOutputSchema,
+    handler: (input) => fsMove(acl, input),
+  });
+
+  registerTool(server, {
+    name: 'fs.mkdir',
+    description: 'Create a directory under an allowed read-write root (recursive by default).',
+    inputSchema: mkdirInputSchema,
+    outputSchema: mkdirOutputSchema,
+    handler: (input) => fsMkdir(acl, input),
   });
 
   return server;

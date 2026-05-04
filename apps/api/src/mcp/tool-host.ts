@@ -69,13 +69,56 @@ function defaultServers(): Record<string, McpServerSpec> {
   // API's working dir = apps/api when run via `pnpm --filter dev`).
   const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
   // aldo-fs expects each root as `<path>:<ro|rw>`. Default to read-only
-  // for safety; agents that need to write would override this entry.
-  return {
+  // for safety; an operator that wants the agent to be able to modify
+  // files opts in via `ALDO_FS_RW_ROOT` (absolute path to grant `:rw`
+  // on; falls inside or replaces the repo root). The protected-paths
+  // denylist on the ACL is the second line of defence — see
+  // mcp-servers/aldo-fs/src/acl.ts:DEFAULT_PROTECTED_PATHS.
+  // MISSING_PIECES.md #2.
+  const rwRoot = process.env.ALDO_FS_RW_ROOT?.trim();
+  const rootsSpec =
+    rwRoot && rwRoot.length > 0 ? `${repoRoot}:ro,${rwRoot}:rw` : `${repoRoot}:ro`;
+  const args = [tsxBin, aldoFsEntry, '--roots', rootsSpec];
+  const protectedPaths = process.env.ALDO_FS_PROTECTED_PATHS?.trim();
+  if (protectedPaths !== undefined && protectedPaths.length > 0) {
+    args.push('--protected-paths', protectedPaths);
+  }
+  const servers: Record<string, McpServerSpec> = {
     'aldo-fs': {
       command: 'node',
-      args: [tsxBin, aldoFsEntry, '--roots', `${repoRoot}:ro`],
+      args,
     },
   };
+
+  // MISSING_PIECES.md #3 — opt-in shell-exec MCP. Default OFF: an agent
+  // running on a sensitive tenant should never get shell access without
+  // explicit operator action. Required env: ALDO_SHELL_ENABLED=true and
+  // ALDO_SHELL_ROOT=<absolute path>. Optional env: ALDO_SHELL_ALLOW,
+  // ALDO_SHELL_DENY, ALDO_SHELL_DEFAULT_CWD, ALDO_SHELL_TIMEOUT_MS,
+  // ALDO_SHELL_MAX_TIMEOUT_MS — passed through verbatim to aldo-shell.
+  const shellEnabled = (process.env.ALDO_SHELL_ENABLED ?? '').toLowerCase();
+  if (shellEnabled === 'true' || shellEnabled === '1' || shellEnabled === 'yes') {
+    const shellRoot = (process.env.ALDO_SHELL_ROOT ?? '').trim() || repoRoot;
+    const aldoShellEntry = fileURLToPath(
+      new URL('../../../../mcp-servers/aldo-shell/src/index.ts', import.meta.url),
+    );
+    const shellArgs = [tsxBin, aldoShellEntry, '--roots', shellRoot];
+    const passThroughFlag = (envName: string, flag: string): void => {
+      const v = process.env[envName]?.trim();
+      if (v !== undefined && v.length > 0) shellArgs.push(flag, v);
+    };
+    passThroughFlag('ALDO_SHELL_ALLOW', '--allow');
+    passThroughFlag('ALDO_SHELL_DENY', '--deny');
+    passThroughFlag('ALDO_SHELL_DEFAULT_CWD', '--default-cwd');
+    passThroughFlag('ALDO_SHELL_TIMEOUT_MS', '--timeout-ms');
+    passThroughFlag('ALDO_SHELL_MAX_TIMEOUT_MS', '--max-timeout-ms');
+    servers['aldo-shell'] = {
+      command: 'node',
+      args: shellArgs,
+    };
+  }
+
+  return servers;
 }
 
 interface ConnectedServer {

@@ -21,7 +21,7 @@
  */
 
 import { stat as fsStat, lstat, realpath } from 'node:fs/promises';
-import { isAbsolute, resolve, sep } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 export type AclMode = 'ro' | 'rw';
 
@@ -31,8 +31,44 @@ export interface Root {
   readonly mode: AclMode;
 }
 
+/**
+ * Default denylist of paths that the ACL refuses to write/delete/move/mkdir
+ * even inside an `:rw` root. Glob semantics (see `matchesProtectedGlob`):
+ *   - `*`  matches any chars except `/`
+ *   - `**` matches any chars (incl `/`)
+ *   - patterns without `/` match basename at ANY depth
+ *
+ * The shipped defaults block the operator-critical paths an autonomous
+ * agent should never modify without explicit human direction. Tune via
+ * `--protected-paths` / `ALDO_FS_PROTECTED_PATHS`. Pass an empty list to
+ * opt out entirely (not recommended outside ephemeral sandboxes).
+ *
+ * MISSING_PIECES.md #2 — once the approval-gate primitive (#9) lands,
+ * matching paths flip from "hard deny" to "needs approval". Until then
+ * deny is the safer default.
+ */
+export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
+  '.git',
+  '.git/**',
+  'node_modules',
+  'node_modules/**',
+  'package.json',
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  '.env',
+  '.env.*',
+  'Dockerfile',
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'docker-compose.*.yml',
+  'docker-compose.*.yaml',
+];
+
 export interface Acl {
   readonly roots: readonly Root[];
+  /** Paths matching any of these globs are refused for writes. */
+  readonly protectedPaths: readonly string[];
   /**
    * Resolve a (possibly relative) caller path against the configured roots.
    * Returns the absolute, sep-trailed resolved path plus the matching root.
@@ -94,12 +130,17 @@ export function findContainingRoot(roots: readonly Root[], abs: string): Root | 
   return null;
 }
 
+export interface CreateAclOptions {
+  /** Override the protected-paths denylist. Defaults to `DEFAULT_PROTECTED_PATHS`. */
+  readonly protectedPaths?: readonly string[];
+}
+
 /**
  * Build an ACL from a list of roots. Each root path is resolved to absolute.
  * Duplicate roots collapse to the most permissive mode; nested roots are
  * permitted (the deepest match wins for resolveInside).
  */
-export function createAcl(roots: readonly Root[]): Acl {
+export function createAcl(roots: readonly Root[], opts: CreateAclOptions = {}): Acl {
   if (roots.length === 0) {
     throw new FsError('PERMISSION_DENIED', 'aldo-fs: no roots configured');
   }
@@ -114,9 +155,11 @@ export function createAcl(roots: readonly Root[]): Acl {
   }
   // Deepest first so resolveInside picks the most-specific match.
   const sorted = [...byPath.values()].sort((a, b) => b.path.length - a.path.length);
+  const protectedPaths = opts.protectedPaths ?? DEFAULT_PROTECTED_PATHS;
 
   return {
     roots: sorted,
+    protectedPaths,
     resolveInside(callerPath, requireWrite = false) {
       if (typeof callerPath !== 'string' || callerPath.length === 0) {
         throw new FsError('OUT_OF_BOUNDS', 'path must be a non-empty string');
@@ -255,12 +298,74 @@ export async function checkRead(
   return { abs, real, root };
 }
 
+/**
+ * Compile a glob pattern (see `DEFAULT_PROTECTED_PATHS`) to a RegExp.
+ * Patterns without a `/` match the basename at ANY depth (implicit `**\/`).
+ * `*` matches any chars except `/`; `**` matches any chars including `/`.
+ */
+function compileGlob(pattern: string): RegExp {
+  let s = '';
+  for (let i = 0; i < pattern.length; i += 1) {
+    const c = pattern[i];
+    if (c === '*') {
+      if (pattern[i + 1] === '*') {
+        s += '.*';
+        i += 1;
+      } else {
+        s += '[^/]*';
+      }
+    } else if (c === '?') {
+      s += '[^/]';
+    } else if (c !== undefined && '\\^$+(){}[]|.'.includes(c)) {
+      s += `\\${c}`;
+    } else {
+      s += c;
+    }
+  }
+  return new RegExp(`^${s}$`);
+}
+
+/**
+ * Match a relative path against a single glob pattern under the
+ * implicit-basename rule above.
+ */
+function matchesProtectedGlob(rel: string, pattern: string): boolean {
+  const re = compileGlob(pattern);
+  if (pattern.includes('/')) return re.test(rel);
+  // No slash: match against any path segment.
+  return rel.split('/').some((seg) => re.test(seg));
+}
+
+/**
+ * Throws PERMISSION_DENIED if `abs` lies under a configured root and
+ * matches one of the protected-path globs. `abs` must already be inside
+ * `root` (caller should have called `resolveInside` first).
+ */
+export function assertNotProtected(acl: Acl, abs: string, root: Root): void {
+  if (acl.protectedPaths.length === 0) return;
+  let rel = relative(root.path, abs);
+  // POSIX-style for matcher consistency. Empty rel means abs === root.path.
+  rel = rel.split(sep).join('/');
+  if (rel.length === 0) {
+    throw new FsError('PERMISSION_DENIED', `refusing to modify the root path itself: ${root.path}`);
+  }
+  for (const pattern of acl.protectedPaths) {
+    if (matchesProtectedGlob(rel, pattern)) {
+      throw new FsError(
+        'PERMISSION_DENIED',
+        `path "${rel}" matches protected pattern "${pattern}" — modification refused`,
+      );
+    }
+  }
+}
+
 /** Convenience: full "is this path safe to write" check (target may not exist). */
 export async function checkWrite(
   acl: Acl,
   callerPath: string,
 ): Promise<{ abs: string; real: string; root: Root }> {
   const { abs, root } = acl.resolveInside(callerPath, true);
+  assertNotProtected(acl, abs, root);
   await assertNoEscapingSymlinkOnPath(acl, abs);
   // Realpath the deepest existing ancestor; verify it's still inside the root.
   let real: string;

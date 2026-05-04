@@ -57,6 +57,7 @@ import { openApiRoutes } from './routes/openapi.js';
 import { assistantRoutes } from './routes/assistant.js';
 import { playgroundRoutes } from './routes/playground.js';
 import { projectsRoutes } from './routes/projects.js';
+import { createGatewayPromptRunner } from './lib/gateway-prompt-runner.js';
 import { promptsRoutes } from './routes/prompts.js';
 import { quotasRoutes } from './routes/quotas.js';
 import { runsCompareRoutes } from './routes/runs-compare.js';
@@ -291,7 +292,11 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   // Wave-4 (Tier-4) — prompts as first-class entities. Closes Vellum
   // (entire product) + LangSmith Hub. Versioned prompt bodies, diff,
   // playground; agent specs gain an additive `promptRef` slot.
-  app.route('/', promptsRoutes(deps));
+  // MISSING_PIECES.md #5 — wire the real gateway behind /v1/prompts/:id/test.
+  // The runner falls back to a deterministic echo when no providers are
+  // wired (dev / test harness), so the existing prompts test surface
+  // keeps passing without code changes.
+  app.route('/', promptsRoutes(deps, { runner: createGatewayPromptRunner(deps) }));
   // Wave-iter-3 — public newsletter capture. POST is on the
   // bearer-auth allow-list (`apps/api/src/auth/middleware.ts`).
   app.route('/', newsletterRoutes(deps));

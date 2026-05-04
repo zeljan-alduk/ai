@@ -11,8 +11,19 @@
 > concrete pieces we need to add so the next picenhancer can be driven
 > end-to-end by the platform itself.
 
-**Status**: planning. No code in this document; design only. Implementation
-follows in scoped commits.
+**Status**: in flight. Implementation underway; progress tracked in §0.
+
+---
+
+## 0. Progress log
+
+Newest at the top. Each entry: piece + date + commit shorthand + result.
+
+| Date | Piece | Status | Notes |
+|---|---|---|---|
+| 2026-05-04 | **#5 PromptRunner** | ✅ shipped | `apps/api/src/lib/gateway-prompt-runner.ts` wires `getOrBuildRuntimeAsync` → `gateway.completeWith` behind `POST /v1/prompts/:id/test`. `app.ts` injects it as the default runner. Falls back to deterministic echo when no providers are wired (preserves dev REPL + the 29 existing prompt tests). Persists `runs` + `usage_records` rows so spend dashboard sees prompt-playground spend. `NoEligibleModelError` → typed 422. **All 476 API tests green.** |
+| 2026-05-04 | **#2 fs-write** | ✅ shipped | `aldo-fs` already had `fs.write`; added the missing `fs.delete` / `fs.move` / `fs.mkdir` plus a `protected_paths` glob denylist on the ACL (default rejects `.git`, `.git/**`, `node_modules`, `package.json`, lockfiles, `.env*`, Dockerfiles). Tool-host opt-in: `ALDO_FS_RW_ROOT` env grants `:rw` to a path; `ALDO_FS_PROTECTED_PATHS` overrides the denylist (`none` to disable). Approval-gating waits on #9 — until then the denylist is "hard deny" rather than "needs approval". 50 fs-server tests + 476 API tests green. macOS dev hosts: fixed pre-existing tmpdir-symlink failures by realpath'ing in beforeAll. **Deviation from doc plan**: the doc proposed a sibling `aldo-fs-write` MCP package, but `aldo-fs` already mixed read+write — kept one server, recorded the trade-off here. |
+| 2026-05-04 | **#3 aldo-shell** | ✅ shipped | New `mcp-servers/aldo-shell` (`@aldo-ai/mcp-shell`): one tool `shell.exec`, allowlist by command basename (defaults: pnpm/npm/node/python3/tsc/gh/curl), deny-substring scan (defaults: `rm -rf`, `git push --force`, `npm publish`, `--no-verify`), per-call AbortController timeout with SIGTERM→SIGKILL grace, output-tail cap (8 KB/stream by default) with full byte counts, cwd ACL inside operator-declared roots. `shell: false` on spawn = no shell expansion = no injection through args. Tool-host wiring is opt-in: `ALDO_SHELL_ENABLED=true` + `ALDO_SHELL_ROOT=<abs>`; pass-through env for allow/deny/timeout overrides. **Sprint 1 complete.** 22 aldo-shell tests + 50 aldo-fs tests + 476 API tests green. `aldo-git` (the other half of doc §3) defers to Sprint 4 per the doc's own ordering. |
 
 ---
 
@@ -202,7 +213,7 @@ mechanical.
 
 ---
 
-### #2 — Write-capable filesystem MCP (`aldo-fs-write`)
+### #2 — Write-capable filesystem MCP (`aldo-fs-write`) ✅ SHIPPED 2026-05-04 (in-place in `aldo-fs`)
 
 **What it is.** Sibling MCP server to `aldo-fs`. Tools:
 `fs.write`, `fs.create`, `fs.delete`, `fs.move`, `fs.mkdir`. Same ACL
@@ -245,7 +256,7 @@ integration and the path-traversal test matrix).
 
 ---
 
-### #3 — Shell-exec + git MCP servers (`aldo-shell`, `aldo-git`)
+### #3 — Shell-exec + git MCP servers (`aldo-shell` ✅ SHIPPED 2026-05-04, `aldo-git` deferred to Sprint 4)
 
 **What it is.** Two more MCP servers.
 
@@ -333,7 +344,7 @@ ops fee separately tracked. Discuss before shipping.
 
 ---
 
-### #5 — Production PromptRunner via gateway
+### #5 — Production PromptRunner via gateway ✅ SHIPPED 2026-05-04
 
 **What it is.** Replace the v0 stub at `/v1/prompts/:id/test`. Today
 the endpoint returns deterministic canned text. Real implementation:
@@ -530,7 +541,7 @@ The graph (→ means "depends on"):
 
 | Sprint | Pieces | Goal |
 |---|---|---|
-| Sprint 1 (week 1) | #5 PromptRunner. #2 aldo-fs-write (no approval gate yet — paths denylisted instead). #3 aldo-shell (allowlist-only). | Prove: the platform can run a prompt and an agent can write a single file + run typecheck. Smoke: "agent writes hello.ts that types `console.log('hi')`, runs `pnpm typecheck`, succeeds." |
+| Sprint 1 (week 1) | ✅ **#5 PromptRunner** + ✅ **#2 fs-write** + ✅ **#3 aldo-shell** (all shipped 2026-05-04). **Sprint 1 complete.** | Prove: the platform can run a prompt and an agent can write a single file + run typecheck. Smoke: "agent writes hello.ts that types `console.log('hi')`, runs `pnpm typecheck`, succeeds." |
 | Sprint 2 (weeks 2–3) | **#1 Iterative loop primitive.** This is the big one. | Smoke: a `local-coder` agent with iterative loop + fs-write + shell completes a "create a function and a test, both pass" task. |
 | Sprint 3 (week 4) | #9 Approval gates. Retrofit #2/#3 to use them. #4 Frontier-coding capability. | Safety + capability needed before exposing the iterative loop to anything destructive. |
 | Sprint 4 (week 5) | #3 aldo-git (was held back until #9 was ready). | Agent can now ship code: typecheck, commit, push, watch deploy. |

@@ -5081,3 +5081,38 @@ Out of scope (per brief):
 - New apps/web/components/assistant/assistant-panel.tsx (~290 lines): launcher bubble (bottom-right), expandable card (40 KB max-h, 80 vh on small screens), message list with auto-scroll, input with Enter-to-send / Shift-Enter for newline, streaming-message rendering, error surface, per-message meta footer (model · latency · token count). Uses semantic tokens throughout; works in light + dark.
 - Wired into apps/web/app/layout.tsx alongside CommandPalette + KeyboardShortcutsRouter.
 - TypeScript clean across @aldo-ai/web + @aldo-ai/api. Did not touch /examples copy per the user's earlier instruction.
+
+2026-05-04 07:40 | engineer | MISSING_PIECES.md #5 — PromptRunner shipped
+- New apps/api/src/lib/gateway-prompt-runner.ts (~140 lines): wires the per-tenant RuntimeBundle.gateway from runtime-bootstrap.ts to the PromptRunner seam declared in routes/prompts.ts. Accumulates Delta text chunks into the final output, reads end-of-stream usage for tokens / cost / model id, persists `runs` + `usage_records` rows so the spend dashboard sees prompt-playground spend the same way it sees agent-run spend.
+- Falls back to deterministic echo when getOrBuildRuntimeAsync returns null (no providers wired in dev / test). Preserves the existing 29 prompt tests + the test-harness defaults without needing to thread provider keys through every setup helper.
+- NoEligibleModelError → typed 422 'no_eligible_model' with capability + reason, mirroring the contract the runs route uses when privacy/capability rules out every model.
+- Wired in apps/api/src/app.ts: promptsRoutes(deps, { runner: createGatewayPromptRunner(deps) }). The route's existing test-injection seam stays — tests can still hand a stub via { runner }.
+- All 476 API tests green; @aldo-ai/api tsc clean.
+- Updated MISSING_PIECES.md: new §0 progress log + #5 marked SHIPPED in §3 + Sprint 1 row in §4 reflects partial completion.
+
+2026-05-04 07:46 | engineer | MISSING_PIECES.md #2 — fs-write shipped (in-place)
+- aldo-fs already had fs.write; the doc was outdated. The actual gaps were the destructive tools, the protected-paths denylist, and the rw opt-in. Closed all three.
+- New mcp-servers/aldo-fs/src/tools/{delete,move,mkdir}.ts: Zod-validated input/output, full ACL spine + symlink-escape + protected-paths checks, atomic-where-possible operations. fs.move falls back to copy+unlink on EXDEV.
+- mcp-servers/aldo-fs/src/acl.ts: added DEFAULT_PROTECTED_PATHS (.git, node_modules, package.json, lockfiles, .env*, Dockerfile, docker-compose.*) and assertNotProtected() — checkWrite() now refuses to write/delete/move/mkdir matching paths even inside an :rw root. Glob matcher supports *, **, and basename-anywhere semantics. Pass protectedPaths:[] to opt out.
+- mcp-servers/aldo-fs/src/config.ts: new resolveAclConfig() returns roots + protectedPaths; --protected-paths CLI flag + ALDO_FS_PROTECTED_PATHS env (literal "none" disables). resolveRoots() kept as a back-compat shim.
+- apps/api/src/mcp/tool-host.ts: ALDO_FS_RW_ROOT env grants :rw on the named path (otherwise repoRoot:ro stays the default); ALDO_FS_PROTECTED_PATHS env passes through to aldo-fs.
+- mcp-servers/aldo-fs/tests/tools.test.ts: +18 tests for the three new tools + denylist semantics. server.test.ts tool-list assertion updated to the 8-tool surface. acl.test.ts gained one realpath() to fix a pre-existing macOS-only failure where /var → /private/var made every test trip the symlink-escape check; same fix applied in tools.test.ts and server.test.ts beforeAll. All 50 aldo-fs tests + 476 API tests green; tsc clean across both packages.
+- Approval-gated writes still wait on MISSING_PIECES.md #9. Until then the denylist is hard-deny rather than "needs approval"; the same regex/glob list flips meaning when #9 lands.
+- Deviation from doc plan: the doc proposed a sibling aldo-fs-write package; kept one server because aldo-fs already mixed read+write and a split would be a churn-heavy refactor for no semantic gain. Trade-off recorded in MISSING_PIECES.md §0 + #2.
+
+2026-05-04 07:52 | engineer | MISSING_PIECES.md #3 — aldo-shell shipped (Sprint 1 complete)
+- New mcp-servers/aldo-shell (@aldo-ai/mcp-shell): one tool shell.exec. ~600 LoC across policy.ts, tools/exec.ts, server.ts, config.ts, index.ts.
+- Policy spine (policy.ts):
+  - Allowlist by command basename (defaults: pnpm, npm, node, python3, tsc, gh, curl). Path-with-slash commands rejected to keep auditing legible.
+  - Deny-substring scan on the joined command line (defaults: rm -rf, git push --force, npm publish, --no-verify). Once #9 lands these flip from hard-deny to needs-approval.
+  - Cwd ACL: defaultCwd or caller-supplied cwd must lie inside one of allowedRoots (lexical containment, no symlink-resolve — operators who need that handle it themselves).
+  - Timeout clamping at maxTimeoutMs (default 5 min).
+- Exec runner (tools/exec.ts): child_process.spawn with shell:false (= no shell expansion = no arg-injection), AbortController-driven timeout with SIGTERM then SIGKILL after a 2s grace, in-memory stdout/stderr capture trimmed to outputTailBytes (default 8 KB) with full byte counts surfaced for context-budget decisions.
+- Server wiring (server.ts): same registerTool helper pattern as aldo-fs, isError envelope on policy rejection so the API tool host can pattern-match on { error: { code } }.
+- Config (config.ts): CLI flags + ALDO_SHELL_* env. --roots / ALDO_SHELL_ROOTS is mandatory; --allow / --deny override the defaults; "none" disables the deny list.
+- Tool-host opt-in (apps/api/src/mcp/tool-host.ts): default OFF — only registers aldo-shell when ALDO_SHELL_ENABLED=true|1|yes plus ALDO_SHELL_ROOT=<abs>. Pass-through env: ALDO_SHELL_ALLOW / DENY / DEFAULT_CWD / TIMEOUT_MS / MAX_TIMEOUT_MS.
+- Tests: 11 policy + 8 exec + 3 server (MCP transport round-trip) = 22 in aldo-shell. Plus the 50 aldo-fs + 476 API tests still green. tsc clean across all three packages.
+- aldo-git half of doc §3 deferred to Sprint 4 per the doc's own ordering — git operations are write-side and want #9 approval-gates before they ship.
+- MISSING_PIECES.md §0 progress log + §3 #3 marker + §4 Sprint 1 row all updated to reflect Sprint 1 completion.
+
+Sprint 1 wrap: three pieces shipped today (#5 prompt runner, #2 fs-write, #3 shell). The platform now has the foundational primitives an agent needs to do real coding work — read, write, exec, run-prompt-with-real-model. The IterativeAgentRun spine (#1) is the natural next move; it's a multi-day piece on its own and was deliberately kept out of this session's scope.

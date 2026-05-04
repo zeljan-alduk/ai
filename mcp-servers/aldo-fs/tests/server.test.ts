@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -12,7 +12,9 @@ let acl: ReturnType<typeof createAcl>;
 let client: Client;
 
 beforeAll(async () => {
-  const base = await mkdtemp(join(tmpdir(), 'aldo-fs-server-'));
+  // Resolve symlinks in the tmp base so macOS (/var -> /private/var) doesn't
+  // trip the ACL's symlink-escape check.
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'aldo-fs-server-')));
   rw = join(base, 'rw');
   await mkdir(rw, { recursive: true });
   await writeFile(join(rw, 'greeting.txt'), 'salutations');
@@ -30,7 +32,16 @@ describe('aldo-fs MCP server', () => {
   it('lists the v0 tools via tools/list', async () => {
     const r = await client.listTools();
     const names = r.tools.map((t) => t.name).sort();
-    expect(names).toEqual(['fs.list', 'fs.read', 'fs.search', 'fs.stat', 'fs.write']);
+    expect(names).toEqual([
+      'fs.delete',
+      'fs.list',
+      'fs.mkdir',
+      'fs.move',
+      'fs.read',
+      'fs.search',
+      'fs.stat',
+      'fs.write',
+    ]);
   });
 
   it('fs.read via tools/call returns structuredContent', async () => {

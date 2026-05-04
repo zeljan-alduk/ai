@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -10,7 +10,9 @@ let outsideDir = '';
 let acl: ReturnType<typeof createAcl>;
 
 beforeAll(async () => {
-  const base = await mkdtemp(join(tmpdir(), 'aldo-fs-acl-'));
+  // realpath the base so macOS (/var -> /private/var) doesn't trip
+  // assertNoEscapingSymlinkOnPath against the host's tmpdir layout.
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'aldo-fs-acl-')));
   rwRoot = join(base, 'rw');
   roRoot = join(base, 'ro');
   outsideDir = join(base, 'outside');

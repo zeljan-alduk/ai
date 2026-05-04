@@ -11,17 +11,20 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { FsError, createAcl } from './acl.js';
-import { resolveRoots } from './config.js';
+import { resolveAclConfig } from './config.js';
 import { createMeridianFsServer } from './server.js';
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
-  let roots: Awaited<ReturnType<typeof resolveRoots>>;
+  let cfg: Awaited<ReturnType<typeof resolveAclConfig>>;
   try {
-    roots = await resolveRoots({ argv });
+    cfg = await resolveAclConfig({ argv });
   } catch (err) {
     fatal(err);
   }
-  const acl = createAcl(roots);
+  const acl = createAcl(
+    cfg.roots,
+    cfg.protectedPaths !== undefined ? { protectedPaths: cfg.protectedPaths } : {},
+  );
   const server = createMeridianFsServer({ acl });
   const transport = new StdioServerTransport();
   await server.connect(transport);

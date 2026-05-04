@@ -30,10 +30,12 @@
 import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { AclMode, Root } from './acl.js';
-import { FsError } from './acl.js';
+import { DEFAULT_PROTECTED_PATHS, FsError } from './acl.js';
 
 export interface LoadedConfig {
   roots: Root[];
+  /** Optional override of the protected-paths denylist. Undefined = use defaults. */
+  protectedPaths?: readonly string[];
 }
 
 export function parseRootsSpec(spec: string): Root[] {
@@ -64,6 +66,7 @@ export function parseRootsSpec(spec: string): Root[] {
 
 interface ConfigFile {
   roots: Array<{ path: string; mode: string }>;
+  protectedPaths?: unknown;
 }
 
 function isConfigFile(x: unknown): x is ConfigFile {
@@ -99,7 +102,14 @@ export async function loadConfigFromJson(path: string): Promise<LoadedConfig> {
     }
     return { path: p, mode };
   });
-  return { roots };
+  const result: LoadedConfig = { roots };
+  if (Array.isArray(parsed.protectedPaths)) {
+    const filtered = parsed.protectedPaths.filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
+    result.protectedPaths = filtered;
+  }
+  return result;
 }
 
 export interface ResolveOpts {
@@ -110,28 +120,81 @@ export interface ResolveOpts {
 /**
  * Walk through CLI flags and env vars to determine the active root list.
  * Throws FsError if no source produced any roots.
+ *
+ * Kept for backwards compatibility; new callers should prefer
+ * `resolveAclConfig` which also returns the protected-paths denylist.
  */
 export async function resolveRoots(opts: ResolveOpts = {}): Promise<Root[]> {
+  const cfg = await resolveAclConfig(opts);
+  return [...cfg.roots];
+}
+
+/**
+ * Resolve the full ACL config: roots + protected-paths denylist.
+ * Lookup order matches `resolveRoots` for roots; protected-paths come
+ * from `--protected-paths`, then `ALDO_FS_PROTECTED_PATHS`, then the
+ * JSON config's `protectedPaths`, then `DEFAULT_PROTECTED_PATHS`.
+ *
+ * The CLI/env spec is comma-separated globs. Pass `none` to opt out
+ * entirely (an empty list is the disable signal).
+ */
+export async function resolveAclConfig(opts: ResolveOpts = {}): Promise<LoadedConfig> {
   const argv = opts.argv ?? process.argv.slice(2);
   const env = opts.env ?? process.env;
 
+  let roots: Root[] | null = null;
+  let protectedPaths: readonly string[] | undefined;
+
   const cliRoots = pickFlag(argv, '--roots');
-  if (cliRoots) return parseRootsSpec(cliRoots);
-
-  const envRoots = env.ALDO_FS_ROOTS;
-  if (envRoots && envRoots.trim().length > 0) return parseRootsSpec(envRoots);
-
-  const cfgPath = pickFlag(argv, '--config') ?? env.ALDO_FS_CONFIG;
-  if (cfgPath) {
-    const cfg = await loadConfigFromJson(cfgPath);
-    return cfg.roots;
+  if (cliRoots) roots = parseRootsSpec(cliRoots);
+  if (roots === null) {
+    const envRoots = env.ALDO_FS_ROOTS;
+    if (envRoots && envRoots.trim().length > 0) roots = parseRootsSpec(envRoots);
+  }
+  if (roots === null) {
+    const cfgPath = pickFlag(argv, '--config') ?? env.ALDO_FS_CONFIG;
+    if (cfgPath) {
+      const cfg = await loadConfigFromJson(cfgPath);
+      roots = cfg.roots;
+      protectedPaths = cfg.protectedPaths;
+    }
+  }
+  if (roots === null) {
+    throw new FsError(
+      'PERMISSION_DENIED',
+      'aldo-fs: no roots configured. Pass --roots <spec>, set ALDO_FS_ROOTS, or supply --config <path>.',
+    );
   }
 
-  throw new FsError(
-    'PERMISSION_DENIED',
-    'aldo-fs: no roots configured. Pass --roots <spec>, set ALDO_FS_ROOTS, or supply --config <path>.',
-  );
+  const cliProtected = pickFlag(argv, '--protected-paths');
+  const envProtected = env.ALDO_FS_PROTECTED_PATHS;
+  const rawProtected = cliProtected ?? envProtected;
+  if (rawProtected !== undefined) {
+    protectedPaths = parseProtectedSpec(rawProtected);
+  }
+  const result: LoadedConfig = { roots };
+  if (protectedPaths !== undefined) result.protectedPaths = protectedPaths;
+  return result;
 }
+
+/**
+ * Parse a comma-separated glob list. The literal `none` (case-insensitive)
+ * disables the denylist entirely. Whitespace around entries is trimmed;
+ * empty entries are dropped. Use this rather than blindly splitting on
+ * comma so `none` is unambiguous.
+ */
+export function parseProtectedSpec(spec: string): readonly string[] {
+  const trimmed = spec.trim();
+  if (trimmed.toLowerCase() === 'none' || trimmed === '') return [];
+  return trimmed
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// Re-export the default list so consumers can reference it without
+// reaching into ./acl directly.
+export { DEFAULT_PROTECTED_PATHS };
 
 function pickFlag(argv: readonly string[], name: string): string | undefined {
   for (let i = 0; i < argv.length; i += 1) {
