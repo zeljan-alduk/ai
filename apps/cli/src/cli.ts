@@ -10,6 +10,7 @@ import { runAgentNew } from './commands/agent-new.js';
 import { runAgentPromote } from './commands/agent-promote.js';
 import { runAgentValidate } from './commands/agent-validate.js';
 import { runAgentsCheck } from './commands/agents-check.js';
+import { runCode } from './commands/code.js';
 import {
   runDatasetsDestroy,
   runDatasetsImport,
@@ -184,6 +185,60 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           io,
         );
     });
+
+  // --- code -----------------------------------------------------------------
+  // MISSING_PIECES §11 / Phase A — headless iterative coding loop. Same
+  // synthetic spec + tool host that the upcoming ink TUI (Phase B)
+  // will reuse; today we stream RunEvents to stdout as JSONL.
+  program
+    .command('code [brief...]')
+    .description('iterative coding agent (headless; ink TUI follows)')
+    .option('--tools <list>', 'comma-separated tool refs (server.tool)')
+    .option('--workspace <path>', 'workspace root (default cwd)')
+    .option('--capability-class <id>', 'override primary capability class')
+    .option('--max-cycles <n>', 'override iteration max-cycles', (v) => Number.parseInt(v, 10))
+    .option(
+      '--context-window <n>',
+      'override iteration context window in tokens',
+      (v) => Number.parseInt(v, 10),
+    )
+    .option('--no-local-fallback', 'refuse to fall back to local-reasoning (e.g. coding-frontier)')
+    .option('--stdin', 'read the brief from stdin', false)
+    .action(
+      (
+        briefArgs: string[],
+        o: {
+          tools?: string;
+          workspace?: string;
+          capabilityClass?: string;
+          maxCycles?: number;
+          contextWindow?: number;
+          localFallback?: boolean; // commander negates --no-* into localFallback
+          stdin?: boolean;
+        },
+      ) => {
+        const brief = briefArgs.length > 0 ? briefArgs.join(' ') : undefined;
+        action = () =>
+          runCode(
+            brief,
+            {
+              ...(o.tools !== undefined ? { tools: o.tools } : {}),
+              ...(o.workspace !== undefined ? { workspace: o.workspace } : {}),
+              ...(o.capabilityClass !== undefined ? { capabilityClass: o.capabilityClass } : {}),
+              ...(o.maxCycles !== undefined && Number.isFinite(o.maxCycles)
+                ? { maxCycles: o.maxCycles }
+                : {}),
+              ...(o.contextWindow !== undefined && Number.isFinite(o.contextWindow)
+                ? { contextWindow: o.contextWindow }
+                : {}),
+              // commander turns `--no-local-fallback` into `localFallback: false`.
+              noLocalFallback: o.localFallback === false,
+              stdin: o.stdin === true,
+            },
+            io,
+          );
+      },
+    );
 
   // --- run ------------------------------------------------------------------
   program

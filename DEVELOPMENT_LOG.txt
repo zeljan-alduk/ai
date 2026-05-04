@@ -5272,3 +5272,43 @@ What's still deferred:
 - WebSocket / SSE-driven push for pending approvals (currently polling at 4s; cheap because it only runs while pending > 0 AND the operator is on the page).
 - Path-aware `protected_paths` predicate (still collapses to 'always').
 - Per-tenant ASSISTANT_TOOLS config beyond the env var (e.g. workspace settings).
+
+2026-05-04T10:47Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §11 Phase A: `aldo code` headless iterative coding loop.
+
+§11 retargets the platform's headline demo onto the iterative loop primitive (#1) by adding a Claude-Code-style `aldo code` subcommand to the CLI. The plan is 5–10 days across 7 phases (A: headless loop, B: ink TUI, C: approval prompts, D: slash commands, E: persistence, F: docs + smoke, G: optional bun-compiled bin). This commit ships Phase A — the headless loop that proves the wiring before any pixels.
+
+Code-spec builder (apps/cli/src/commands/code-spec.ts, ~150 LoC):
+- buildCliCodeSpec({ toolsCsv?, capabilityClass?, ... }) returns a fresh AgentSpec at request time. iteration: maxCycles 50, contextWindow 128k, summaryStrategy rolling-window, terminator on `<task-complete>`. modelPolicy: privacy_tier internal, primary reasoning-medium with local-reasoning fallback (or no fallback when --no-local-fallback is set, e.g. for coding-frontier).
+- Default tool ACL is the full coding kit: aldo-fs.fs.read/write/list/mkdir + aldo-shell.shell.exec. --tools narrows the set; refs outside an allow-list are silently dropped (same anti-footgun as the assistant's ASSISTANT_TOOLS env).
+- Filesystem permission widens to repo-readwrite when fs.write or fs.mkdir is in the resolved set; stays at repo-readonly otherwise.
+- System prompt teaches loop discipline + the `<task-complete>` sentinel. CLI_CODE_SYSTEM_PROMPT exported for the upcoming TUI to reuse.
+
+Local tool host (apps/cli/src/commands/code-tool-host.ts, ~220 LoC):
+- CliCodeToolHost confines fs and shell calls to a workspace root supplied by --workspace (default cwd). All paths resolve under root; refusing-via-PATH_ESCAPE when an absolute path or .. trick would escape. shell.exec runs with cwd=root, 5-minute timeout, 8MB stdout/stderr cap.
+- Skips MCP subprocess machinery since the user is already running on their own machine; the §3 #3 aldo-shell server's policy spine remains the production safety boundary when the user opts into it via --tools.
+- Implements fs.read/write/list/stat/search/mkdir + shell.exec directly via node:fs + node:child_process.
+
+Code subcommand (apps/cli/src/commands/code.ts, ~150 LoC):
+- `aldo code [brief...] [--tools] [--workspace] [--capability-class] [--max-cycles] [--context-window] [--no-local-fallback] [--stdin]`. Brief comes from positional, --stdin, or test-hook.
+- Builds the synthetic spec, wraps it in an inline AgentRegistry shim, bootstraps the runtime with --tools-derived CliCodeToolHost. Calls runtime.runAgent({ name: '__cli_code__' }, { messages: [{ role: user, content: brief }], systemPrompt }).
+- Streams every RunEvent to stdout as JSONL `{ kind: "event", event: { type, at, payload } }`. Brackets the run with `{ kind: "session.start", ... }` / `{ kind: "session.end", ok, output }` frames so a subprocess consumer can parse start/end deterministically. String fields > 2KB get truncated.
+- Exit 0 on success, 1 on error or terminator-via-error.
+
+Bootstrap extension (apps/cli/src/bootstrap.ts):
+- BootstrapOptions.agentRegistryOverride: optional AgentRegistry-shaped override that replaces the default `new AgentRegistry()`. Used by `aldo code` to inject the synthetic spec; existing `aldo run` callers are unaffected (option absent → default behaviour).
+
+Tests (17 new, all green):
+- apps/cli/tests/code-spec.test.ts — 14 unit tests covering defaults, --tools narrowing + dedup + privilege-escalation refusal, fs.write widening filesystem permission, capability-class override, refuseLocalFallback, sanity (privacy tier, budget cap).
+- apps/cli/tests/code-command.test.ts — 3 integration tests against runCode with a stub gateway: scripted cycle 1 (fs.write hello.ts) → cycle 2 (shell.exec printf "tsc OK") → cycle 3 (text <task-complete>); asserts exit 0, JSONL frames, real file landing on disk, shell.exec dispatched, terminator reason text-includes; missing-brief returns exit 1; --tools narrowing fails-closed when the agent attempts an unallowed tool.
+
+Verification:
+- tsc clean across @aldo-ai/cli.
+- 17 new tests pass in <1s. Pre-existing flakes in bootstrap-persistence.test.ts + cli.test.ts (mcp ls) are unchanged — same 1-failure count on stashed pre-change tree, alternating between the two files depending on test order.
+
+What's deferred to subsequent §11 phases (each a separate session-sized commit):
+- Phase B — ink TUI shell on top of the same code-spec + tool host (~250 LoC + components).
+- Phase C — approval-gated tool calls in the TUI (depends on #9 approval gates, which are shipped engine-side; the TUI just needs the dialog).
+- Phase D — slash commands (/help, /clear, /model, /tools, /save, /exit) ~150 LoC.
+- Phase E — session persistence + --resume against the runs DB.
+- Phase F — docs + smoke + bin polish.
+- Phase G (optional) — homebrew + curl|sh installer + signed binaries.

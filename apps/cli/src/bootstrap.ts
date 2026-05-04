@@ -43,7 +43,7 @@ import {
 } from '@aldo-ai/gateway';
 import { AgentRegistry } from '@aldo-ai/registry';
 import { fromDatabaseUrl } from '@aldo-ai/storage';
-import type { TenantId, ToolHost } from '@aldo-ai/types';
+import type { AgentRegistry as AgentRegistryIface, TenantId, ToolHost } from '@aldo-ai/types';
 import type { Config } from './config.js';
 
 /** Dependencies handed back to the CLI commands. Stable surface. */
@@ -83,6 +83,15 @@ export interface BootstrapOptions {
   readonly gatewayOverride?: GatewayEx;
   /** Optional ToolHost. Defaults to a no-op host that rejects every tool. */
   readonly toolHost?: ToolHost;
+  /**
+   * MISSING_PIECES §11 — optional registry override. The `aldo code`
+   * subcommand builds a synthetic `__cli_code__` AgentSpec at request
+   * time and routes through this hook so the rest of the bootstrap
+   * (gateway / adapters / runtime) stays unchanged. When omitted, the
+   * default `new AgentRegistry()` (Postgres-backed for `aldo run`,
+   * empty for tests) takes the field.
+   */
+  readonly agentRegistryOverride?: AgentRegistryIface;
   /**
    * Optional pre-built RunStore. When supplied, the runtime persists
    * every emitted RunEvent through it (the API layer + replay debugger
@@ -138,11 +147,12 @@ export function bootstrap(opts: BootstrapOptions): RuntimeBundle {
   const tracer = new NoopTracer();
   const agentRegistry = new AgentRegistry();
   const toolHost = opts.toolHost ?? noopToolHost();
+  const runtimeRegistry: AgentRegistryIface = opts.agentRegistryOverride ?? agentRegistry;
 
   const runtime = new PlatformRuntime({
     modelGateway: gateway,
     toolHost,
-    registry: agentRegistry,
+    registry: runtimeRegistry,
     tracer,
     tenant,
     checkpointer,
