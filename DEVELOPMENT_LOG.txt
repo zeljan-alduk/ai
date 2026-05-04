@@ -5352,3 +5352,34 @@ Out of scope (subsequent §11 phases):
 - Phase E — persistence + --resume against the run store.
 - Phase F — docs + smoke + bin polish.
 - Phase G — homebrew + curl|sh installer.
+
+2026-05-04T11:20Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §11 Phase C: approval prompts in the `aldo code` TUI.
+
+Phase C closes the safety loop in the TUI. Tool calls whose spec marks them `tools.approvals: always` (the same #9 mechanism the run-detail page surfaces in the web banner) suspend the iterative loop in-process; the App now renders a modal-style dialog and routes a/r/v keybinds to the controller.
+
+Bootstrap extension (apps/cli/src/bootstrap.ts):
+- BootstrapOptions.approvalController: optional ApprovalController. Wired into PlatformRuntime when supplied. Headless `aldo code` leaves it undefined → gated tools fail closed via the engine's synthetic rejection (matches every other unattended caller). The TUI builds a fresh InMemoryApprovalController per session and threads it both into the runtime AND into the App's keybind handler.
+
+State reducer extension (commands/code/state.ts):
+- The awaiting-approval phase now carries the full payload — { runId, callId, tool, args, reason } — so the dialog has everything it needs for rendering AND so the App can call `controller.resolve(runId, callId, ...)` correctly. The runId is required (not optional) because resolve() keys on the (runId, callId) tuple.
+- Reducer drops malformed events (missing runId, callId, OR tool); 24 reducer tests now cover the richer payload + the malformed-event path.
+
+ApprovalDialog component (~80 LoC):
+- Three sub-states: choose / viewing / rejecting. Choose lands by default and shows `[a]pprove · [r]eject · [v]iew-full-args`. Viewing expands the args JSON multi-line. Rejecting focuses an inline reason input with Enter-to-confirm / Esc-to-cancel.
+- Pure renderer — sub-state owned by the App and reset on each new pending callId so consecutive approvals don't reuse a half-typed reject draft.
+- 7 ink-testing-library tests cover all three sub-states + the agent-reason / no-reason rendering / args truncation / multi-line expansion.
+
+App keybind wiring (commands/code/app.tsx):
+- useInput with `isActive: phase === 'awaiting-approval'` so the dialog's keys never collide with the regular Input's typing.
+- a/A → approve and resolve via `controller.resolve(runId, callId, { kind: 'approved' })`. The next engine event (tool_result for the dispatched call) flips the phase back to running.
+- r/R → enter rejecting sub-state. Enter sends `controller.resolve(... { kind: 'rejected', reason })`; Esc returns to choose.
+- v/V → toggle viewing sub-state for full args.
+- Backspace + printable chars edit the reject reason draft.
+
+Tests: 61 §11 passing (14 spec + 24 reducer + 3 command + 20 render). 7 are net-new (ApprovalDialog rendering) plus 2 updated reducer cases for the richer payload. <5s wall clock. tsc clean. Pre-existing CLI flake unchanged.
+
+Out of scope (subsequent phases):
+- Phase D — slash commands (/help /clear /model /tools /save /exit). Reset-conversation already in the reducer; /clear is a one-line dispatch.
+- Phase E — session persistence + --resume against the run store.
+- Phase F — docs + smoke + bin polish.
+- Phase G — homebrew + curl|sh installer.

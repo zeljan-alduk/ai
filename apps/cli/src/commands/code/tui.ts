@@ -11,6 +11,7 @@
  */
 
 import { resolve as resolvePath } from 'node:path';
+import { InMemoryApprovalController } from '@aldo-ai/engine';
 import type {
   AgentRef,
   AgentRegistry as AgentRegistryIface,
@@ -81,12 +82,17 @@ export async function startTui(
   };
 
   const cfg = (hooks.loadConfig ?? loadConfig)();
+  // MISSING_PIECES §11 Phase C — per-session approval controller.
+  // Tool calls whose spec marks them `tools.approvals: always` will
+  // suspend the loop here; the App resolves them via keybinds.
+  const approvalController = new InMemoryApprovalController();
   let bundle: RuntimeBundle;
   try {
     bundle = (hooks.bootstrap ?? bootstrap)({
       config: cfg,
       agentRegistryOverride: registryShim,
       toolHost: new CliCodeToolHost({ root: workspaceRoot }),
+      approvalController,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -150,6 +156,7 @@ export async function startTui(
   const { mountTui } = await import('./app-render.js');
   await mountTui({
     runTurn,
+    approvalController,
     ...(opts.initialBrief !== undefined ? { initialBrief: opts.initialBrief } : {}),
   });
   return 0;

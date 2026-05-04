@@ -15,6 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  type ApprovalController,
   InMemoryCheckpointer,
   InMemoryMemoryStore,
   InProcessEventBus,
@@ -100,6 +101,16 @@ export interface BootstrapOptions {
    * undefined unless the caller threads one in explicitly.
    */
   readonly runStore?: RunStore;
+  /**
+   * MISSING_PIECES §11 Phase C — optional ApprovalController. When
+   * supplied, an iterative agent's `tools.approvals: always` calls
+   * suspend until the controller resolves. The TUI in `aldo code
+   * --tui` builds an InMemoryApprovalController and routes keybinds
+   * through it; the headless mode in code.ts leaves it undefined
+   * (gated tools fail closed via the engine's synthetic rejection,
+   * matching the behaviour every other unattended caller sees).
+   */
+  readonly approvalController?: ApprovalController;
 }
 
 /** Construct the runtime bundle. Pure; never makes a network call here. */
@@ -157,6 +168,9 @@ export function bootstrap(opts: BootstrapOptions): RuntimeBundle {
     tenant,
     checkpointer,
     ...(opts.runStore !== undefined ? { runStore: opts.runStore } : {}),
+    ...(opts.approvalController !== undefined
+      ? { approvalController: opts.approvalController }
+      : {}),
   });
 
   return {

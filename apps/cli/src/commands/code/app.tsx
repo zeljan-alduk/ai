@@ -15,9 +15,11 @@
  * `state.ts`; ink only sees the current `TuiState` snapshot.
  */
 
-import { Box, useApp } from 'ink';
+import { Box, useApp, useInput } from 'ink';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import type { ApprovalController } from '@aldo-ai/engine';
 import type { RunEvent } from '@aldo-ai/types';
+import { ApprovalDialog, type DialogSubState } from './components/ApprovalDialog.js';
 import { Conversation } from './components/Conversation.js';
 import { Input } from './components/Input.js';
 import { StatusLine } from './components/StatusLine.js';
@@ -45,9 +47,19 @@ export interface TurnDriver {
 export interface AppProps {
   readonly initialBrief?: string;
   readonly runTurn: TurnDriver;
+  /**
+   * MISSING_PIECES §11 Phase C — optional ApprovalController.
+   * When supplied, the App listens for `[a]/[r]/[v]` keybinds when
+   * the reducer's phase is `awaiting-approval` and resolves the
+   * pending approval directly (the runtime is in-process, so no API
+   * round-trip is needed). When undefined, gated tools fail closed
+   * via the engine's synthetic rejection — the dialog still shows
+   * but the keybinds are inert.
+   */
+  readonly approvalController?: ApprovalController;
 }
 
-export function App({ initialBrief, runTurn }: AppProps) {
+export function App({ initialBrief, runTurn, approvalController }: AppProps) {
   const [state, dispatch] = useReducer(reduce, initialState);
   const { exit } = useApp();
   const abortRef = useRef<AbortController | null>(null);
@@ -104,11 +116,92 @@ export function App({ initialBrief, runTurn }: AppProps) {
     exit();
   }, [exit]);
 
+  // MISSING_PIECES §11 Phase C — approval-dialog state machine. When
+  // the reducer surfaces an `awaiting-approval` phase, the App
+  // listens for keybinds and routes the decision back to the
+  // ApprovalController. The dialog sub-state tracks the
+  // choose/viewing/rejecting modes locally because the choice is a
+  // UI concern, not a reducer one.
+  const [dialogSub, setDialogSub] = useState<DialogSubState>({ kind: 'choose' });
+  const awaitingApproval =
+    state.phase.kind === 'awaiting-approval' ? state.phase : null;
+
+  // Reset the dialog sub-state every time a new pending approval
+  // arrives (keyed by callId so consecutive approvals don't reuse
+  // an in-progress reject draft).
+  useEffect(() => {
+    if (awaitingApproval !== null) {
+      setDialogSub({ kind: 'choose' });
+    }
+  }, [awaitingApproval?.callId]);
+
+  useInput(
+    (input, key) => {
+      if (awaitingApproval === null || approvalController === undefined) return;
+      if (dialogSub.kind === 'rejecting') {
+        if (key.escape) {
+          setDialogSub({ kind: 'choose' });
+          return;
+        }
+        if (key.return) {
+          const reason = dialogSub.reasonDraft.trim();
+          if (reason.length === 0) return;
+          approvalController.resolve(awaitingApproval.runId, awaitingApproval.callId, {
+            kind: 'rejected',
+            approver: 'cli-user',
+            reason,
+          });
+          // The next engine event (synthetic tool_result) will flip
+          // the phase back to running.
+          setDialogSub({ kind: 'choose' });
+          return;
+        }
+        if (key.backspace || key.delete) {
+          setDialogSub({
+            kind: 'rejecting',
+            reasonDraft: dialogSub.reasonDraft.slice(0, -1),
+          });
+          return;
+        }
+        if (input.length > 0 && !key.ctrl && !key.meta) {
+          setDialogSub({
+            kind: 'rejecting',
+            reasonDraft: dialogSub.reasonDraft + input,
+          });
+        }
+        return;
+      }
+
+      // choose / viewing keybinds
+      if (input === 'a' || input === 'A') {
+        approvalController.resolve(awaitingApproval.callId, awaitingApproval.callId, {
+          kind: 'approved',
+          approver: 'cli-user',
+        });
+        setDialogSub({ kind: 'choose' });
+        return;
+      }
+      if (input === 'r' || input === 'R') {
+        setDialogSub({ kind: 'rejecting', reasonDraft: '' });
+        return;
+      }
+      if (input === 'v' || input === 'V') {
+        setDialogSub((cur) =>
+          cur.kind === 'viewing' ? { kind: 'choose' } : { kind: 'viewing' },
+        );
+      }
+    },
+    { isActive: awaitingApproval !== null },
+  );
+
   const busy = isBusy(state);
 
   return (
     <Box flexDirection="column">
       <Conversation entries={state.entries} />
+      {awaitingApproval !== null ? (
+        <ApprovalDialog phase={awaitingApproval} subState={dialogSub} />
+      ) : null}
       <StatusLine phase={state.phase} telemetry={state.telemetry} />
       <Input disabled={busy} onSubmit={startTurn} onAbort={onAbort} onExit={onExit} />
     </Box>

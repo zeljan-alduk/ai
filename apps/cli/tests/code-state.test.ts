@@ -293,25 +293,65 @@ describe('reducer — usage telemetry', () => {
 });
 
 describe('reducer — approval gates', () => {
-  it('tool.pending_approval flips phase to awaiting-approval', () => {
+  it('tool.pending_approval captures the full payload (runId/callId/tool/args/reason)', () => {
     const state = apply(
       initialState,
       { kind: 'user-input', text: 'rm -rf' },
       {
         kind: 'engine-event',
         event: ev('tool.pending_approval', {
+          runId: 'run-abc',
           callId: 'c1',
           tool: 'aldo-shell.shell.exec',
-          args: {},
-          reason: null,
+          args: { cmd: 'rm -rf /etc' },
+          reason: 'I want to clean up',
         }),
       },
     );
     expect(state.phase).toEqual({
       kind: 'awaiting-approval',
+      runId: 'run-abc',
       callId: 'c1',
       tool: 'aldo-shell.shell.exec',
+      args: { cmd: 'rm -rf /etc' },
+      reason: 'I want to clean up',
     });
+  });
+
+  it('reason defaults to null when the engine emits no reason field', () => {
+    const state = apply(
+      initialState,
+      { kind: 'user-input', text: 'go' },
+      {
+        kind: 'engine-event',
+        event: ev('tool.pending_approval', {
+          runId: 'run-abc',
+          callId: 'c1',
+          tool: 'aldo-shell.shell.exec',
+          args: {},
+        }),
+      },
+    );
+    if (state.phase.kind !== 'awaiting-approval') {
+      throw new Error('expected awaiting-approval phase');
+    }
+    expect(state.phase.reason).toBeNull();
+  });
+
+  it('payload is dropped when runId, callId or tool is missing', () => {
+    const before = reduce(initialState, { kind: 'user-input', text: 'go' });
+    // Missing runId
+    const noRun = reduce(before, {
+      kind: 'engine-event',
+      event: ev('tool.pending_approval', { callId: 'c1', tool: 't' }),
+    });
+    expect(noRun.phase.kind).toBe('running');
+    // Missing tool
+    const noTool = reduce(before, {
+      kind: 'engine-event',
+      event: ev('tool.pending_approval', { runId: 'r', callId: 'c1' }),
+    });
+    expect(noTool.phase.kind).toBe('running');
   });
 });
 

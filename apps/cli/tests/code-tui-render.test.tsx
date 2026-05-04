@@ -17,6 +17,10 @@
 
 import { render } from 'ink-testing-library';
 import { describe, expect, it } from 'vitest';
+import {
+  ApprovalDialog,
+  type DialogSubState,
+} from '../src/commands/code/components/ApprovalDialog.js';
 import { Conversation } from '../src/commands/code/components/Conversation.js';
 import { StatusLine } from '../src/commands/code/components/StatusLine.js';
 import {
@@ -152,8 +156,11 @@ describe('StatusLine', () => {
   it('awaiting-approval phase highlights the gated tool', () => {
     const phase: RunPhase = {
       kind: 'awaiting-approval',
+      runId: 'r1',
       callId: 'c1',
       tool: 'aldo-shell.shell.exec',
+      args: { cmd: 'rm -rf /etc' },
+      reason: null,
     };
     const { lastFrame } = render(<StatusLine phase={phase} telemetry={noTelemetry} />);
     const out = lastFrame() ?? '';
@@ -196,5 +203,85 @@ describe('StatusLine', () => {
     expect(out).toContain('claude-sonnet-4-6');
     expect(out).toContain('250/50 tok');
     expect(out).toContain('$0.0123');
+  });
+});
+
+describe('ApprovalDialog', () => {
+  const phase: Extract<RunPhase, { kind: 'awaiting-approval' }> = {
+    kind: 'awaiting-approval',
+    runId: 'r1',
+    callId: 'c1abcdef-rest',
+    tool: 'aldo-shell.shell.exec',
+    args: { cmd: 'rm -rf /etc' },
+    reason: 'cleaning up obsolete config',
+  };
+
+  it('choose state shows the [a] / [r] / [v] keybinds', () => {
+    const sub: DialogSubState = { kind: 'choose' };
+    const { lastFrame } = render(<ApprovalDialog phase={phase} subState={sub} />);
+    const out = lastFrame() ?? '';
+    expect(out).toContain('approval required');
+    expect(out).toContain('aldo-shell.shell.exec');
+    expect(out).toContain('[a]pprove');
+    expect(out).toContain('[r]eject');
+    expect(out).toContain('[v]');
+  });
+
+  it('surfaces the agent reason on the dialog', () => {
+    const sub: DialogSubState = { kind: 'choose' };
+    const { lastFrame } = render(<ApprovalDialog phase={phase} subState={sub} />);
+    expect(lastFrame()).toContain('cleaning up obsolete config');
+  });
+
+  it('renders the truncated args by default', () => {
+    const sub: DialogSubState = { kind: 'choose' };
+    const { lastFrame } = render(<ApprovalDialog phase={phase} subState={sub} />);
+    const out = lastFrame() ?? '';
+    expect(out).toContain('cmd');
+    expect(out).toContain('rm -rf /etc');
+  });
+
+  it('viewing state expands the args JSON to multi-line', () => {
+    const sub: DialogSubState = { kind: 'viewing' };
+    const longArgs = {
+      cmd: 'rm -rf /etc',
+      cwd: '/workspace',
+      timeoutMs: 60000,
+    };
+    const { lastFrame } = render(
+      <ApprovalDialog phase={{ ...phase, args: longArgs }} subState={sub} />,
+    );
+    const out = lastFrame() ?? '';
+    // Multi-line JSON renders one key per line.
+    expect(out).toContain('cmd');
+    expect(out).toContain('cwd');
+    expect(out).toContain('timeoutMs');
+    // The "v" key now reads "collapse args" instead of "view full args".
+    expect(out).toContain('collapse args');
+  });
+
+  it('rejecting state shows the reason input affordance', () => {
+    const sub: DialogSubState = { kind: 'rejecting', reasonDraft: 'too risky' };
+    const { lastFrame } = render(<ApprovalDialog phase={phase} subState={sub} />);
+    const out = lastFrame() ?? '';
+    expect(out).toContain('reject reason');
+    expect(out).toContain('too risky');
+    expect(out).toContain('Enter to confirm');
+    expect(out).toContain('Esc to cancel');
+  });
+
+  it('rejecting with empty draft shows a placeholder caret', () => {
+    const sub: DialogSubState = { kind: 'rejecting', reasonDraft: '' };
+    const { lastFrame } = render(<ApprovalDialog phase={phase} subState={sub} />);
+    expect(lastFrame()).toContain('reject reason');
+  });
+
+  it('omits the reason line when the agent provided none', () => {
+    const sub: DialogSubState = { kind: 'choose' };
+    const { lastFrame } = render(
+      <ApprovalDialog phase={{ ...phase, reason: null }} subState={sub} />,
+    );
+    const out = lastFrame() ?? '';
+    expect(out).not.toContain('cleaning up obsolete config');
   });
 });

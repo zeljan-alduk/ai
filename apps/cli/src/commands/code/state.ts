@@ -58,8 +58,12 @@ export type RunPhase =
     }
   | {
       readonly kind: 'awaiting-approval';
+      readonly runId: string;
       readonly callId: string;
       readonly tool: string;
+      readonly args: unknown;
+      /** Agent's stated reason from the model's tool_call args, if any. */
+      readonly reason: string | null;
     }
   | {
       readonly kind: 'completed';
@@ -172,13 +176,33 @@ function applyEngineEvent(state: TuiState, event: RunEvent): TuiState {
       return resolveToolEntry(state, p.callId, p.result, p.isError === true);
     }
     case 'tool.pending_approval': {
-      const p = event.payload as { callId?: string; tool?: string } | null;
-      if (p === null || typeof p.callId !== 'string' || typeof p.tool !== 'string') {
+      const p = event.payload as
+        | {
+            runId?: string;
+            callId?: string;
+            tool?: string;
+            args?: unknown;
+            reason?: string | null;
+          }
+        | null;
+      if (
+        p === null ||
+        typeof p.runId !== 'string' ||
+        typeof p.callId !== 'string' ||
+        typeof p.tool !== 'string'
+      ) {
         return state;
       }
       return {
         ...state,
-        phase: { kind: 'awaiting-approval', callId: p.callId, tool: p.tool },
+        phase: {
+          kind: 'awaiting-approval',
+          runId: p.runId,
+          callId: p.callId,
+          tool: p.tool,
+          args: p.args,
+          reason: typeof p.reason === 'string' ? p.reason : null,
+        },
       };
     }
     case 'tool.approval_resolved': {
