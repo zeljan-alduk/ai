@@ -24,6 +24,11 @@ import { Conversation } from './components/Conversation.js';
 import { Input } from './components/Input.js';
 import { StatusLine } from './components/StatusLine.js';
 import {
+  HELP_TEXT,
+  parseSlashCommand,
+  renderTranscriptMarkdown,
+} from './slash-commands.js';
+import {
   type Action,
   type TuiState,
   initialState,
@@ -57,17 +62,116 @@ export interface AppProps {
    * but the keybinds are inert.
    */
   readonly approvalController?: ApprovalController;
+  /**
+   * MISSING_PIECES §11 Phase D — session info surfaced by /model and
+   * /tools. Read-only in v0; mutating mid-session would require
+   * rebuilding the spec + runtime so it's deferred.
+   */
+  readonly sessionInfo?: {
+    readonly capabilityClass: string;
+    readonly toolRefs: readonly string[];
+    readonly workspace: string;
+    readonly maxCycles: number;
+  };
+  /**
+   * MISSING_PIECES §11 Phase D — save side-effect callback. The App
+   * passes the rendered markdown + path; the parent (tui.ts) does
+   * the actual fs.writeFileSync. Returns the absolute path written
+   * (for the system-info confirmation) or throws on failure.
+   */
+  readonly onSave?: (path: string, content: string) => Promise<string>;
 }
 
-export function App({ initialBrief, runTurn, approvalController }: AppProps) {
+export function App({
+  initialBrief,
+  runTurn,
+  approvalController,
+  sessionInfo,
+  onSave,
+}: AppProps) {
   const [state, dispatch] = useReducer(reduce, initialState);
   const { exit } = useApp();
   const abortRef = useRef<AbortController | null>(null);
   // Auto-fire the first turn from the positional brief (if supplied).
   const [bootBrief, setBootBrief] = useState<string | undefined>(initialBrief);
 
+  const stateRef = useRef<TuiState>(state);
+  stateRef.current = state;
+
   const startTurn = useCallback(
     (text: string) => {
+      // MISSING_PIECES §11 Phase D — intercept slash commands BEFORE
+      // they reach the agent. Slash commands are synchronous (mostly)
+      // and never spend tokens.
+      const slash = parseSlashCommand(text);
+      if (slash !== null) {
+        switch (slash.kind) {
+          case 'help':
+            dispatch({ kind: 'system-info', content: HELP_TEXT });
+            return;
+          case 'clear':
+            dispatch({ kind: 'reset-conversation' });
+            return;
+          case 'exit':
+            if (abortRef.current !== null) abortRef.current.abort();
+            exit();
+            return;
+          case 'save': {
+            const transcript = renderTranscriptMarkdown(stateRef.current.entries);
+            if (onSave === undefined) {
+              dispatch({
+                kind: 'system-info',
+                content: '/save is not wired in this session.',
+              });
+              return;
+            }
+            void (async () => {
+              try {
+                const written = await onSave(slash.path, transcript);
+                dispatch({
+                  kind: 'system-info',
+                  content: `transcript saved to ${written}`,
+                });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                dispatch({
+                  kind: 'system-info',
+                  content: `save failed: ${msg}`,
+                });
+              }
+            })();
+            return;
+          }
+          case 'model':
+            dispatch({
+              kind: 'system-info',
+              content:
+                sessionInfo === undefined
+                  ? 'no session info available.'
+                  : `capability_class: ${sessionInfo.capabilityClass}\n` +
+                    'mid-session swap is not yet supported — restart with --capability-class <id>.',
+            });
+            return;
+          case 'tools':
+            dispatch({
+              kind: 'system-info',
+              content:
+                sessionInfo === undefined
+                  ? 'no session info available.'
+                  : 'active tools:\n  · ' +
+                    sessionInfo.toolRefs.join('\n  · ') +
+                    '\nmid-session change is not yet supported — restart with --tools <list>.',
+            });
+            return;
+          case 'unknown':
+            dispatch({
+              kind: 'system-info',
+              content: `unknown command: ${slash.raw}\nrun /help for the list.`,
+            });
+            return;
+        }
+      }
+
       dispatch({ kind: 'user-input', text });
       const ac = new AbortController();
       abortRef.current = ac;
@@ -95,7 +199,7 @@ export function App({ initialBrief, runTurn, approvalController }: AppProps) {
         }
       })();
     },
-    [runTurn],
+    [runTurn, exit, onSave, sessionInfo],
   );
 
   useEffect(() => {

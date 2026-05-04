@@ -10,7 +10,8 @@
  * pull in the React + ink graph.
  */
 
-import { resolve as resolvePath } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, resolve as resolvePath } from 'node:path';
 import { InMemoryApprovalController } from '@aldo-ai/engine';
 import type {
   AgentRef,
@@ -152,11 +153,28 @@ export async function startTui(
     };
   };
 
+  // MISSING_PIECES §11 Phase D — slash command side-effect bridges.
+  const onSave = async (path: string, content: string): Promise<string> => {
+    const target = isAbsolute(path) ? path : resolvePath(workspaceRoot, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+    return target;
+  };
+
+  const sessionInfo = {
+    capabilityClass: built.spec.modelPolicy.primary.capabilityClass,
+    toolRefs: built.toolRefs,
+    workspace: workspaceRoot,
+    maxCycles: built.spec.iteration?.maxCycles ?? 0,
+  };
+
   // Lazy-load the ink renderer so non-TUI callers never pay the cost.
   const { mountTui } = await import('./app-render.js');
   await mountTui({
     runTurn,
     approvalController,
+    sessionInfo,
+    onSave,
     ...(opts.initialBrief !== undefined ? { initialBrief: opts.initialBrief } : {}),
   });
   return 0;

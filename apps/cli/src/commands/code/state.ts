@@ -38,7 +38,17 @@ export interface ToolEntry {
   readonly isError: boolean;
 }
 
-export type Entry = UserEntry | AssistantEntry | ToolEntry;
+/**
+ * MISSING_PIECES §11 / Phase D — slash-command output. Distinct from
+ * `assistant` entries so the renderer can dim them and so the
+ * markdown transcript exporter can label them as `### system`.
+ */
+export interface SystemEntry {
+  readonly kind: 'system';
+  readonly content: string;
+}
+
+export type Entry = UserEntry | AssistantEntry | ToolEntry | SystemEntry;
 
 export interface TelemetryRollup {
   readonly tokensIn: number;
@@ -95,7 +105,9 @@ export type Action =
   | { readonly kind: 'user-input'; readonly text: string }
   | { readonly kind: 'engine-event'; readonly event: RunEvent }
   | { readonly kind: 'turn-finished'; readonly ok: boolean; readonly output: string | null }
-  | { readonly kind: 'reset-conversation' };
+  | { readonly kind: 'reset-conversation' }
+  /** MISSING_PIECES §11 / Phase D — append a system info entry. */
+  | { readonly kind: 'system-info'; readonly content: string };
 
 /** Apply one action; produce the next state. Pure. */
 export function reduce(state: TuiState, action: Action): TuiState {
@@ -108,6 +120,11 @@ export function reduce(state: TuiState, action: Action): TuiState {
       return finishTurn(state, action.ok, action.output);
     case 'reset-conversation':
       return { ...initialState };
+    case 'system-info':
+      return {
+        ...state,
+        entries: [...state.entries, { kind: 'system', content: action.content }],
+      };
   }
 }
 

@@ -5383,3 +5383,33 @@ Out of scope (subsequent phases):
 - Phase E — session persistence + --resume against the run store.
 - Phase F — docs + smoke + bin polish.
 - Phase G — homebrew + curl|sh installer.
+
+2026-05-04T11:54Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §11 Phase D: slash commands + transcript export.
+
+Phase D adds the small but high-leverage in-session controls every Claude-Code-style TUI ships: /help, /clear, /save <path>, /exit, plus read-only /model and /tools. Mid-session model + tool swap is deferred (would require a fresh runtime + spec rebuild and history transfer); read-only views are the right v0 affordance.
+
+Slash command parser + transcript renderer (commands/code/slash-commands.ts, ~140 LoC):
+- parseSlashCommand(text): SlashCommand | null. Returns null when text doesn't start with `/` so the App falls through to the regular user-input path. Discriminated union: help / clear / exit / save{path} / model / tools / unknown{raw}. Aliases supported (?  /reset /quit /q). Case-insensitive command name. /save without a path returns 'unknown' so the App can show a clear error.
+- HELP_TEXT — exported as data so the help dispatch is one dispatch into a system-info action; tests assert every command + keybind is mentioned.
+- renderTranscriptMarkdown(entries): pure markdown emitter. ## you / ## aldo / ### tool · <name> · ok|error|pending / ### system. JSON-fenced args + result.
+
+State extension (commands/code/state.ts):
+- New SystemEntry { kind: 'system', content }; new system-info action; reducer appends a SystemEntry without disturbing the running/idle/etc. phase. Pre-Phase D entries unchanged.
+
+Conversation rendering: ※ system header + dim text for SystemEntry. Reducer's reset-conversation action (already shipping in Phase B) doubles as /clear.
+
+App intercept (commands/code/app.tsx):
+- startTurn parses slash commands BEFORE dispatching user-input. Each command branches: /help → system-info(HELP_TEXT); /clear → reset-conversation; /exit → abort + ink exit(); /save → renders transcript via stateRef.current.entries, calls onSave (injected by tui.ts) → confirms with system-info("transcript saved to ..."); /model and /tools → system-info displaying sessionInfo (capabilityClass / toolRefs); unknown → system-info hint.
+- Used a stateRef so the /save handler can read the latest entries without making the callback rebuild on every state change (avoiding a stale-closure bug).
+
+Side-effect bridges (commands/code/tui.ts):
+- onSave(path, content): writes via mkdirSync(recursive) + writeFileSync, returning the resolved absolute path. Confines via cwd resolution but doesn't sandbox into the workspace root — operators saving a transcript to ~/notes is the common case.
+- sessionInfo: capabilityClass + toolRefs + workspace + maxCycles surfaced to App for /model and /tools.
+
+Tests: 78 §11 passing total (+17 Phase D). 13 parser cases (every command + aliases + missing-args + case-insensitivity + typos + non-slash falls through), HELP_TEXT shape assertion, 4 transcript-renderer cases (empty / full session / pending+error tool / streaming-vs-finished assistant / no-text placeholder), 2 reducer cases (system-info appends; preserves prior entries). tsc clean. Pre-existing CLI flake unchanged.
+
+Out of scope (subsequent phases):
+- Phase E — session persistence + --resume against the run store.
+- Phase F — docs + smoke + bin polish.
+- Phase G — homebrew + curl|sh installer.
+- Mutating /model and /tools mid-session (rebuild spec + runtime + history transfer; nontrivial).

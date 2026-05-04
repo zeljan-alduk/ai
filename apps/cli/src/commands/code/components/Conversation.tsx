@@ -55,5 +55,15 @@ function EntryRow({ entry }: { entry: Entry }) {
       </Box>
     );
   }
+  if (entry.kind === 'system') {
+    return (
+      <Box flexDirection="column" marginY={1}>
+        <Text bold dimColor>
+          ※ system
+        </Text>
+        <Text dimColor>{entry.content}</Text>
+      </Box>
+    );
+  }
   return <ToolCall entry={entry} />;
 }
