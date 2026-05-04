@@ -31,6 +31,16 @@ export {
   type TerminationDecision,
 } from './iterative-termination.js';
 
+// MISSING_PIECES #9 — approval gate primitive.
+export {
+  ApprovalNotFoundError,
+  approvalPolicyFor,
+  InMemoryApprovalController,
+  type ApprovalController,
+  type ApprovalDecision,
+  type ApprovalRequest,
+} from './approval-controller.js';
+
 export {
   PlatformRuntime,
   SpawnNotAllowedError,

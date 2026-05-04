@@ -17,6 +17,7 @@ import type {
 } from '@aldo-ai/types';
 import { type InternalAgentRun, LeafAgentRun, type SecretArgResolver } from './agent-run.js';
 import { type Checkpointer, InMemoryCheckpointer } from './checkpointer/index.js';
+import type { ApprovalController } from './approval-controller.js';
 import {
   type HistoryCompressor,
   IterativeAgentRun,
@@ -149,6 +150,15 @@ export interface RuntimeDeps {
    * `spec.iteration.summaryStrategy`; this dep is the executor.
    */
   readonly historyCompressor?: HistoryCompressor;
+  /**
+   * MISSING_PIECES #9 — optional approval controller. When the spec
+   * declares `tools.approvals` and this dep is wired, the iterative
+   * loop pauses on gated tool calls until an approver resolves the
+   * request. Production wires `InMemoryApprovalController` (per-API-
+   * process); a future Postgres-backed controller would let approvals
+   * survive process restarts and span multiple replicas.
+   */
+  readonly approvalController?: ApprovalController;
 }
 
 /**
@@ -350,6 +360,7 @@ export class PlatformRuntime implements Runtime {
   private readonly orchestrator: CompositeOrchestrator | undefined;
   private readonly notificationSink: NotificationSink | undefined;
   private readonly historyCompressor: HistoryCompressor;
+  private readonly approvalController: ApprovalController | undefined;
 
   constructor(deps: RuntimeDeps) {
     this.modelGateway = deps.modelGateway;
@@ -366,6 +377,12 @@ export class PlatformRuntime implements Runtime {
     this.orchestrator = deps.orchestrator;
     this.notificationSink = deps.notificationSink;
     this.historyCompressor = deps.historyCompressor ?? passThroughCompressor;
+    this.approvalController = deps.approvalController;
+  }
+
+  /** Public accessor for the approval controller (used by API routes). */
+  getApprovalController(): ApprovalController | undefined {
+    return this.approvalController;
   }
 
   /**
@@ -601,6 +618,9 @@ export class PlatformRuntime implements Runtime {
           checkpointer: this.checkpointer,
           track: (r) => this.runs.set(r.id, r),
           ...(this.runStore !== undefined ? { runStore: this.runStore } : {}),
+          ...(this.approvalController !== undefined
+            ? { approvalController: this.approvalController }
+            : {}),
         },
         this.historyCompressor,
       );

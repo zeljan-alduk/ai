@@ -66,6 +66,7 @@ import {
   parseModelsYaml,
 } from '@aldo-ai/gateway';
 import {
+  InMemoryApprovalController,
   InMemoryCheckpointer,
   NoopTracer,
   PlatformRuntime,
@@ -339,6 +340,12 @@ function finalizeRuntime(deps: Deps, tenantId: string, state: ProviderState): Ru
     // defaults to `passThroughCompressor` and a long iterative loop
     // will OOM the model's context window.
     historyCompressor: new RealHistoryCompressor(),
+    // MISSING_PIECES #9 — per-tenant in-memory approval controller.
+    // Tool calls whose spec marks `tools.approvals.<name>: always`
+    // suspend until the approve/reject API resolves them. The
+    // controller is per-tenant per process; multi-replica deployments
+    // would swap in a Postgres-backed implementation in a follow-up.
+    approvalController: new InMemoryApprovalController(),
   });
 
   // Wave-X — wire the composite orchestrator so agents whose specs

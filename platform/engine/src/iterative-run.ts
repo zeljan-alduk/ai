@@ -64,6 +64,10 @@ import type {
 import type { Checkpoint, Checkpointer } from './checkpointer/index.js';
 import type { InternalAgentRun } from './agent-run.js';
 import {
+  type ApprovalController,
+  approvalPolicyFor,
+} from './approval-controller.js';
+import {
   type CycleOutcome,
   firstMatchingTermination,
   type TerminationDecision,
@@ -78,6 +82,16 @@ export interface IterativeAgentRunDeps {
   readonly checkpointer: Checkpointer;
   readonly track: (run: InternalAgentRun) => void;
   readonly runStore?: RunStore;
+  /**
+   * MISSING_PIECES #9 — optional approval controller. When the spec
+   * declares `tools.approvals` and the controller is supplied, the
+   * loop pauses on gated tool calls until an out-of-band caller
+   * resolves the request. When the controller is absent, gated tool
+   * calls fail fast with a synthetic `{ rejected: true, reason }`
+   * tool_result so a misconfigured deployment can't silently bypass
+   * the gate.
+   */
+  readonly approvalController?: ApprovalController;
 }
 
 export interface IterativeAgentRunOptions {
@@ -510,6 +524,49 @@ export class IterativeAgentRun implements InternalAgentRun {
         toolCalls.map(async (tc): Promise<ToolResultPart> => {
           const ref = resolveToolRef(this.spec, tc.tool);
           this.emit({ type: 'tool_call', at: now(), payload: tc });
+
+          // MISSING_PIECES #9 — approval gate. When the spec marks
+          // this tool as requiring approval, suspend until the
+          // controller resolves the request. Approved → dispatch as
+          // normal. Rejected → synthesise the rejection tool_result
+          // and skip dispatch (the model decides what to do next).
+          const policy = approvalPolicyFor(this.spec, tc.tool);
+          if (policy === 'always') {
+            const decision = await this.awaitApproval(tc);
+            if (decision === null) {
+              const failPart: ToolResultPart & { tool?: string } = {
+                type: 'tool_result',
+                callId: tc.callId,
+                result: {
+                  rejected: true,
+                  reason: 'no approval controller wired into runtime',
+                },
+                isError: true,
+                tool: tc.tool,
+              };
+              this.toolResultsRecord[tc.callId] = failPart.result;
+              this.emit({ type: 'tool_result', at: now(), payload: failPart });
+              return failPart;
+            }
+            if (decision.kind === 'rejected') {
+              const rejPart: ToolResultPart & { tool?: string } = {
+                type: 'tool_result',
+                callId: tc.callId,
+                result: {
+                  rejected: true,
+                  reason: decision.reason,
+                  approver: decision.approver,
+                },
+                isError: true,
+                tool: tc.tool,
+              };
+              this.toolResultsRecord[tc.callId] = rejPart.result;
+              this.emit({ type: 'tool_result', at: now(), payload: rejPart });
+              return rejPart;
+            }
+            // approved → fall through to invoke
+          }
+
           let r: ToolResult;
           try {
             r = await this.deps.toolHost.invoke(ref, tc.args, ctx);
@@ -566,6 +623,79 @@ export class IterativeAgentRun implements InternalAgentRun {
     }
 
     return { text: textAccum, toolCalls, toolResults, usage: endUsage, finishReason };
+  }
+
+  /**
+   * MISSING_PIECES #9 — block on the approval controller. Emits the
+   * `tool.pending_approval` event before suspending, and the
+   * `tool.approval_resolved` event the moment the controller settles.
+   * Returns `null` when no controller is wired (caller fails closed).
+   */
+  private async awaitApproval(
+    tc: ToolCallPart,
+  ): Promise<
+    | null
+    | {
+        readonly kind: 'approved';
+        readonly approver: string;
+        readonly at: string;
+      }
+    | {
+        readonly kind: 'rejected';
+        readonly approver: string;
+        readonly reason: string;
+        readonly at: string;
+      }
+  > {
+    const ctrl = this.deps.approvalController;
+    if (ctrl === undefined) return null;
+
+    const reason = readReasonFromArgs(tc.args);
+    this.emit({
+      type: 'tool.pending_approval',
+      at: now(),
+      payload: {
+        runId: this.id,
+        callId: tc.callId,
+        tool: tc.tool,
+        args: tc.args,
+        reason,
+      },
+    });
+
+    let decision: Awaited<ReturnType<ApprovalController['requestApproval']>>;
+    try {
+      decision = await ctrl.requestApproval(
+        {
+          runId: this.id,
+          callId: tc.callId,
+          tool: tc.tool,
+          args: tc.args,
+          reason,
+        },
+        this.abortController.signal,
+      );
+    } catch {
+      // Cancelled while waiting — treat as a structural rejection so
+      // the loop can wind down without crashing on an unhandled
+      // promise rejection. The cancel() handler already drained
+      // events; emit nothing further here.
+      return null;
+    }
+
+    this.emit({
+      type: 'tool.approval_resolved',
+      at: now(),
+      payload: {
+        runId: this.id,
+        callId: tc.callId,
+        kind: decision.kind,
+        approver: decision.approver,
+        ...(decision.kind === 'rejected' ? { reason: decision.reason } : {}),
+        at: decision.at,
+      },
+    });
+    return decision;
   }
 
   // ─── plumbing ─────────────────────────────────────────────────────
@@ -647,6 +777,19 @@ function renderSystemPrompt(spec: AgentSpec): string {
   const base = `You are ${spec.identity.name} v${spec.identity.version}. ${spec.identity.description}`;
   const varLine = Object.keys(vars).length ? ` Variables: ${JSON.stringify(vars)}` : '';
   return base + varLine;
+}
+
+/**
+ * MISSING_PIECES #9 — pull a `reason` field off the model's tool args
+ * if present. Some agents convention-encode the human-readable reason
+ * for a write inside the args (`{ path, content, reason }`); when
+ * present we surface it on the pending-approval event so the
+ * approver doesn't have to read raw JSON to decide.
+ */
+function readReasonFromArgs(args: unknown): string | null {
+  if (args === null || typeof args !== 'object') return null;
+  const r = (args as { reason?: unknown }).reason;
+  return typeof r === 'string' && r.length > 0 ? r : null;
 }
 
 function lastAssistantText(messages: readonly Message[]): string {

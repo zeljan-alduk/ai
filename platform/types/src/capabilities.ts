@@ -33,6 +33,20 @@ export const CANONICAL_CAPABILITIES = [
   'code-fim',
   'embeddings',
   'rerank',
+
+  /**
+   * MISSING_PIECES #4 — frontier-grade coding capability.
+   *
+   * Declared by Claude Opus / Sonnet / GPT-5 / Gemini-Pro class models
+   * that consistently outperform local quantized models on tool-using
+   * coding loops at non-trivial context lengths. An agent that
+   * requires this capability gets routed to a frontier model (when
+   * the tenant has the corresponding provider key) or fails fast
+   * with `NoEligibleModelError` — never silently downgrades to a
+   * local model whose typecheck-loop performance is meaningfully
+   * worse.
+   */
+  'coding-frontier',
 ] as const;
 
 export type CanonicalCapability = (typeof CANONICAL_CAPABILITIES)[number];

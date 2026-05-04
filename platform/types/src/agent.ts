@@ -65,6 +65,18 @@ export interface ToolsGuardsConfig {
   };
 }
 
+/**
+ * MISSING_PIECES #9 — per-tool approval policy. The engine's
+ * iterative loop checks this map on every tool dispatch and pauses
+ * on tools whose value resolves to `'always'` or `'protected_paths'`.
+ * Pre-#9 specs simply omit the field; the loop runs unchanged.
+ *
+ * Keys are tool names. They can be either the bare form (e.g.
+ * `shell.exec`) or the MCP server-prefixed form (e.g.
+ * `aldo-shell.shell.exec`); the resolver accepts both.
+ */
+export type ApprovalPolicy = 'never' | 'always' | 'protected_paths';
+
 export interface ToolsConfig {
   readonly mcp: readonly {
     readonly server: string;
@@ -76,6 +88,12 @@ export interface ToolsConfig {
     readonly filesystem: ToolPermission;
   };
   readonly guards?: ToolsGuardsConfig;
+  /**
+   * MISSING_PIECES #9 — per-tool approval-gate policy. Optional;
+   * pre-#9 specs that omit the field run with no gating. Empty
+   * object behaves the same as omitted.
+   */
+  readonly approvals?: Readonly<Record<string, ApprovalPolicy>>;
 }
 
 /**

@@ -10,15 +10,19 @@
 import { randomUUID } from 'node:crypto';
 import {
   AddRunTagRequest,
+  ApprovalDecisionResponse,
+  ApproveRunRequest,
   BulkRunActionRequest,
   BulkRunActionResponse,
   CreateRunRequest,
   CreateRunResponse,
   GetRunResponse,
   GetRunTreeResponse,
+  ListPendingApprovalsResponse,
   ListRunsQuery,
   ListRunsResponse,
   PopularTagsResponse,
+  RejectRunRequest,
   ReplaceRunTagsRequest,
   RunSearchRequest,
   RunSearchResponse,
@@ -34,9 +38,11 @@ import type {
   TenantId,
   TraceId,
 } from '@aldo-ai/types';
+import { ApprovalNotFoundError } from '@aldo-ai/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getAuth, requireRole, requireScope } from '../auth/middleware.js';
+import { getOrBuildRuntime } from '../runtime-bootstrap.js';
 import {
   DEPTH_OVERFLOW_ID,
   addRunTag,
@@ -545,6 +551,140 @@ export function runsRoutes(deps: Deps): Hono {
     });
     if (tags === null) throw notFound(`run not found: ${idParsed.data.id}`);
     return c.json(RunTagsResponse.parse({ runId: idParsed.data.id, tags: [...tags] }));
+  });
+
+  // -------------------------------------------------------------------------
+  // MISSING_PIECES #9 — approval-gate routes.
+  //
+  // These mutate the runtime's in-memory ApprovalController; they are
+  // load-bearing for any iterative agent whose spec declares
+  // `tools.approvals`. The controller is per-tenant and per-process —
+  // multi-replica deployments need a Postgres-backed implementation
+  // (TODO).
+
+  /** `GET /v1/runs/:id/approvals` — list pending approvals for a run. */
+  app.get('/v1/runs/:id/approvals', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'runs:read');
+    const idParsed = RunIdParam.safeParse({ id: c.req.param('id') });
+    if (!idParsed.success) throw validationError('invalid run id', idParsed.error.issues);
+    const tenantId = getAuth(c).tenantId;
+    const bundle = getOrBuildRuntime(deps, tenantId);
+    if (bundle === null) {
+      // No providers wired up → no runtime → no approval controller.
+      // Return an empty list rather than 500; that matches the
+      // semantics of "nothing pending" and keeps the UI render path
+      // simple.
+      return c.json(ListPendingApprovalsResponse.parse({ approvals: [] }));
+    }
+    const ctrl = bundle.runtime.getApprovalController();
+    const approvals = ctrl?.pending(idParsed.data.id) ?? [];
+    return c.json(
+      ListPendingApprovalsResponse.parse({
+        approvals: approvals.map((a) => ({
+          runId: a.runId,
+          callId: a.callId,
+          tool: a.tool,
+          args: a.args,
+          reason: a.reason,
+        })),
+      }),
+    );
+  });
+
+  /** `POST /v1/runs/:id/approve` — resolve a pending approval as approved. */
+  app.post('/v1/runs/:id/approve', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'runs:write');
+    const idParsed = RunIdParam.safeParse({ id: c.req.param('id') });
+    if (!idParsed.success) throw validationError('invalid run id', idParsed.error.issues);
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      throw validationError('request body must be JSON');
+    }
+    const parsed = ApproveRunRequest.safeParse(raw);
+    if (!parsed.success) throw validationError('invalid approve body', parsed.error.issues);
+
+    const auth = getAuth(c);
+    const bundle = getOrBuildRuntime(deps, auth.tenantId);
+    if (bundle === null) {
+      throw new HttpError(503, 'runtime_unavailable', 'no runtime available for this tenant');
+    }
+    const ctrl = bundle.runtime.getApprovalController();
+    if (ctrl === undefined) {
+      throw new HttpError(503, 'approval_unavailable', 'runtime has no approval controller wired');
+    }
+    try {
+      const decision = ctrl.resolve(idParsed.data.id, parsed.data.callId, {
+        kind: 'approved',
+        approver: auth.userId,
+      });
+      return c.json(
+        ApprovalDecisionResponse.parse({
+          runId: idParsed.data.id,
+          callId: parsed.data.callId,
+          kind: decision.kind,
+          approver: decision.approver,
+          reason: decision.kind === 'rejected' ? decision.reason : null,
+          at: decision.at,
+        }),
+      );
+    } catch (err) {
+      if (err instanceof ApprovalNotFoundError) {
+        throw notFound(`no pending approval for callId=${parsed.data.callId}`);
+      }
+      throw err;
+    }
+  });
+
+  /** `POST /v1/runs/:id/reject` — resolve a pending approval as rejected. */
+  app.post('/v1/runs/:id/reject', async (c) => {
+    requireRole(c, 'member');
+    requireScope(c, 'runs:write');
+    const idParsed = RunIdParam.safeParse({ id: c.req.param('id') });
+    if (!idParsed.success) throw validationError('invalid run id', idParsed.error.issues);
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      throw validationError('request body must be JSON');
+    }
+    const parsed = RejectRunRequest.safeParse(raw);
+    if (!parsed.success) throw validationError('invalid reject body', parsed.error.issues);
+
+    const auth = getAuth(c);
+    const bundle = getOrBuildRuntime(deps, auth.tenantId);
+    if (bundle === null) {
+      throw new HttpError(503, 'runtime_unavailable', 'no runtime available for this tenant');
+    }
+    const ctrl = bundle.runtime.getApprovalController();
+    if (ctrl === undefined) {
+      throw new HttpError(503, 'approval_unavailable', 'runtime has no approval controller wired');
+    }
+    try {
+      const decision = ctrl.resolve(idParsed.data.id, parsed.data.callId, {
+        kind: 'rejected',
+        approver: auth.userId,
+        reason: parsed.data.reason,
+      });
+      return c.json(
+        ApprovalDecisionResponse.parse({
+          runId: idParsed.data.id,
+          callId: parsed.data.callId,
+          kind: decision.kind,
+          approver: decision.approver,
+          reason: decision.kind === 'rejected' ? decision.reason : null,
+          at: decision.at,
+        }),
+      );
+    } catch (err) {
+      if (err instanceof ApprovalNotFoundError) {
+        throw notFound(`no pending approval for callId=${parsed.data.callId}`);
+      }
+      throw err;
+    }
   });
 
   /**

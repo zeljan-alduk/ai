@@ -136,6 +136,18 @@ export const RunEvent = z.object({
     'model.response',
     'tool.results',
     'history.compressed',
+    /**
+     * MISSING_PIECES #9 — approval gate lifecycle.
+     *
+     *  - tool.pending_approval  { runId, callId, tool, args, reason }
+     *  - tool.approval_resolved { runId, callId, kind, approver, reason?, at }
+     *
+     * The iterative loop suspends between these two events; the
+     * out-of-band caller (API approve/reject route) signals the
+     * controller, which unblocks the loop.
+     */
+    'tool.pending_approval',
+    'tool.approval_resolved',
   ]),
   at: z.string(),
   payload: z.unknown(),
@@ -157,6 +169,48 @@ export const RunDetail = RunSummary.extend({
   usage: z.array(UsageRow),
 });
 export type RunDetail = z.infer<typeof RunDetail>;
+
+// ---------------------------------------------------------------------------
+// MISSING_PIECES #9 — approval-gate wire shapes.
+
+/** A pending approval surfaced via `GET /v1/runs/:id/approvals`. */
+export const PendingApprovalWire = z.object({
+  runId: z.string(),
+  callId: z.string(),
+  tool: z.string(),
+  args: z.unknown(),
+  reason: z.string().nullable(),
+});
+export type PendingApprovalWire = z.infer<typeof PendingApprovalWire>;
+
+export const ListPendingApprovalsResponse = z.object({
+  approvals: z.array(PendingApprovalWire),
+});
+export type ListPendingApprovalsResponse = z.infer<typeof ListPendingApprovalsResponse>;
+
+export const ApproveRunRequest = z.object({
+  callId: z.string().min(1),
+  /** Optional free-form note the approver leaves. */
+  reason: z.string().min(1).optional(),
+});
+export type ApproveRunRequest = z.infer<typeof ApproveRunRequest>;
+
+export const RejectRunRequest = z.object({
+  callId: z.string().min(1),
+  /** Required for reject — operators MUST justify the denial. */
+  reason: z.string().min(1),
+});
+export type RejectRunRequest = z.infer<typeof RejectRunRequest>;
+
+export const ApprovalDecisionResponse = z.object({
+  runId: z.string(),
+  callId: z.string(),
+  kind: z.enum(['approved', 'rejected']),
+  approver: z.string(),
+  reason: z.string().nullable(),
+  at: z.string(),
+});
+export type ApprovalDecisionResponse = z.infer<typeof ApprovalDecisionResponse>;
 
 export const GetRunResponse = z.object({
   run: RunDetail,

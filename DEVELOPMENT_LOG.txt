@@ -5167,3 +5167,44 @@ What's next per §9 plan:
 - Per-cycle eval rubrics (deferred to a follow-up) — extend iterativeRunOutput or add a sibling extractor that scores each cycle individually.
 - editAndResume() on IterativeAgentRun (Phase B's stub forwards to plain resume — full message-rewrite path is the LeafAgentRun pattern).
 - Sandbox + secret-resolver + breakpoints + notifications wiring on the iterative path (intentionally narrow in B; the leaf path has the full set).
+
+2026-05-04T08:49Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES Sprint 3: #4 frontier-coding capability + #9 approval gates (engine + API). Plus production wiring of the §9 Phase C compressor.
+
+Production wiring:
+- apps/api/src/runtime-bootstrap.ts — production PlatformRuntime now passes `RealHistoryCompressor` (not the passThrough default). Iterative leaf agents in production will compress their history at the 80% threshold per spec.summaryStrategy. Required to make Phase C actually live in deployed runs.
+
+#4 frontier-coding capability:
+- platform/types/src/capabilities.ts — added `coding-frontier` to CANONICAL_CAPABILITIES.
+- platform/gateway/fixtures/models.yaml — Claude Opus 4.7, Sonnet 4.6, GPT-5 all advertise `coding-frontier` in their `provides` lists. Plus a dedicated routing entry `claude-sonnet-4-6-coding` with `capabilityClass: coding-frontier` so agents that route by class (not just by required capability) resolve correctly. Local models do NOT advertise it — the platform refuses to silently downgrade a frontier-coding contract to a local model.
+- platform/gateway/tests/coding-frontier.test.ts — 9 tests: capability is canonical; shipped catalog declares it on the right models AND not on local ones; router refuses an agent that requires `coding-frontier` when no model in the registry provides it; routes correctly when one does; budget=0/0 local-only mode rejects the frontier model even when its cost rounds to zero (locality wins over cost).
+- The §9 plan's design sketch had a "CAPABILITY_FALLBACK_CHAIN" hardcoded in the gateway. I deliberately did NOT add that — the spec already controls the fallback chain via `model_policy.fallbacks[]`. An agent author who wants "never fall to local for coding-frontier" sets `primary: coding-frontier` with no `local-reasoning` fallback. Spec-driven > hardcoded.
+
+#9 approval gates — engine state machine:
+- platform/engine/src/approval-controller.ts (~180 LoC) — ApprovalController interface + InMemoryApprovalController. Pause is engine-internal (no run_status enum migration); the wire signal is the `tool.pending_approval` event in the event stream. Per-call (not per-run) await — two parallel tool calls in the same cycle each go through their own approval. Reject path emits a synthetic ToolResult `{ rejected: true, reason }`; the agent observes it and decides next move (no exception). AbortSignal cancels a pending approval mid-pause. ApprovalNotFoundError thrown when an unknown (runId, callId) is resolved.
+- platform/engine/src/iterative-run.ts — wired into the per-cycle tool dispatch loop. New `approvalPolicyFor(spec, toolName)` resolves the policy: looks up `spec.tools.approvals` accepting both bare and server-prefixed forms (`shell.exec` matches both `shell.exec` and `aldo-shell.shell.exec`); collapses `protected_paths` to `always` in v0 (path-aware predicate is a follow-up). When policy === 'always', the loop emits `tool.pending_approval`, suspends via `await approvalController.requestApproval(...)`, then either dispatches (approved) or appends a synthetic rejection tool_result (rejected). When NO controller is wired AND a tool is gated, the loop fails closed: synthetic rejection with reason "no approval controller wired into runtime". Misconfigured deployment can never silently bypass the gate.
+- platform/types/src/agent.ts — ApprovalPolicy type + `tools.approvals` slot on ToolsConfig. Additive; pre-#9 specs unaffected.
+- platform/types/src/runtime.ts — RunEvent union extended with `tool.pending_approval` + `tool.approval_resolved`.
+- platform/api-contract/src/runs.ts — wire-shape additions: PendingApprovalWire, ListPendingApprovalsResponse, ApproveRunRequest, RejectRunRequest, ApprovalDecisionResponse.
+- platform/registry/src/{schema,loader}.ts — YAML schema for `tools.approvals: { <toolName>: never|always|protected_paths }`; pass-through to the runtime spec.
+- platform/engine/src/runtime.ts — RuntimeDeps.approvalController seam; PlatformRuntime.getApprovalController() public accessor; threaded into IterativeAgentRun construction.
+- apps/api/src/runtime-bootstrap.ts — production wires a per-tenant InMemoryApprovalController. Per-tenant per process; multi-replica deployments need a Postgres-backed implementation (TODO).
+
+#9 approval gates — API:
+- apps/api/src/routes/runs.ts — three new routes: GET /v1/runs/:id/approvals (list pending), POST /v1/runs/:id/approve (resolve approved), POST /v1/runs/:id/reject (resolve rejected; reason required). Maps ApprovalNotFoundError → 404 not_found; HttpError(503, runtime_unavailable) when no runtime is built. Auth via the existing requireRole/requireScope middleware.
+
+Tests (31 new, all green):
+- platform/gateway/tests/coding-frontier.test.ts — 9 (#4 capability + routing + privacy refusal).
+- platform/engine/tests/approval-controller.test.ts — 15 (5 unit on approvalPolicyFor + 5 unit on InMemoryApprovalController + 5 integration with IterativeAgentRun: approve dispatches the tool, reject synthesizes a rejection tool_result with isError:true, no-approvals spec runs unchanged regression check, no-controller fails closed, agent's reason is surfaced on the pending event).
+- apps/api/tests/runs-approvals.test.ts — 7 (route plumbing: 400 on bad body, 404 on unknown approval, GET returns empty list when nothing pending, reject requires reason).
+
+Verification:
+- tsc clean across 8 touched packages: types, api-contract, registry, engine, eval, gateway, web, api.
+- Sprint 3: 31/31 new tests passing. §9 still green: 68/68. Combined: 99/99.
+- Pre-existing flakes left untouched (postgres-run-store cross-test isolation, eval-playground.spec.ts e2e typecheck — both predate this sweep).
+
+What's deferred (for follow-up commits):
+- UI panel for pending approvals on /runs/[id]. The cycle-tree from §9 Phase D will surface tool.pending_approval events in cycle panels; a dedicated approval banner is a natural follow-up.
+- LeafAgentRun integration — approval gates are currently iterative-only. Adding to LeafAgentRun would mirror the maybePauseAt() debugger pause hook.
+- protected_paths predicate — v0 collapses to 'always'; a path-aware predicate (e.g. fs.write to a protected glob → require approval, fs.write elsewhere → don't) lands when an operator demand surfaces.
+- Postgres-backed ApprovalController for multi-replica deployments.
+- WebSocket push for live "your approval is needed" UX (the run-event SSE stream already carries the events, so the existing live-tail already shows them).

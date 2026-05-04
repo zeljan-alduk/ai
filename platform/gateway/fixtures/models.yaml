@@ -23,6 +23,7 @@ models:
       - vision
       - long-output
       - structured-output
+      - coding-frontier
     privacyAllowed: [public, internal]
     effectiveContextTokens: 200000
     latencyP95Ms: 4500
@@ -49,6 +50,41 @@ models:
       - extended-thinking
       - vision
       - structured-output
+      - coding-frontier
+    privacyAllowed: [public, internal]
+    effectiveContextTokens: 200000
+    latencyP95Ms: 2500
+    cost:
+      usdPerMtokIn: 3.0
+      usdPerMtokOut: 15.0
+      usdPerMtokCacheRead: 0.3
+      usdPerMtokCacheWrite: 3.75
+    providerConfig:
+      apiKeyEnv: ANTHROPIC_API_KEY
+
+  # MISSING_PIECES #4 — dedicated routing entry for `capability_class:
+  # coding-frontier`. Same provider + cost as `claude-sonnet-4-6`; the
+  # only difference is the capabilityClass is the frontier-coding
+  # routing target so agents that set `primary.capability_class:
+  # coding-frontier` resolve to it. Agents that route by
+  # `reasoning-medium` AND require `coding-frontier` capability still
+  # work (the entry above provides the capability).
+  - id: claude-sonnet-4-6-coding
+    provider: anthropic
+    providerKind: anthropic
+    locality: cloud
+    capabilityClass: coding-frontier
+    provides:
+      - 200k-context
+      - tool-use
+      - function-calling
+      - parallel-tool-calls
+      - streaming
+      - reasoning
+      - extended-thinking
+      - vision
+      - structured-output
+      - coding-frontier
     privacyAllowed: [public, internal]
     effectiveContextTokens: 200000
     latencyP95Ms: 2500
@@ -76,6 +112,7 @@ models:
       - vision
       - json-mode
       - structured-output
+      - coding-frontier
     privacyAllowed: [public, internal]
     effectiveContextTokens: 1000000
     latencyP95Ms: 5000

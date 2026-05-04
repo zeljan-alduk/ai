@@ -68,6 +68,18 @@ export interface RunEvent {
     | 'tool.results'
     | 'history.compressed'
     /**
+     * MISSING_PIECES #9 — approval-gate lifecycle. Emitted by the
+     * iterative loop when a tool call's spec policy resolves to
+     * `'always'` (or `'protected_paths'`). The loop suspends until
+     * an out-of-band caller resolves the request via the API's
+     * approve/reject routes.
+     *
+     *  - tool.pending_approval  { runId, callId, tool, args, reason }
+     *  - tool.approval_resolved { runId, callId, kind, approver, reason?, at }
+     */
+    | 'tool.pending_approval'
+    | 'tool.approval_resolved'
+    /**
      * Wave-17 declarative termination. Emitted by the orchestrator
      * (in `@aldo-ai/orchestrator`) on the SUPERVISOR run's event
      * stream when a `termination:` block trigger fires and the run

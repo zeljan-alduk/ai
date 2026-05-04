@@ -177,6 +177,8 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
       filesystem: y.tools.permissions.filesystem,
     },
     ...(guards !== undefined ? { guards } : {}),
+    // MISSING_PIECES #9 — pass through per-tool approval policy.
+    ...(y.tools.approvals !== undefined ? { approvals: y.tools.approvals } : {}),
   };
 
   const memory: MemoryPolicy = {

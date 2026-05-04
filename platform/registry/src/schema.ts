@@ -146,6 +146,14 @@ const toolsGuardsSchema = z
   })
   .strict();
 
+/**
+ * MISSING_PIECES #9 — per-tool approval policy. Snake-case-friendly
+ * but the YAML actually uses dotted tool names as keys (e.g.
+ * `shell.exec: always`) so we just type-check the values.
+ */
+const approvalPolicyEnum = z.enum(['never', 'always', 'protected_paths']);
+const toolsApprovalsSchema = z.record(z.string().min(1), approvalPolicyEnum);
+
 const toolsSchema = z
   .object({
     mcp: z.array(mcpToolBindingSchema).default([]),
@@ -157,6 +165,8 @@ const toolsSchema = z
       })
       .strict(),
     guards: toolsGuardsSchema.optional(),
+    /** MISSING_PIECES #9 — optional per-tool approval-gate policy. */
+    approvals: toolsApprovalsSchema.optional(),
   })
   .strict();
 
