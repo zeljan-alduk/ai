@@ -5312,3 +5312,43 @@ What's deferred to subsequent §11 phases (each a separate session-sized commit)
 - Phase E — session persistence + --resume against the runs DB.
 - Phase F — docs + smoke + bin polish.
 - Phase G (optional) — homebrew + curl|sh installer + signed binaries.
+
+2026-05-04T11:01Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §11 Phase B: ink TUI shell for `aldo code`.
+
+Phase B replaces Phase A's stdout-JSONL output with a real interactive ink-based TUI. The headless mode stays available (`aldo code "brief"`); the new `aldo code --tui` boots the conversational shell where the user can chat across multiple turns, watch tool calls fly, and send Ctrl+C / Ctrl+D for control flow.
+
+State reducer (apps/cli/src/commands/code/state.ts, ~250 LoC):
+- Pure reducer over an `Action` union (`user-input` | `engine-event` | `turn-finished` | `reset-conversation`) producing a `TuiState` of `Entry` list + `RunPhase` + `TelemetryRollup` + lastError. The chronological invariant ("user → tool → assistant text") lives here, not in the React tree — the same rule the assistant panel from §10 uses, lifted into the CLI.
+- Phase machine: idle → running (cycle.start lands cycle/maxCycles) → compressing (history.compressed) → awaiting-approval (tool.pending_approval) → completed | errored. tool_call inserts a tool entry BEFORE the streaming placeholder; tool_result resolves it via callId match (with orphan synthesis for engine-side rejections).
+- 22 unit tests cover every transition: chronology, telemetry fold across cycles, approval pause, error surfacing, finalisation w/ output fallback, helper purity.
+
+ink components (apps/cli/src/commands/code/components/):
+- Conversation.tsx (~50 LoC) — vertical entry list. User entries show `> you`, streaming assistants show `◇` until finalised (`◆`), tool entries delegate to ToolCall.
+- ToolCall.tsx (~80 LoC) — three-state tile: `⟳` in-flight (yellow), `✓` ok (green), `✕` error (red). Args preview special-cases `path` + `cmd` for readability; result preview special-cases `exitCode` (shell.exec) and `bytes` (fs.write).
+- StatusLine.tsx (~60 LoC) — single line at the bottom: phase tag + last model + tokens + USD ($0.0000 with 4 decimals).
+- Input.tsx (~80 LoC) — bordered input box. Enter sends, Alt+Enter newline (most reliable cross-terminal modifier for "newline, don't send"), Backspace deletes, Ctrl+C aborts in-flight, Ctrl+D exits. Disabled while a turn is running.
+- 13 ink-testing-library snapshot tests cover empty conversation, in-flight + done tool calls (success + error), all six phase tags, telemetry rollup with $-formatted output.
+
+App + TUI runner:
+- app.tsx — root ink App composing the components, useReducer over the pure `reduce`, useApp().exit for clean Ctrl+D, AbortController per turn for Ctrl+C cancellation. Auto-fires the first turn from --positional brief on mount.
+- tui.ts — builds a TurnDriver bound to a fresh runtime + synthetic spec + CliCodeToolHost (same pieces Phase A uses for the headless flow). Maintains an in-memory conversation history per session so subsequent turns flow with prior context (Phase E lands true persistence via the run store).
+- app-render.tsx — minimal mount shim (`render(<App />)` + waitUntilExit), kept in its own file so the JSX/React graph only loads when --tui is passed.
+
+CLI + bootstrap:
+- `aldo code [brief...] --tui` flag added (default JSONL flow unchanged).
+- bootstrap.agentRegistryOverride from Phase A reused; no other bootstrap changes.
+- tsconfig.json: jsx: 'react-jsx' so .tsx files compile under the existing tsc setup.
+
+Deps added (apps/cli/package.json): ink, ink-testing-library, react, @types/react. The bun --compile build path will pull these into the single-binary in Phase G.
+
+Verification:
+- tsc clean across @aldo-ai/cli.
+- §11 tests: 52 passing in <4s (14 Phase A spec + 3 Phase A command + 22 reducer + 13 render). 1 pre-existing CLI flake unchanged (alternates between bootstrap-persistence and cli.test.ts).
+- Cannot run an actual interactive TUI in CI; the snapshot tests + the reducer tests + the typecheck cover the rendering surface and the state machine.
+
+Out of scope (subsequent §11 phases):
+- Phase C — approval prompts in the TUI: tool.pending_approval lands the awaiting-approval phase already; the dialog component + keybind handling is Phase C work (a few hours).
+- Phase D — slash commands (/help /clear /model /tools /save /exit). The reducer's reset-conversation action is already in place for /clear.
+- Phase E — persistence + --resume against the run store.
+- Phase F — docs + smoke + bin polish.
+- Phase G — homebrew + curl|sh installer.

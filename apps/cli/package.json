@@ -30,7 +30,11 @@
     "@aldo-ai/runtime-config": "workspace:*",
     "@aldo-ai/storage": "workspace:*",
     "@aldo-ai/types": "workspace:*",
+    "@types/react": "^19.0.0",
     "commander": "^12.1.0",
+    "ink": "^7.0.1",
+    "ink-testing-library": "^4.0.0",
+    "react": "^19.0.0",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"
   },

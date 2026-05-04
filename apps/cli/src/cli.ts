@@ -204,6 +204,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     )
     .option('--no-local-fallback', 'refuse to fall back to local-reasoning (e.g. coding-frontier)')
     .option('--stdin', 'read the brief from stdin', false)
+    .option('--tui', 'launch the interactive ink-based TUI shell (Phase B)', false)
     .action(
       (
         briefArgs: string[],
@@ -215,6 +216,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           contextWindow?: number;
           localFallback?: boolean; // commander negates --no-* into localFallback
           stdin?: boolean;
+          tui?: boolean;
         },
       ) => {
         const brief = briefArgs.length > 0 ? briefArgs.join(' ') : undefined;
@@ -234,6 +236,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               // commander turns `--no-local-fallback` into `localFallback: false`.
               noLocalFallback: o.localFallback === false,
               stdin: o.stdin === true,
+              tui: o.tui === true,
             },
             io,
           );

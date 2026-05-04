@@ -52,6 +52,13 @@ export interface CodeOptions {
   readonly noLocalFallback?: boolean;
   /** Read the brief from stdin instead of the positional arg. */
   readonly stdin?: boolean;
+  /**
+   * MISSING_PIECES §11 / Phase B — interactive TUI mode. When true,
+   * the command boots the ink-based shell instead of streaming JSONL
+   * to stdout. The brief (if supplied) auto-fires as the first turn;
+   * subsequent turns come from user input.
+   */
+  readonly tui?: boolean;
 }
 
 export interface CodeHooks {
@@ -77,6 +84,28 @@ export async function runCode(
   hooksArg: CodeHooks = {},
 ): Promise<number> {
   const hooks: CodeHooks = injectedHooks ?? hooksArg;
+
+  // --- 0. TUI mode short-circuit ----------------------------------------
+  if (opts.tui === true) {
+    const { startTui } = await import('./code/tui.js');
+    const initialBrief = await resolveBrief(brief, opts.stdin === true, hooks);
+    return startTui(
+      {
+        ...(opts.tools !== undefined ? { tools: opts.tools } : {}),
+        ...(opts.workspace !== undefined ? { workspace: opts.workspace } : {}),
+        ...(opts.capabilityClass !== undefined ? { capabilityClass: opts.capabilityClass } : {}),
+        ...(opts.maxCycles !== undefined ? { maxCycles: opts.maxCycles } : {}),
+        ...(opts.contextWindow !== undefined ? { contextWindow: opts.contextWindow } : {}),
+        noLocalFallback: opts.noLocalFallback === true,
+        ...(initialBrief !== null ? { initialBrief } : {}),
+      },
+      io,
+      {
+        ...(hooks.bootstrap !== undefined ? { bootstrap: hooks.bootstrap } : {}),
+        ...(hooks.loadConfig !== undefined ? { loadConfig: hooks.loadConfig } : {}),
+      },
+    );
+  }
 
   // --- 1. Brief ----------------------------------------------------------
   const briefText = await resolveBrief(brief, opts.stdin === true, hooks);
