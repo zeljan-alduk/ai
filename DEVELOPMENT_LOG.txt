@@ -5511,3 +5511,13 @@ Verification:
 Deferred:
 - Static API doc JSONs for approve/reject don't carry the Zod-schema match because the generator's naming heuristic ('<EndpointTitleCase>Request') doesn't match the contract names ('ApproveRunRequest'). Scalar + Redoc render the canonical OpenAPI which has the schemas attached, so this is cosmetic; generator naming-convention extension is its own commit.
 - Classic Swagger UI page — we ship Scalar at /api/docs and Redoc at /api/redoc plus the `aldo openapi dump` CLI; a third viewer would be redundant.
+
+2026-05-04T23:35Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §13 plan + aldo-git Phase A scaffold.
+
+Picked up the next-leveraged-chunk per §12: aldo-git MCP + a real reference-agency dry-run. Drafted §13 execution plan in MISSING_PIECES.md (Phases A-F: read-only foundation → write ops → remote ops → gh PR ops → tool-host wiring → end-to-end agency dry-run on a contrived-but-real brief).
+
+Phase A landed: new mcp-servers/aldo-git package modelled on aldo-shell. Five read-only tools registered (git.status, git.diff, git.log, git.branch.list, git.remote.list). Policy module ports the cwd-ACL pattern from aldo-shell and adds repo-working-tree + protected-branch + remote-allowlist + path-inside-repo gates. Shared spawn helper (run.ts) re-uses the SIGTERM->SIGKILL grace + tail-cap + timeout machinery; per-tool parsers consume git's machine shapes (porcelain=v2, --numstat, FIELD/RECORD-separated log format, for-each-ref).
+
+Tests: 37 vitest cases green across three files — tests/policy.test.ts (20) for the policy gates, tests/parsers.test.ts (10) pure-parser unit tests, tests/tools-readonly.test.ts (7) integration against a real `git init` fixture (skipped when git not on PATH). pnpm --filter @aldo-ai/mcp-git typecheck clean.
+
+Phases B (write ops + protected-branch denial), C (remote ops + force-push gating), D (gh PR ops), E (tool-host opt-in wiring), F (end-to-end agency dry-run + post-mortem) are queued. Phase F is the one §12 named as the actual inflection — that's where we move from "loop primitive ships" to "agency primitive ships".

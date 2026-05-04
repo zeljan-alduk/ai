@@ -1520,4 +1520,336 @@ Both are scope-controlled. The picenhancer-class ambition (§12.7 +
 
 ---
 
+## 13. Execution plan — `aldo-git` MCP + agency dry-run (drafted 2026-05-04)
+
+§12 ranks `aldo-git` + a real reference-agency dry-run as the next
+leveraged chunk: the move from *"loop primitive ships"* to *"agency
+primitive ships"*. This section is the concrete plan.
+
+**Goal**: a first-party `mcp-servers/aldo-git` MCP server giving agents
+a typed, policy-gated surface over `git` and `gh`; then a real
+end-to-end dry-run of `agency/direction/principal.yaml` →
+`architect.yaml` → `tech-lead.yaml` → `backend-engineer.yaml` /
+`code-reviewer.yaml` against a contrived-but-real brief, with the new
+server wired through `apps/api/src/mcp/tool-host.ts`.
+
+**Target effort**: 5 days. Modeled on `aldo-shell` (Sprint 1) — the
+shape, policy/ACL/denylist primitives, server wiring, and tool-host
+opt-in pattern all transfer directly.
+
+### Stack choices
+
+- **Same shape as `aldo-shell`**: stdio MCP, `@modelcontextprotocol/sdk`
+  + `zod` + `zod-to-json-schema`. Single package
+  `@aldo-ai/mcp-git`, `mcp-servers/aldo-git/`. No new platform deps.
+- **Spawn `git` and `gh` directly** (`shell: false`, `child_process.spawn`)
+  rather than routing through `aldo-shell`. Keeps git policy decisions
+  (protected branches, force-push, remote allowlist) inside the git
+  server where they belong; agents that don't have shell.exec can still
+  use git.
+- **Typed-tool surface, no free-form args**: each git operation is its
+  own MCP tool with a closed schema. Agents call `git.commit({message,
+  files})`, not `shell.exec({command: "git", args: ["commit", "-m",
+  ...]})`. This is the §12.3 doc-stated requirement.
+
+### Phase A — Read-only git foundation (Day 1)
+
+Goal: a server that exposes the read-only surface and proves the
+policy/ACL primitives transfer cleanly from `aldo-shell`.
+
+**Package skeleton** (`mcp-servers/aldo-git/`):
+
+- `package.json` — `@aldo-ai/mcp-git`, deps mirror `aldo-shell`
+  exactly. Bin name `aldo-mcp-git`.
+- `tsconfig.json` + `tsconfig.test.json` — copy from `aldo-shell`.
+- `src/index.ts` (~55 LoC) — entry, stdio transport, fatal handler.
+- `src/config.ts` (~120 LoC) — CLI flags + env vars resolver. Flags:
+  `--roots`, `--protected-branches` (default `main,master`),
+  `--allowed-remotes` (default `origin`), `--git-bin` (default `git`),
+  `--gh-bin` (default `gh`), `--timeout-ms`, `--max-timeout-ms`,
+  `--output-tail`. Env mirror: `ALDO_GIT_ROOTS`, `ALDO_GIT_PROTECTED_BRANCHES`,
+  `ALDO_GIT_ALLOWED_REMOTES`, `ALDO_GIT_BIN`, `ALDO_GH_BIN`, etc.
+- `src/policy.ts` (~200 LoC) — ports `aldo-shell/policy.ts`:
+  `GitPolicy` interface, `createPolicy`, `GitError`,
+  `isInsideAny` (cwd-in-roots check). Adds `assertGitWorkingTree(cwd)`
+  (rejects when `.git` is absent) and `assertNotProtected(branch)`.
+- `src/tools/run.ts` (~120 LoC) — shared spawn helper. Same SIGTERM →
+  SIGKILL grace window + tail-cap pattern as `aldo-shell/exec.ts`,
+  but wrapped with a typed-result transform per tool.
+- `src/tools/status.ts`, `diff.ts`, `log.ts`, `branch-list.ts`,
+  `remote-list.ts` (~40–80 LoC each) — read-only tools. Each parses
+  porcelain output into a typed shape:
+  - `git.status` → `{ branch, ahead, behind, files: [{path, status}] }`
+  - `git.diff` → `{ patch, files: [{path, additions, deletions}] }`
+    (cap patch at `outputTailBytes`; surface `truncated: true`)
+  - `git.log` → `{ commits: [{sha, author, date, subject}] }`
+    (default `--max-count=20`)
+  - `git.branch.list` → `{ current, branches: [{name, sha,
+    upstream?}] }`
+  - `git.remote.list` → `{ remotes: [{name, fetchUrl, pushUrl}] }`
+- `src/server.ts` — register all six tools via the same `registerTool`
+  helper as `aldo-shell` (copy verbatim; it's shape-stable).
+
+**Tests** (`tests/`):
+
+- `policy.test.ts` (~10 cases): cwd ACL, working-tree assertion,
+  protected-branch logic, remote allowlist.
+- `tools-readonly.test.ts` (~12 cases): each read-only tool against a
+  fixture repo built in `beforeAll` via real `git init` + commits.
+  Uses `os.tmpdir()` realpath'd (the fix `aldo-shell` already shipped).
+- `server.test.ts` (~3 cases): tool registration listed via MCP; one
+  end-to-end JSON-RPC roundtrip per tool.
+
+**Acceptance**: `pnpm --filter @aldo-ai/mcp-git test` green;
+`aldo-mcp-git --roots /tmp/repo` boots; `git.status` returns a typed
+shape against a real repo.
+
+**Commit**: `feat(mcp/git): MISSING_PIECES §12.3 Phase A — read-only
+git surface (status/diff/log/branch-list/remote-list)`
+
+### Phase B — Write-capable local git ops (Day 2)
+
+Goal: agents can stage, commit, and create branches — within policy.
+
+**Files**:
+- `src/tools/add.ts` — `git.add({paths: string[]})`. Refuses `.` and
+  bare wildcards; each path must be a real working-tree path inside the
+  repo root (lexical containment + `lstat` check). No `--force`.
+- `src/tools/checkout.ts` — `git.checkout({branch, create?: boolean})`.
+  When `create: true`, runs `git checkout -b`; when `false`, switches
+  to an existing branch. Refuses `--force` / `--`. Refuses checkout
+  when working tree is dirty unless `allowDirty: true` is explicit.
+- `src/tools/commit.ts` — `git.commit({message, allowEmpty?: false,
+  signoff?: boolean})`. **Refuses**: `--amend`, `--no-verify`,
+  committing onto a protected branch, empty messages. Returns
+  `{sha, branch, files: [{path, status}]}`.
+- `src/policy.ts` (extend): `assertCommitAllowed(branch)`,
+  `assertPathInsideRepo(repo, path)`.
+
+**Tests** (`tests/`): `tools-write.test.ts` (~14 cases). Includes:
+- happy-path branch + add + commit
+- commit on `main` rejected with `PERMISSION_DENIED`
+- `--no-verify` / `--amend` rejected at the schema layer (no escape)
+- `git.add` with `.` or `*` rejected
+- checkout with dirty tree rejected unless `allowDirty`
+
+**Acceptance**: an automated test does the full
+`branch → add → commit` cycle on a fixture repo from MCP-RPC calls
+only, and the resulting commit is visible in `git log`.
+
+**Commit**: `feat(mcp/git): MISSING_PIECES §12.3 Phase B — write
+ops (add/checkout/commit) with protected-branch + amend/no-verify
+denials`
+
+### Phase C — Remote ops with force-push gating (Day 3)
+
+Goal: `fetch`, `pull` (ff-only), `push` (no force unless approval) —
+the surface that lets the agency leave artefacts on the customer's
+remote.
+
+**Files**:
+- `src/tools/fetch.ts` — `git.fetch({remote?: string})`. Remote must
+  be in `policy.allowedRemotes` (default `origin`).
+- `src/tools/pull.ts` — `git.pull({remote?, branch?})`. Always passes
+  `--ff-only`; abort otherwise. Reason: a merge commit produced by
+  the agent is harder to review than a hard fail forcing the agent
+  to rebase explicitly.
+- `src/tools/push.ts` — `git.push({remote?, branch?, setUpstream?:
+  boolean, force?: 'no' | 'with-lease'})`. **`force: 'with-lease'`
+  requires #9 approval gate** — when the gate isn't wired, the
+  schema layer hard-denies. **Refuses** plain `--force`, `--mirror`,
+  delete-remote-branch (`refspec: ":branchname"`).
+- `src/policy.ts` (extend): `assertRemoteAllowed(remote)`,
+  `assertNotForcePush(spec)`.
+
+**Tests**: `tools-remote.test.ts` (~10 cases). Spin up a bare-repo
+fixture (`git init --bare` in `tmpdir`) as the "remote", point
+`origin` at it, exercise fetch/pull/push end-to-end. Verify:
+- ff-only pull rejects on diverged history
+- force-push with `force: 'no'` over diverged history fails with
+  policy + git's own non-fast-forward — not silently
+- `force: 'with-lease'` returns `NEEDS_APPROVAL` shaped response
+  (placeholder until #9 is live)
+
+**Acceptance**: an agent can push a branch to a fixture remote and
+read back the commit via `git log` on the remote side.
+
+**Commit**: `feat(mcp/git): MISSING_PIECES §12.3 Phase C — remote
+ops (fetch/pull --ff-only/push) with force-push gated`
+
+### Phase D — `gh` PR ops (Day 3–4, can run parallel with C)
+
+Goal: agents open PRs as typed-tool calls.
+
+**Files**:
+- `src/tools/gh-pr-create.ts` — `gh.pr.create({title, body, base?,
+  head?, draft?: boolean})`. Spawns `gh pr create` with the args
+  laid out individually (no shell expansion). Body passed via
+  `--body-file` writing to a tmpfile (avoids argv-length limits).
+  Returns `{url, number}`.
+- `src/tools/gh-pr-list.ts` — `gh.pr.list({state?: 'open' | 'closed'
+  | 'merged' | 'all', limit?: number})`. Parses `gh pr list --json`.
+- `src/tools/gh-pr-view.ts` — `gh.pr.view({number})`. Returns
+  `{number, state, title, body, author, headRefName, baseRefName,
+  url, mergeable, reviews}`.
+- `src/policy.ts` (extend): `assertGhAvailable()` — runs `gh --version`
+  once at server boot; surfaces a clear `INTERNAL` if missing.
+
+**Tests** (`tools-gh.test.ts`, ~6 cases): mocked-binary tests using
+a stub `gh` script in `PATH` that emits canned JSON. Real
+`gh`-against-GitHub testing is out of scope at this layer; lives in
+the Phase F dry-run.
+
+**Acceptance**: against a stub `gh`, all three tools roundtrip the
+expected shapes.
+
+**Commit**: `feat(mcp/git): MISSING_PIECES §12.3 Phase D — gh PR
+ops (create/list/view) with stub-binary tests`
+
+### Phase E — Tool-host wiring + opt-in (Day 4)
+
+Goal: `apps/api/src/mcp/tool-host.ts` learns to spawn `aldo-mcp-git`
+when opted in, exactly the way it already spawns `aldo-mcp-shell`.
+
+**Files**:
+- `apps/api/src/mcp/tool-host.ts` (modify, ~30 LoC delta) — add a
+  branch alongside the shell-server branch: when `ALDO_GIT_ENABLED=true`
+  and `ALDO_GIT_ROOT=<abs>`, spawn `aldo-mcp-git --roots <root>` and
+  expose its tools under the `git` namespace. Pass-through env:
+  `ALDO_GIT_PROTECTED_BRANCHES`, `ALDO_GIT_ALLOWED_REMOTES`,
+  `ALDO_GIT_TIMEOUT_MS`.
+- `apps/api/tests/mcp-tool-host.test.ts` (extend, ~3 new cases) —
+  assert: server present when env set, server absent when env unset,
+  health-check call returns the registered tool list.
+
+**Acceptance**: API boot with env set → tool host lists `git.status`,
+`git.commit`, `gh.pr.create` etc. alongside the existing
+`shell.exec` and `fs.read`.
+
+**Commit**: `feat(api/mcp): MISSING_PIECES §12.3 Phase E — wire
+aldo-mcp-git into tool-host (opt-in via ALDO_GIT_ENABLED)`
+
+### Phase F — End-to-end agency dry-run (Day 5)
+
+Goal: prove the §12.1 doubt — that the composite orchestrator's
+`composite.subagents[].inputMap` evaluator + `composite.iteration.terminate`
+predicate runtime + cross-agent state handoff actually hold up
+against a real brief.
+
+**The brief** (contrived but real):
+> "Add a `/v1/healthz/db` endpoint to `apps/api` that pings the
+> Postgres pool and returns `{ok: true, latencyMs}`. Include unit
+> tests, update the OpenAPI spec, and open a PR against the
+> working branch."
+
+This is small enough to finish in one run, big enough to exercise
+every primitive: principal sets the brief; architect chooses the
+shape; tech-lead routes to backend-engineer; backend-engineer writes
+files (aldo-fs), runs the test suite (aldo-shell), commits + opens
+PR (aldo-git); code-reviewer reads the diff and either approves or
+sends back review comments; iteration terminates on approval.
+
+**Files**:
+- `agency/dry-runs/2026-05-XX-healthz-db.md` (new) — the brief +
+  the run plan + the post-mortem template.
+- `eval/agency-dry-run/healthz-db.spec.ts` (new) — drives the run
+  via the existing composite-orchestrator test harness, against a
+  worktree of the repo (so the agency can commit without touching
+  the real branch).
+- `agency/development/composite-driver.yaml` (review only) — confirm
+  the existing composite spec wires `principal → architect →
+  tech-lead → engineer + reviewer` correctly; no new agent YAMLs
+  unless a gap surfaces (in which case, log it as a deviation).
+
+**Run setup**:
+1. Spin up a temp worktree of the current branch.
+2. Configure tool-host env: `ALDO_FS_RW_ROOT=<worktree>`,
+   `ALDO_SHELL_ROOT=<worktree>`, `ALDO_GIT_ROOT=<worktree>`,
+   `ALDO_GIT_PROTECTED_BRANCHES=main,master`,
+   `ALDO_GIT_ALLOWED_REMOTES=origin`.
+3. Capability routing: principal/architect → `reasoning-large` (cloud
+   frontier when available, local fallback otherwise); engineer →
+   `coding-frontier`; reviewer → `reasoning-medium`.
+4. Run the composite agent against the brief.
+5. Capture: every `RunEvent`, the cycle tree, the final PR number
+   (if created), the eval rubric scores.
+
+**Post-mortem (mandatory output)** at
+`agency/dry-runs/2026-05-XX-healthz-db.md`:
+- What worked? (each phase: did the agent do the right thing
+  unsupervised?)
+- What didn't? (which primitives needed manual nudging?)
+- Composite-orchestrator surprises: did `inputMap` evaluators
+  evaluate cleanly? did `terminate` fire on the right condition?
+  did cross-agent state handoff land?
+- Cost: total $, total tokens, total wall-clock.
+- Eval rubric scores: did the existing `coverage_no_regress` /
+  ad-hoc graders catch anything?
+- Punch list of follow-ups discovered.
+
+**Acceptance**: the post-mortem exists, the dry-run completed
+end-to-end (or got far enough to identify the first blocker), and
+the punch list either shows zero blockers (in which case the
+agency primitive is genuinely shipped) or names the exact next
+primitive to fix.
+
+**Commit**: `chore(agency): MISSING_PIECES §12.3 Phase F — healthz-db
+dry-run + post-mortem`
+
+### Cross-cutting risks
+
+1. **`gh` auth assumed configured.** The MCP server requires the
+   operator to have `gh auth status` green before opt-in. Document
+   this in the package README; surface a clear error at boot if
+   missing.
+2. **`git` exit-code idiosyncrasy.** Several git commands return
+   non-zero on benign cases (`git diff` returns 1 when there are
+   changes with `--exit-code`; we don't pass that flag). The shared
+   `run.ts` helper must classify exit code per-tool, not generically.
+3. **Working-tree assumption.** Sub-modules and worktrees can confuse
+   the `.git`-presence check. v0 supports vanilla repos and named
+   worktrees; submodule support is documented as out of scope.
+4. **Long clone outputs blow context.** `git fetch` on a fresh
+   remote can produce MB of output. Re-use the same tail-cap pattern
+   as `aldo-shell`, default 8 KB per stream.
+5. **Force-push gating depends on #9.** Until the approval-gate
+   primitive is wired into the tool-host event loop, `force:
+   'with-lease'` returns `NEEDS_APPROVAL` and the agent has to
+   route through a human. That's intentional — better than a flag
+   that silently force-pushes on the day #9 lands.
+6. **The dry-run might find composite-orchestrator gaps.** That's
+   the *point* of Phase F — surface them before a paying customer
+   does. Budget half a day of slack for fixing the first gap inline,
+   defer larger gaps to follow-up tickets.
+
+### Out of scope (for this plan)
+
+- Interactive rebase, cherry-pick, bisect — agents that need these
+  can shell-exec under the existing `aldo-shell` policy.
+- Git LFS — punt to a follow-on.
+- GitLab / Bitbucket / Gitea CLIs — `gh`-only at v0; same shape
+  applies when adding a sibling `glab.*` namespace.
+- Submodule support — flag and refuse if `.gitmodules` is present
+  in v0.
+- Memory across runs (#6 / §12.2) — separate initiative; this plan
+  ships single-run agency coordination, not multi-run continuity.
+
+### Sequencing summary
+
+| Phase | Days | Output | Depends on |
+|---|---|---|---|
+| A | 1 | Read-only git surface (status/diff/log/branch/remote) | nothing new |
+| B | 1 | Write ops (add/checkout/commit) + protected branches | A |
+| C | 1 | Remote ops (fetch/pull/push) + force-push gated | A |
+| D | ≤1 | gh PR ops (create/list/view) | A (parallel-able with B+C) |
+| E | ≤1 | Tool-host opt-in wiring | B + C + D |
+| F | 1 | Agency dry-run + post-mortem | E |
+
+After Phase F: **the agency primitive ships, or we have a named,
+testable list of what's still wrong with it.** That's the §12 inflection
+point — the move from *"the loop primitive ships"* to *"the agency
+primitive ships."*
+
+---
+
 (end of MISSING_PIECES.md)
