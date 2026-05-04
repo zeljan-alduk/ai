@@ -17,7 +17,7 @@
   "dependencies": {
     "@aldo-ai/api-contract": "workspace:*",
     "@aldo-ai/storage": "workspace:*",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@electric-sql/pglite": "~0.4.4",
