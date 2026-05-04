@@ -3,10 +3,12 @@
 /**
  * Assistant chat panel — floating bottom-right.
  *
- * MVP scope (matches /v1/assistant/stream):
- *   - Plain Q&A. Streams text deltas via SSE.
- *   - No tool calls yet (those land with MISSING_PIECES.md #1).
- *   - No persistence (each open of the panel starts a fresh thread).
+ * MISSING_PIECES §10 — the assistant route now drives an
+ * `IterativeAgentRun` with the synthetic `__assistant__` spec, so
+ * tool calls flow through as `{ type: 'tool', ... }` SSE frames in
+ * addition to the existing `delta` text. The panel renders an inline
+ * tile per call → result pair so the user sees the agent's reasoning
+ * trail rather than just text.
  *
  * Mounted by app/layout.tsx alongside the command palette. Visible
  * only when NEXT_PUBLIC_ASSISTANT_ENABLED=true so the chrome stays
@@ -17,7 +19,8 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { API_BASE } from '@/lib/api';
 
-interface Message {
+interface ChatMessage {
+  readonly kind: 'message';
   readonly role: 'user' | 'assistant';
   readonly content: string;
   /** True while the assistant message is still streaming. */
@@ -31,9 +34,20 @@ interface Message {
   };
 }
 
+interface ToolMessage {
+  readonly kind: 'tool';
+  readonly callId: string;
+  readonly name: string;
+  readonly args: unknown;
+  readonly result: unknown;
+  readonly isError: boolean;
+}
+
+type Entry = ChatMessage | ToolMessage;
+
 export function AssistantPanel() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +57,7 @@ export function AssistantPanel() {
   // Auto-scroll the message list when new content arrives.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+  }, [entries]);
 
   // Focus the input when the panel opens.
   useEffect(() => {
@@ -55,20 +69,33 @@ export function AssistantPanel() {
     if (!text || busy) return;
     setError(null);
     setDraft('');
-    const userMsg: Message = { role: 'user', content: text };
-    const placeholder: Message = { role: 'assistant', content: '', streaming: true };
-    const next = [...messages, userMsg, placeholder];
-    setMessages(next);
+    const userEntry: ChatMessage = { kind: 'message', role: 'user', content: text };
+    const placeholder: ChatMessage = {
+      kind: 'message',
+      role: 'assistant',
+      content: '',
+      streaming: true,
+    };
+    setEntries((cur) => [...cur, userEntry, placeholder]);
     setBusy(true);
+
+    // For the request body, only send the chat messages — tool entries
+    // are platform-internal and the assistant agent rebuilds them
+    // from history. The assistant's prior text replies count.
+    const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    for (const e of entries) {
+      if (e.kind === 'message' && (e.role === 'user' || e.role === 'assistant')) {
+        chatHistory.push({ role: e.role, content: e.content });
+      }
+    }
+    chatHistory.push({ role: 'user', content: text });
 
     try {
       const res = await fetch(`${API_BASE}/v1/assistant/stream`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
-        }),
+        body: JSON.stringify({ messages: chatHistory }),
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
@@ -80,7 +107,7 @@ export function AssistantPanel() {
       const decoder = new TextDecoder();
       let buf = '';
       let acc = '';
-      let meta: Message['meta'] | undefined;
+      let meta: ChatMessage['meta'] | undefined;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -95,15 +122,39 @@ export function AssistantPanel() {
           try {
             const ev = JSON.parse(dataLine.slice(5).trim()) as
               | { type: 'delta'; text: string }
-              | { type: 'done'; model?: string; tokensIn?: number; tokensOut?: number; latencyMs?: number }
+              | {
+                  type: 'tool';
+                  name: string;
+                  callId: string;
+                  args: unknown;
+                  result: unknown;
+                  isError?: boolean;
+                }
+              | {
+                  type: 'done';
+                  model?: string;
+                  tokensIn?: number;
+                  tokensOut?: number;
+                  latencyMs?: number;
+                }
               | { type: 'error'; message: string };
             if (ev.type === 'delta') {
               acc += ev.text;
-              setMessages((cur) => {
-                const last = cur[cur.length - 1];
-                if (!last || last.role !== 'assistant' || !last.streaming) return cur;
-                return [...cur.slice(0, -1), { ...last, content: acc }];
-              });
+              setEntries((cur) => updateStreamingAssistant(cur, acc));
+            } else if (ev.type === 'tool') {
+              // MISSING_PIECES §10 — tool tile. Insert BEFORE the
+              // currently-streaming assistant placeholder so the
+              // chronological ordering reads "user → tool call(s) →
+              // assistant text".
+              const tile: ToolMessage = {
+                kind: 'tool',
+                callId: ev.callId,
+                name: ev.name,
+                args: ev.args,
+                result: ev.result,
+                isError: ev.isError === true,
+              };
+              setEntries((cur) => insertToolBeforePlaceholder(cur, tile));
             } else if (ev.type === 'done') {
               meta = {
                 ...(ev.model !== undefined ? { model: ev.model } : {}),
@@ -122,23 +173,12 @@ export function AssistantPanel() {
         }
       }
       // Finalise: drop streaming flag, attach meta if present.
-      setMessages((cur) => {
-        const last = cur[cur.length - 1];
-        if (!last || last.role !== 'assistant' || !last.streaming) return cur;
-        return [
-          ...cur.slice(0, -1),
-          { ...last, content: acc || last.content, streaming: false, ...(meta ? { meta } : {}) },
-        ];
-      });
+      setEntries((cur) => finaliseStreamingAssistant(cur, acc, meta));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       // Drop the streaming placeholder on error.
-      setMessages((cur) => {
-        const last = cur[cur.length - 1];
-        if (!last || last.role !== 'assistant' || !last.streaming) return cur;
-        return cur.slice(0, -1);
-      });
+      setEntries((cur) => dropStreamingPlaceholder(cur));
     } finally {
       setBusy(false);
     }
@@ -181,7 +221,7 @@ export function AssistantPanel() {
               <div className="leading-tight">
                 <div className="text-sm font-semibold text-fg">ALDO assistant</div>
                 <div className="text-[10px] uppercase tracking-wider text-fg-faint">
-                  MVP · chat only
+                  iterative · tools enabled
                 </div>
               </div>
             </div>
@@ -197,18 +237,18 @@ export function AssistantPanel() {
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
-            {messages.length === 0 && (
+            {entries.length === 0 && (
               <div className="rounded-lg border border-dashed border-border bg-bg-subtle/40 px-3 py-3 text-[13px] leading-relaxed text-fg-muted">
                 <p className="font-medium text-fg">Hi — I&rsquo;m the ALDO assistant.</p>
                 <p className="mt-1">
                   Ask about agents, runs, prompts, the gateway, MCP servers, privacy tiers.
-                  Today I do plain Q&amp;A; tool calls (list runs, enhance images) land with
-                  the next engine update.
+                  When read-only filesystem tools are enabled I can also peek at files in
+                  your workspace to answer specific questions.
                 </p>
               </div>
             )}
-            {messages.map((m, i) => (
-              <MessageRow key={i} message={m} />
+            {entries.map((e, i) => (
+              <EntryRow key={`${e.kind}-${i}`} entry={e} />
             ))}
             {error && (
               <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-[12px] text-danger">
@@ -249,8 +289,9 @@ export function AssistantPanel() {
   );
 }
 
-function MessageRow({ message }: { message: Message }) {
-  const isUser = message.role === 'user';
+function EntryRow({ entry }: { entry: Entry }) {
+  if (entry.kind === 'tool') return <ToolTile entry={entry} />;
+  const isUser = entry.role === 'user';
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
@@ -261,17 +302,137 @@ function MessageRow({ message }: { message: Message }) {
             : 'bg-bg text-fg ring-1 ring-border',
         )}
       >
-        {message.content || (message.streaming && '…')}
-        {message.meta && (
+        {entry.content || (entry.streaming && '…')}
+        {entry.meta && (
           <div className="mt-1.5 font-mono text-[10px] text-fg-faint">
-            {message.meta.model ?? '?'} · {message.meta.latencyMs ?? '?'} ms ·{' '}
-            {message.meta.tokensIn ?? '?'}/{message.meta.tokensOut ?? '?'} tok
+            {entry.meta.model ?? '?'} · {entry.meta.latencyMs ?? '?'} ms ·{' '}
+            {entry.meta.tokensIn ?? '?'}/{entry.meta.tokensOut ?? '?'} tok
           </div>
         )}
       </div>
     </div>
   );
 }
+
+function ToolTile({ entry }: { entry: ToolMessage }) {
+  return (
+    <details
+      data-testid={`tool-tile-${entry.callId}`}
+      className={cn(
+        'group rounded-md border px-3 py-2 text-[12px] font-mono',
+        entry.isError
+          ? 'border-danger/40 bg-danger/5 text-fg'
+          : 'border-border bg-bg-subtle/40 text-fg-muted',
+      )}
+    >
+      <summary className="flex cursor-pointer items-center gap-2 list-none">
+        <span
+          className={cn(
+            'inline-flex h-4 items-center rounded px-1.5 text-[10px] uppercase tracking-wider',
+            entry.isError
+              ? 'bg-danger/15 text-danger'
+              : 'bg-accent/15 text-accent',
+          )}
+        >
+          {entry.isError ? 'error' : 'tool'}
+        </span>
+        <span className="font-semibold text-fg">{entry.name}</span>
+        <span className="ml-auto text-[10px] text-fg-faint">{entry.callId.slice(0, 8)}</span>
+      </summary>
+      <div className="mt-2 space-y-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-fg-faint">args</div>
+          <pre className="mt-0.5 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-bg px-2 py-1 text-[11px] text-fg ring-1 ring-border">
+            {stringify(entry.args)}
+          </pre>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-fg-faint">result</div>
+          <pre className="mt-0.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-bg px-2 py-1 text-[11px] text-fg ring-1 ring-border">
+            {stringify(entry.result)}
+          </pre>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function stringify(v: unknown): string {
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
+// ─── pure entry mutators (exported for unit tests) ────────────────
+
+export function updateStreamingAssistant(cur: readonly Entry[], acc: string): Entry[] {
+  const last = cur[cur.length - 1];
+  if (
+    !last ||
+    last.kind !== 'message' ||
+    last.role !== 'assistant' ||
+    !last.streaming
+  )
+    return [...cur];
+  return [...cur.slice(0, -1), { ...last, content: acc }];
+}
+
+export function insertToolBeforePlaceholder(
+  cur: readonly Entry[],
+  tile: ToolMessage,
+): Entry[] {
+  const last = cur[cur.length - 1];
+  if (
+    !last ||
+    last.kind !== 'message' ||
+    last.role !== 'assistant' ||
+    !last.streaming
+  ) {
+    return [...cur, tile];
+  }
+  return [...cur.slice(0, -1), tile, last];
+}
+
+export function finaliseStreamingAssistant(
+  cur: readonly Entry[],
+  acc: string,
+  meta: ChatMessage['meta'] | undefined,
+): Entry[] {
+  const last = cur[cur.length - 1];
+  if (
+    !last ||
+    last.kind !== 'message' ||
+    last.role !== 'assistant' ||
+    !last.streaming
+  )
+    return [...cur];
+  return [
+    ...cur.slice(0, -1),
+    {
+      ...last,
+      content: acc || last.content,
+      streaming: false,
+      ...(meta ? { meta } : {}),
+    },
+  ];
+}
+
+export function dropStreamingPlaceholder(cur: readonly Entry[]): Entry[] {
+  const last = cur[cur.length - 1];
+  if (
+    !last ||
+    last.kind !== 'message' ||
+    last.role !== 'assistant' ||
+    !last.streaming
+  )
+    return [...cur];
+  return cur.slice(0, -1);
+}
+
+export type { ChatMessage, ToolMessage, Entry };
 
 function ChatIcon({ size = 22 }: { size?: number }) {
   return (

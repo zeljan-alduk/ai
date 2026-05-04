@@ -462,6 +462,51 @@ export function removeRunTag(runId: string, tag: string) {
   );
 }
 
+/* ------------------------------- Approvals ----------------------------- */
+//
+// MISSING_PIECES #9 — approval-gate API.
+// Lists pending approvals for a run + applies an approve/reject decision.
+
+export async function listRunApprovals(runId: string) {
+  const { ListPendingApprovalsResponse } = await import('@aldo-ai/api-contract');
+  return request(
+    `/v1/runs/${encodeURIComponent(runId)}/approvals`,
+    ListPendingApprovalsResponse,
+  );
+}
+
+export async function approveRunCall(
+  runId: string,
+  body: { callId: string; reason?: string },
+) {
+  const { ApprovalDecisionResponse } = await import('@aldo-ai/api-contract');
+  return request(
+    `/v1/runs/${encodeURIComponent(runId)}/approve`,
+    ApprovalDecisionResponse,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function rejectRunCall(
+  runId: string,
+  body: { callId: string; reason: string },
+) {
+  const { ApprovalDecisionResponse } = await import('@aldo-ai/api-contract');
+  return request(
+    `/v1/runs/${encodeURIComponent(runId)}/reject`,
+    ApprovalDecisionResponse,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 /* ------------------------------- Saved views --------------------------- */
 
 /**

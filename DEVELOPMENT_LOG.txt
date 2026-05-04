@@ -5246,3 +5246,29 @@ What's deferred:
 - Per-tenant ACL config for the assistant's tool set (env-only today).
 - Tenant-specific system_prompt_override on the synthetic spec.
 - Resume-on-reload from localStorage threadId.
+
+2026-05-04T10:08Z — engineer (claude opus 4.7, 1M ctx) — UI follow-ups for §10 + #9: assistant tool-tile rendering + approval-gate banner.
+
+The §10 commit retargeted the assistant onto IterativeAgentRun and the SSE wire carries `tool` frames now, but the panel ignored them. The #9 commit shipped the approval-gate engine + API but the only way to act on a pending approval was a curl. Both pieces were one commit short of being user-visible.
+
+Assistant tool-tile rendering (apps/web/components/assistant/assistant-panel.tsx):
+- The panel's message list became a heterogeneous Entry list (ChatMessage | ToolMessage); tool tiles render inline between the user message and the assistant's text reply, preserving the chronological "user → tool → assistant text" ordering. Tile is a collapsible <details> showing tool name + callId + args + result, with a red ring + 'error' badge when isError is true.
+- State mutators (`updateStreamingAssistant`, `insertToolBeforePlaceholder`, `finaliseStreamingAssistant`, `dropStreamingPlaceholder`) extracted as pure exports so they're unit-testable. 12 component tests cover delta accumulation, tool tile insertion ordering across multiple calls, finalise + meta attachment, error path drop.
+- Outgoing chat history sent on the next turn omits tool entries (the agent rebuilds them from server-side history); the chat array is the same shape `/v1/assistant/stream` was already validating.
+
+Approval-gate banner (apps/web/components/runs/pending-approvals-banner.tsx):
+- Server-fetched initial pending list via `getRun`'s sibling call to `GET /v1/runs/:id/approvals`, threaded into the page; the client component (`'use client'`) handles the interactive approve/reject mutations + 4s polling while approvals remain.
+- Mounted ABOVE the run-detail card on /runs/[id]. Critically, the running-status redirect-to-/live now skips when initialApprovals.length > 0 — an approver landing on the page sees the banner instead of being bounced to the live tail.
+- Reject requires a non-empty reason via an inline confirm input; approve is one-click. Optimistic local update (filters the row out) followed by router.refresh() so the cycle-tree below picks up the new tool_result event.
+- New API client helpers in apps/web/lib/api.ts: listRunApprovals / approveRunCall / rejectRunCall.
+- e2e: apps/web-e2e/tests/approvals-banner.spec.ts gated on E2E_ALLOW_WRITES; seeds a run, polls for a pending approval, navigates to /runs/[id], asserts the banner renders + Approve hides the row.
+
+Verification:
+- tsc clean across @aldo-ai/web. The 2 pre-existing eval-playground.spec.ts flakes in @aldo-ai/web-e2e are unchanged (same on stashed pre-change tree).
+- Web test sweep: 382 tests pass including the 12 new panel-mutator tests.
+
+What's still deferred:
+- LeafAgentRun integration for approval gates (still iterative-only).
+- WebSocket / SSE-driven push for pending approvals (currently polling at 4s; cheap because it only runs while pending > 0 AND the operator is on the page).
+- Path-aware `protected_paths` predicate (still collapses to 'always').
+- Per-tenant ASSISTANT_TOOLS config beyond the env var (e.g. workspace settings).

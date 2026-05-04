@@ -42,7 +42,9 @@ import {
   getRun,
   getRunTree,
   listAnnotationsApi,
+  listRunApprovals,
 } from '@/lib/api';
+import { PendingApprovalsBanner } from '@/components/runs/pending-approvals-banner';
 import { formatAbsolute, formatDuration, formatRelativeTime, formatUsd } from '@/lib/format';
 import type { Annotation, RunDetail, RunTreeNode } from '@aldo-ai/api-contract';
 import Link from 'next/link';
@@ -66,12 +68,30 @@ export default async function RunDetailPage({
     error = err;
   }
 
+  // MISSING_PIECES #9 — pull pending approvals BEFORE the
+  // running-redirect check so an approver who lands on this page
+  // while the run is paused-for-approval sees the banner instead of
+  // being bounced to the live tail.
+  let initialApprovals: import('@aldo-ai/api-contract').PendingApprovalWire[] = [];
+  if (data !== null) {
+    try {
+      const res = await listRunApprovals(id);
+      initialApprovals = [...res.approvals];
+    } catch {
+      // Best-effort — banner is auxiliary; never block the page on it.
+    }
+  }
+
   // Wave-13 — auto-redirect to /runs/[id]/live when the run is still
   // in flight. The live page renders the SSE stream + filter chips;
   // landing on it directly avoids the "is this still running?"
   // double-take. Terminal-status runs stay on the detail page (where
   // the timeline / replay tabs live).
-  if (data !== null && data.run.status === 'running') {
+  //
+  // EXCEPTION: when at least one approval is pending, the run is
+  // running but blocked on a human — the detail page is exactly
+  // where the approver needs to be.
+  if (data !== null && data.run.status === 'running' && initialApprovals.length === 0) {
     redirect(`/runs/${encodeURIComponent(id)}/live`);
   }
 
@@ -164,6 +184,7 @@ export default async function RunDetailPage({
           currentUserId={currentUserId}
           currentUserEmail={currentUserEmail}
           initialAnnotations={initialAnnotations}
+          initialApprovals={initialApprovals}
         />
       ) : null}
     </>
@@ -178,6 +199,7 @@ function RunDetailBody({
   currentUserId,
   currentUserEmail,
   initialAnnotations,
+  initialApprovals,
 }: {
   run: RunDetail;
   tree: RunTreeNode | null;
@@ -186,6 +208,7 @@ function RunDetailBody({
   currentUserId: string;
   currentUserEmail: string;
   initialAnnotations: readonly Annotation[];
+  initialApprovals: readonly import('@aldo-ai/api-contract').PendingApprovalWire[];
 }) {
   const effectiveTree: RunTreeNode = tree ?? synthesiseTreeOfOne(run);
   const isChild = run.parentRunId !== null;
@@ -266,6 +289,12 @@ function RunDetailBody({
 
   return (
     <div className="flex flex-col gap-6">
+      {/* MISSING_PIECES #9 — pending approvals banner. Only renders
+          when the engine has at least one tool call paused on
+          spec-declared `tools.approvals: always`. */}
+      {initialApprovals.length > 0 ? (
+        <PendingApprovalsBanner runId={runId} initial={initialApprovals} />
+      ) : null}
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
