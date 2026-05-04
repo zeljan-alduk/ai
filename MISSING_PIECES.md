@@ -21,6 +21,7 @@ Newest at the top. Each entry: piece + date + commit shorthand + result.
 
 | Date | Piece | Status | Notes |
 |---|---|---|---|
+| 2026-05-04 | **§13 aldo-git Phases A–F** | ✅ shipped (engine), ⚠️ blocked (real dry-run) | `mcp-servers/aldo-git`: 5 read-only tools + add/checkout/commit + fetch/pull --ff-only/push (force-with-lease → NEEDS_APPROVAL until #9) + gh.pr.create/list/view. Tool-host opt-in via `ALDO_GIT_ENABLED` + `ALDO_GIT_ROOT`. **61 mcp-git tests + 8 new tool-host tests + 521/521 apps/api tests** all green; tsc clean. **Phase F outcome**: real end-to-end run blocked on three unimplemented MCP servers the agency YAMLs reference: `repo-fs`, `aldo-memory`, `github`. Post-mortem at `agency/dry-runs/2026-05-04-healthz-db.md` names the next leveraged chunk: `repo-fs` alias (½ d) + `github`-as-aldo-git alias (1 d) + `aldo-memory` MCP (3–5 d, the §12.2 item) → real run becomes feasible in ~6–8 d. The composite orchestrator + agency YAML schema themselves are sound. |
 | 2026-05-04 | **#5 PromptRunner** | ✅ shipped | `apps/api/src/lib/gateway-prompt-runner.ts` wires `getOrBuildRuntimeAsync` → `gateway.completeWith` behind `POST /v1/prompts/:id/test`. `app.ts` injects it as the default runner. Falls back to deterministic echo when no providers are wired (preserves dev REPL + the 29 existing prompt tests). Persists `runs` + `usage_records` rows so spend dashboard sees prompt-playground spend. `NoEligibleModelError` → typed 422. **All 476 API tests green.** |
 | 2026-05-04 | **#2 fs-write** | ✅ shipped | `aldo-fs` already had `fs.write`; added the missing `fs.delete` / `fs.move` / `fs.mkdir` plus a `protected_paths` glob denylist on the ACL (default rejects `.git`, `.git/**`, `node_modules`, `package.json`, lockfiles, `.env*`, Dockerfiles). Tool-host opt-in: `ALDO_FS_RW_ROOT` env grants `:rw` to a path; `ALDO_FS_PROTECTED_PATHS` overrides the denylist (`none` to disable). Approval-gating waits on #9 — until then the denylist is "hard deny" rather than "needs approval". 50 fs-server tests + 476 API tests green. macOS dev hosts: fixed pre-existing tmpdir-symlink failures by realpath'ing in beforeAll. **Deviation from doc plan**: the doc proposed a sibling `aldo-fs-write` MCP package, but `aldo-fs` already mixed read+write — kept one server, recorded the trade-off here. |
 | 2026-05-04 | **#3 aldo-shell** | ✅ shipped | New `mcp-servers/aldo-shell` (`@aldo-ai/mcp-shell`): one tool `shell.exec`, allowlist by command basename (defaults: pnpm/npm/node/python3/tsc/gh/curl), deny-substring scan (defaults: `rm -rf`, `git push --force`, `npm publish`, `--no-verify`), per-call AbortController timeout with SIGTERM→SIGKILL grace, output-tail cap (8 KB/stream by default) with full byte counts, cwd ACL inside operator-declared roots. `shell: false` on spawn = no shell expansion = no injection through args. Tool-host wiring is opt-in: `ALDO_SHELL_ENABLED=true` + `ALDO_SHELL_ROOT=<abs>`; pass-through env for allow/deny/timeout overrides. **Sprint 1 complete.** 22 aldo-shell tests + 50 aldo-fs tests + 476 API tests green. `aldo-git` (the other half of doc §3) defers to Sprint 4 per the doc's own ordering. |
@@ -1849,6 +1850,28 @@ After Phase F: **the agency primitive ships, or we have a named,
 testable list of what's still wrong with it.** That's the §12 inflection
 point — the move from *"the loop primitive ships"* to *"the agency
 primitive ships."*
+
+### Phase F outcome (2026-05-04)
+
+**The agency primitive does NOT yet ship — and we now know precisely why.**
+The audit is captured in full at
+[`agency/dry-runs/2026-05-04-healthz-db.md`](agency/dry-runs/2026-05-04-healthz-db.md).
+Summary:
+
+- 9 of 17 (agent, server) edges the brief touches reference MCP servers
+  that don't exist (`repo-fs`, `aldo-memory`, `github`).
+- The composite orchestrator + agency YAML schema are sound; the
+  blocker is registry/runtime alignment, not engine quality.
+- Punch-list, ranked: (1) `repo-fs` → `aldo-fs` alias (½ d), (2)
+  `github` → `aldo-git`'s `gh.*` alias (1 d), (3) `aldo-memory` MCP
+  server over the existing `MemoryStore` (3–5 d — this is the §12.2
+  item), (4) driver harness (1 d).
+- Time-to-real-dry-run: **~6–8 days** of focused work.
+
+This satisfies the §13 acceptance verbatim: *"the dry-run completed
+end-to-end (or got far enough to identify the first blocker), and the
+punch list either shows zero blockers or names the exact next primitive
+to fix."*
 
 ---
 

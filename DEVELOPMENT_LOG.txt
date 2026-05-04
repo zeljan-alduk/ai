@@ -5541,3 +5541,15 @@ Exported defaultServers + McpServerSpec for test introspection without spawning 
 apps/api/tests/mcp-tool-host.test.ts (new): 8 cases covering the env-gated branches — aldo-fs always present, aldo-shell off-by-default + on-with-env, aldo-git off-by-default + on-with-env, env pass-through (--protected-branches, --allowed-remotes, --timeout-ms), accepting "true"/"1"/"yes" as on, falsy values as off.
 
 Verification: 521/521 apps/api tests green (was 513; 8 new tool-host tests added). Typecheck clean. The aldo-git MCP can now be wired into a running API by exporting ALDO_GIT_ENABLED=true and ALDO_GIT_ROOT=<abs>.
+
+2026-05-04T23:55Z — engineer (claude opus 4.7, 1M ctx) — aldo-git Phase F: agency dry-run audit + post-mortem.
+
+§13 Phase F doesn't ship the unsupervised end-to-end run — and the post-mortem at agency/dry-runs/2026-05-04-healthz-db.md explains exactly why. The audit walked every (agent, server) edge the principal→architect→tech-lead→backend-engineer+code-reviewer composite touches against the brief "Add /v1/healthz/db endpoint to apps/api with tests + OpenAPI + PR".
+
+Finding: 9 of 17 (53%) edges target MCP servers that don't exist in the repo. The unimplemented servers, ranked by how many agents reference them: aldo-memory (22), repo-fs (17), github (14), aldo-agent (8). The composite orchestrator + agency YAML schema themselves are sound — 240+ unit tests confirm the strategy + JSONPath + termination machinery — but the engine can't iterate against tools that don't exist.
+
+Phase F's actual output, per §13's escape clause: name the next leveraged chunk. The post-mortem ranks four follow-ups: (1) repo-fs → aldo-fs alias at registry load, ½ day, (2) github → aldo-git gh.* alias + extras for issues/comments, 1 day, (3) aldo-memory MCP veneer over the existing @aldo-ai/engine MemoryStore, 3-5 days (the §12.2 long pole), (4) eval/agency-dry-run/healthz-db.ts driver harness, 1 day. Total: ~6-8 days to a real, end-to-end run.
+
+MISSING_PIECES.md updated: §0 progress log + §13 Phase F outcome subsection both reflect the honest state. Auto-memory updated: project_next_chunk_aldo_git.md retitled and rewritten — aldo-git is shipped; the next chunk is the agency-tooling alignment trio.
+
+Net: §13 is closed in the sense the doc allowed (the dry-run "got far enough to identify the first blocker" and the punch list is named). The agency primitive is ~6-8 days away, not unbounded. §12.2 (memory) just moved from "deferred" to "the literal next thing."
