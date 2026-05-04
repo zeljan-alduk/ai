@@ -156,6 +156,37 @@ export function defaultServers(): Record<string, McpServerSpec> {
   return servers;
 }
 
+/**
+ * Virtual-server aliases — names the agency YAMLs use that resolve to
+ * existing real servers without spawning a second child.
+ *
+ * `repo-fs` is referenced by 17 agency specs as the working-tree-scoped
+ * read-write fs surface. Today it routes to the same `aldo-fs` server,
+ * which already takes `:rw` scoping via `ALDO_FS_RW_ROOT`. A future
+ * separate `mcp-servers/repo-fs/` package can replace the alias when
+ * the working-tree slice needs different protected-paths than the full
+ * repo (MISSING_PIECES.md §13 Phase G — agency-tooling alignment trio).
+ *
+ * `github` aliases `aldo-git` (only when the latter is enabled) so the
+ * agency YAMLs' `server: github, allow: [pr.read, pr.comment, ...]`
+ * resolves to the gh-CLI-backed surface in aldo-git. Tool-name
+ * reconciliation between the YAMLs' `pr.read`/`issue.write` shape and
+ * aldo-git's `gh.pr.view`/`gh.issue.comment` shape is intentionally
+ * deferred to the driver-harness work — the §13 Phase F post-mortem
+ * names that decision explicitly.
+ *
+ * Exported for tests so registry assembly can be asserted without
+ * spawning real children.
+ */
+export function defaultAliases(): Record<string, string> {
+  const aliases: Record<string, string> = { 'repo-fs': 'aldo-fs' };
+  const gitEnabled = (process.env.ALDO_GIT_ENABLED ?? '').toLowerCase();
+  if (gitEnabled === 'true' || gitEnabled === '1' || gitEnabled === 'yes') {
+    aliases['github'] = 'aldo-git';
+  }
+  return aliases;
+}
+
 interface ConnectedServer {
   readonly client: McpClientLike;
   readonly proc: ChildProcess;
@@ -180,6 +211,8 @@ interface McpClientLike {
 export interface CreateMcpToolHostOptions {
   /** Override / extend the default server registry. */
   readonly servers?: Record<string, McpServerSpec>;
+  /** Override / extend the default virtual-server aliases. */
+  readonly aliases?: Record<string, string>;
 }
 
 export function createMcpToolHost(opts: CreateMcpToolHostOptions = {}): ToolHost {
@@ -187,13 +220,30 @@ export function createMcpToolHost(opts: CreateMcpToolHostOptions = {}): ToolHost
     ...defaultServers(),
     ...(opts.servers ?? {}),
   };
+  const aliases: Record<string, string> = {
+    ...defaultAliases(),
+    ...(opts.aliases ?? {}),
+  };
+  // Connections are cached by canonical (real) server name so an
+  // alias never spawns a second child. Aliases just route to the
+  // already-spawned canonical server.
   const connections = new Map<string, Promise<ConnectedServer>>();
 
+  function resolveCanonical(serverName: string): string {
+    return aliases[serverName] ?? serverName;
+  }
+
   async function connect(serverName: string): Promise<ConnectedServer> {
-    const cached = connections.get(serverName);
+    const canonical = resolveCanonical(serverName);
+    const cached = connections.get(canonical);
     if (cached) return cached;
-    const spec = servers[serverName];
-    if (!spec) throw new Error(`unknown MCP server '${serverName}' — not in registry`);
+    const spec = servers[canonical];
+    if (!spec) {
+      // Surface the original name (which is what the caller used) plus
+      // the canonical to make alias misconfiguration obvious in logs.
+      const hint = canonical === serverName ? '' : ` (alias for '${canonical}')`;
+      throw new Error(`unknown MCP server '${serverName}'${hint} — not in registry`);
+    }
     const promise = (async () => {
       // Lazy SDK import keeps the rest of the API independent of MCP.
       const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
@@ -219,17 +269,19 @@ export function createMcpToolHost(opts: CreateMcpToolHostOptions = {}): ToolHost
       await client.connect(transport);
       return { client: client as unknown as McpClientLike, proc };
     })();
-    connections.set(serverName, promise);
+    connections.set(canonical, promise);
     return promise;
   }
 
   return {
     async listTools(mcpServer?: string): Promise<readonly ToolDescriptor[]> {
+      const known = (name: string): boolean =>
+        servers[name] !== undefined || aliases[name] !== undefined;
       const targets = mcpServer
-        ? servers[mcpServer]
+        ? known(mcpServer)
           ? [mcpServer]
           : []
-        : Object.keys(servers);
+        : [...Object.keys(servers), ...Object.keys(aliases)];
       const out: ToolDescriptor[] = [];
       for (const name of targets) {
         try {

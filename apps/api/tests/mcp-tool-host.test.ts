@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { defaultServers } from '../src/mcp/tool-host.js';
+import { defaultAliases, defaultServers } from '../src/mcp/tool-host.js';
 
 const ENV_KEYS = [
   'ALDO_FS_RW_ROOT',
@@ -118,5 +118,41 @@ describe('defaultServers — env gating', () => {
     process.env.ALDO_GIT_ENABLED = 'false';
     process.env.ALDO_GIT_ROOT = '/tmp/r';
     expect(Object.keys(defaultServers())).not.toContain('aldo-git');
+  });
+});
+
+describe('defaultAliases — virtual server resolution', () => {
+  let snap: Record<string, string | undefined>;
+  beforeEach(() => {
+    snap = snapshotEnv();
+    for (const k of ENV_KEYS) delete process.env[k];
+  });
+  afterEach(() => restoreEnv(snap));
+
+  it('always aliases repo-fs to aldo-fs', () => {
+    const aliases = defaultAliases();
+    expect(aliases['repo-fs']).toBe('aldo-fs');
+  });
+
+  it('does not alias github when aldo-git is disabled', () => {
+    const aliases = defaultAliases();
+    expect(aliases.github).toBeUndefined();
+  });
+
+  it('aliases github to aldo-git when ALDO_GIT_ENABLED is set', () => {
+    process.env.ALDO_GIT_ENABLED = 'true';
+    process.env.ALDO_GIT_ROOT = '/tmp/r';
+    const aliases = defaultAliases();
+    expect(aliases.github).toBe('aldo-git');
+  });
+
+  it('returns alias map keys disjoint from server map keys', () => {
+    process.env.ALDO_GIT_ENABLED = 'true';
+    process.env.ALDO_GIT_ROOT = '/tmp/r';
+    const servers = Object.keys(defaultServers());
+    const aliases = Object.keys(defaultAliases());
+    for (const a of aliases) {
+      expect(servers).not.toContain(a);
+    }
   });
 });

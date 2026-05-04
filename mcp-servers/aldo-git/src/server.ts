@@ -25,6 +25,26 @@ import { checkoutInputSchema, checkoutOutputSchema, gitCheckout } from './tools/
 import { commitInputSchema, commitOutputSchema, gitCommit } from './tools/commit.js';
 import { diffInputSchema, diffOutputSchema, gitDiff } from './tools/diff.js';
 import { fetchInputSchema, fetchOutputSchema, gitFetch } from './tools/fetch.js';
+import {
+  ghIssueComment,
+  ghIssueCommentInputSchema,
+  ghIssueCommentOutputSchema,
+} from './tools/gh-issue-comment.js';
+import {
+  ghIssueList,
+  ghIssueListInputSchema,
+  ghIssueListOutputSchema,
+} from './tools/gh-issue-list.js';
+import {
+  ghIssueView,
+  ghIssueViewInputSchema,
+  ghIssueViewOutputSchema,
+} from './tools/gh-issue-view.js';
+import {
+  ghPrComment,
+  ghPrCommentInputSchema,
+  ghPrCommentOutputSchema,
+} from './tools/gh-pr-comment.js';
 import { ghPrCreate, ghPrCreateInputSchema, ghPrCreateOutputSchema } from './tools/gh-pr-create.js';
 import { ghPrList, ghPrListInputSchema, ghPrListOutputSchema } from './tools/gh-pr-list.js';
 import { ghPrView, ghPrViewInputSchema, ghPrViewOutputSchema } from './tools/gh-pr-view.js';
@@ -169,6 +189,38 @@ export function createAldoGitServer(opts: CreateServerOpts): McpServer {
     inputSchema: ghPrViewInputSchema,
     outputSchema: ghPrViewOutputSchema,
     handler: (input) => ghPrView(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'gh.pr.comment',
+    description: 'Append a comment to an existing PR. Body is passed via --body-file.',
+    inputSchema: ghPrCommentInputSchema,
+    outputSchema: ghPrCommentOutputSchema,
+    handler: (input) => ghPrComment(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'gh.issue.view',
+    description: 'Read an issue\'s metadata, body, labels, and comments.',
+    inputSchema: ghIssueViewInputSchema,
+    outputSchema: ghIssueViewOutputSchema,
+    handler: (input) => ghIssueView(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'gh.issue.list',
+    description: 'List issues filtered by state.',
+    inputSchema: ghIssueListInputSchema,
+    outputSchema: ghIssueListOutputSchema,
+    handler: (input) => ghIssueList(policy, input),
+  });
+
+  registerTool(server, {
+    name: 'gh.issue.comment',
+    description: 'Post a comment on an existing issue. Body is passed via --body-file.',
+    inputSchema: ghIssueCommentInputSchema,
+    outputSchema: ghIssueCommentOutputSchema,
+    handler: (input) => ghIssueComment(policy, input),
   });
 
   return server;

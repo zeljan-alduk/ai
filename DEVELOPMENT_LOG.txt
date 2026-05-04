@@ -5553,3 +5553,17 @@ Phase F's actual output, per §13's escape clause: name the next leveraged chunk
 MISSING_PIECES.md updated: §0 progress log + §13 Phase F outcome subsection both reflect the honest state. Auto-memory updated: project_next_chunk_aldo_git.md retitled and rewritten — aldo-git is shipped; the next chunk is the agency-tooling alignment trio.
 
 Net: §13 is closed in the sense the doc allowed (the dry-run "got far enough to identify the first blocker" and the punch list is named). The agency primitive is ~6-8 days away, not unbounded. §12.2 (memory) just moved from "deferred" to "the literal next thing."
+
+2026-05-05T00:05Z — engineer (claude opus 4.7, 1M ctx) — §13 Phase G alignment trio, items 5.1 + 5.3.
+
+Items 5.1 (`repo-fs` alias) and 5.3 (`github` alias + 4 new gh tools) landed. `aldo-memory` (5.2, the §12.2 long pole) and the driver harness (5.4) are still pending.
+
+apps/api/src/mcp/tool-host.ts: new defaultAliases() helper exporting a virtual-server alias map. `repo-fs` always → `aldo-fs`; `github` → `aldo-git` only when `ALDO_GIT_ENABLED` is set. Connection cache keyed by canonical name so aliases never spawn duplicate children. `connect()` resolves aliases first; `listTools()` includes alias keys in its iteration target. createMcpToolHost now accepts `aliases` for caller overrides.
+
+mcp-servers/aldo-git: four new gh.* tools landed — gh.pr.comment (post review comment), gh.issue.view (read issue + labels + comments), gh.issue.list (list filtered by state), gh.issue.comment (post issue comment). Body via --body-file tmpfile pattern reused from gh.pr.create. All four covered by stub-binary tests using fake `gh` scripts on PATH. aldo-git's typed-tool surface is now 18 tools (5 git read + 3 git write + 3 git remote + 7 gh).
+
+Tests: 65/65 mcp-git (was 61), 12/12 tool-host (was 8), 525/525 apps/api (was 521). All typechecks clean.
+
+Honest call: 17 of 17 (agent, server) edges that the dry-run brief touches are now resolvable to *some* MCP server — but `aldo-memory` (22 agency-tree references, including all five brief-touching agents) is still not implemented. Items 5.1+5.3 take us from "53% of edges blocked" to "100% of NON-MEMORY edges resolved". The §12.2 / #6 memory MCP is now the literal one thing between us and a real composite dry-run.
+
+Updated agency/dry-runs/2026-05-04-healthz-db.md §9 with the post-update + revised time-to-dry-run table (~4-6 d from now). Updated MISSING_PIECES.md §0 progress log + auto-memory pointer to reflect that aldo-memory is the new last-pole.

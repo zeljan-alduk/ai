@@ -259,3 +259,68 @@ fill it in here.
 
 - Did the agency primitive ship? *Yes / partially / no — because*
 - Next leveraged chunk: *(named)*
+
+---
+
+## 9. Update — 2026-05-05 (items 5.1 + 5.3 landed)
+
+Per §13 Phase G — agency-tooling alignment trio, items 5.1 (`repo-fs`
+alias) and 5.3 (`github` alias + 4 new gh tools) **shipped 2026-05-05**.
+
+### What landed
+
+- **`repo-fs` virtual alias** in `apps/api/src/mcp/tool-host.ts`:
+  every `server: repo-fs` line in the agency YAMLs now routes to the
+  same `aldo-fs` connection, no second child spawn. Connection cache
+  keyed by canonical name so aliases never duplicate spawns. The 17
+  agents that reference `repo-fs` are unblocked.
+- **`github` virtual alias** routes to `aldo-git` (when
+  `ALDO_GIT_ENABLED=true`). The 14 agents that reference `github` are
+  unblocked at the *server* layer — but see "still pending" below for
+  the tool-name reconciliation.
+- **Four new gh.* tools in aldo-git**: `gh.pr.comment`,
+  `gh.issue.view`, `gh.issue.list`, `gh.issue.comment`. All four
+  carry stub-binary tests (`tests/tools-gh.test.ts`, now 10 cases);
+  body via `--body-file` tmpfile pattern reused; --json field selectors
+  hard-coded. The aldo-git surface is now: 5 read-only git ops + 3
+  write git ops + 3 remote git ops + 7 gh ops = **18 typed tools**.
+- **+4 tool-host alias tests** in `apps/api/tests/mcp-tool-host.test.ts`
+  (12 cases total).
+
+### Verification
+
+- `pnpm --filter @aldo-ai/mcp-git test` → 65/65 (was 61).
+- `pnpm --filter @aldo-ai/api test` → 525/525 (was 521).
+- Both typechecks clean.
+
+### Still pending before the dry-run can fire
+
+- **5.2 `aldo-memory` MCP** — the long pole. Untouched today;
+  remains the §12.2 / #6 item. Estimated 3–5 days. The `MemoryStore`
+  shape exists in `@aldo-ai/engine`; needs the MCP veneer + persistence
+  alignment (Postgres + pglite) + scope enforcement (`private`, `org`,
+  `project`) + retention enforcement matching `agency/*.yaml`'s
+  `memory.retention.*`.
+- **5.4 driver harness** — untouched. ~1 day, after 5.2 lands.
+- **Tool-name reconciliation**. The agency YAMLs say
+  `allow: [pr.read, pr.comment, issue.read, issue.write]`. The
+  `github` alias routes to `aldo-git`, but the tool names on
+  `aldo-git` are `gh.pr.view` / `gh.pr.comment` / `gh.issue.view` /
+  `gh.issue.comment` (the YAMLs use shorthand). Two paths:
+  (a) the registry loader rewrites YAML allow-lists when the server
+  is `github` (read → view, write → comment); (b) the YAMLs are
+  edited to the canonical names. Pick one when the driver harness
+  lands and a real run forces the issue. Path (a) is cheaper.
+
+### Revised time-to-real-dry-run
+
+| Item | Effort | Status |
+|---|---|---|
+| 5.1 `repo-fs` alias | ½ d | ✅ shipped 2026-05-05 |
+| 5.3 `github` alias + 4 gh tools | 1 d | ✅ shipped 2026-05-05 |
+| 5.2 `aldo-memory` MCP | 3–5 d | ⏳ pending |
+| 5.4 Driver harness | 1 d | ⏳ pending (depends on 5.2) |
+| **End-to-end real dry-run** | | **~4–6 days from 2026-05-05** |
+
+§12.2 (memory) is now the one item between us and the agency
+primitive shipping.
