@@ -107,7 +107,14 @@ export type Action =
   | { readonly kind: 'turn-finished'; readonly ok: boolean; readonly output: string | null }
   | { readonly kind: 'reset-conversation' }
   /** MISSING_PIECES §11 / Phase D — append a system info entry. */
-  | { readonly kind: 'system-info'; readonly content: string };
+  | { readonly kind: 'system-info'; readonly content: string }
+  /**
+   * MISSING_PIECES §11 / Phase E — replace the entry list with a
+   * persisted snapshot. Used on `aldo code --resume <thread-id>` to
+   * hydrate the App from a saved session sidecar. Phase resets to
+   * idle because the resumed session is not actively running.
+   */
+  | { readonly kind: 'hydrate-entries'; readonly entries: readonly Entry[] };
 
 /** Apply one action; produce the next state. Pure. */
 export function reduce(state: TuiState, action: Action): TuiState {
@@ -124,6 +131,11 @@ export function reduce(state: TuiState, action: Action): TuiState {
       return {
         ...state,
         entries: [...state.entries, { kind: 'system', content: action.content }],
+      };
+    case 'hydrate-entries':
+      return {
+        ...initialState,
+        entries: action.entries,
       };
   }
 }

@@ -80,6 +80,19 @@ export interface AppProps {
    * (for the system-info confirmation) or throws on failure.
    */
   readonly onSave?: (path: string, content: string) => Promise<string>;
+  /**
+   * MISSING_PIECES §11 Phase E — entries to seed the conversation
+   * with. Used on `--resume <thread-id>` to hydrate from a saved
+   * session sidecar.
+   */
+  readonly initialEntries?: readonly import('./state.js').Entry[];
+  /**
+   * MISSING_PIECES §11 Phase E — fired after every state change that
+   * a saved session should reflect (turn completion, system info,
+   * reset). Receives the latest entry list so the parent can persist
+   * it without subscribing to every reducer transition.
+   */
+  readonly onPersist?: (entries: readonly import('./state.js').Entry[]) => void;
 }
 
 export function App({
@@ -88,6 +101,8 @@ export function App({
   approvalController,
   sessionInfo,
   onSave,
+  initialEntries,
+  onPersist,
 }: AppProps) {
   const [state, dispatch] = useReducer(reduce, initialState);
   const { exit } = useApp();
@@ -97,6 +112,26 @@ export function App({
 
   const stateRef = useRef<TuiState>(state);
   stateRef.current = state;
+
+  // MISSING_PIECES §11 Phase E — hydrate from --resume on first mount.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    if (initialEntries !== undefined && initialEntries.length > 0) {
+      dispatch({ kind: 'hydrate-entries', entries: initialEntries });
+    }
+    hydratedRef.current = true;
+  }, [initialEntries]);
+
+  // MISSING_PIECES §11 Phase E — persist entries on every change.
+  // Runs after every reducer commit; the parent's onPersist is
+  // responsible for debouncing if it wants (the JSON sidecar is
+  // small enough that we don't bother in v0).
+  useEffect(() => {
+    if (onPersist === undefined) return;
+    if (!hydratedRef.current) return; // skip the pre-hydration mount
+    onPersist(state.entries);
+  }, [state.entries, onPersist]);
 
   const startTurn = useCallback(
     (text: string) => {

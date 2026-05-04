@@ -59,6 +59,11 @@ export interface CodeOptions {
    * subsequent turns come from user input.
    */
   readonly tui?: boolean;
+  /**
+   * MISSING_PIECES §11 / Phase E — resume an existing TUI session
+   * by threadId. Only honored when --tui is set.
+   */
+  readonly resumeThreadId?: string;
 }
 
 export interface CodeHooks {
@@ -98,6 +103,7 @@ export async function runCode(
         ...(opts.contextWindow !== undefined ? { contextWindow: opts.contextWindow } : {}),
         noLocalFallback: opts.noLocalFallback === true,
         ...(initialBrief !== null ? { initialBrief } : {}),
+        ...(opts.resumeThreadId !== undefined ? { resumeThreadId: opts.resumeThreadId } : {}),
       },
       io,
       {

@@ -205,6 +205,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     .option('--no-local-fallback', 'refuse to fall back to local-reasoning (e.g. coding-frontier)')
     .option('--stdin', 'read the brief from stdin', false)
     .option('--tui', 'launch the interactive ink-based TUI shell (Phase B)', false)
+    .option('--resume <thread-id>', 'resume a saved TUI session by thread-id (Phase E)')
     .action(
       (
         briefArgs: string[],
@@ -217,6 +218,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           localFallback?: boolean; // commander negates --no-* into localFallback
           stdin?: boolean;
           tui?: boolean;
+          resume?: string;
         },
       ) => {
         const brief = briefArgs.length > 0 ? briefArgs.join(' ') : undefined;
@@ -237,6 +239,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               noLocalFallback: o.localFallback === false,
               stdin: o.stdin === true,
               tui: o.tui === true,
+              ...(o.resume !== undefined ? { resumeThreadId: o.resume } : {}),
             },
             io,
           );

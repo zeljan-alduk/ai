@@ -5413,3 +5413,40 @@ Out of scope (subsequent phases):
 - Phase F — docs + smoke + bin polish.
 - Phase G — homebrew + curl|sh installer.
 - Mutating /model and /tools mid-session (rebuild spec + runtime + history transfer; nontrivial).
+
+2026-05-04T12:28Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §11 Phase E: session persistence + --resume.
+
+Phase E gives `aldo code --tui` cross-session memory. Each session is keyed by a UUID thread-id; the conversation Entry list is serialised to a JSON sidecar after every state change; `aldo code --tui --resume <thread-id>` rehydrates the App from the saved sidecar. Multi-day workflows (start Monday, resume Tuesday) preserve context.
+
+Pragmatic v0 design — sidecar over a DB-rebuild path:
+The §11 plan called for "write every turn into the platform's runs DB via the runtime's existing RunStore" and re-derive the UI state from RunEvents on resume. That's correct for replay (`/runs/<id>` cycle tree) but heavyweight for the chat-resume UX: re-running the reducer over a persisted event log on every session open is wasteful when the Entry list is the cached projection of those events. Phase E ships the sidecar as the UI's local memory; the DB still holds the engine RunEvents for replay (when DATABASE_URL is set, via the existing PostgresRunStore wiring), and a future improvement can also UPDATE runs.thread_id so /runs/<id> groups by thread alongside the sidecar.
+
+Persistence module (commands/code/persistence.ts, ~210 LoC):
+- saveSession({ threadId, workspace, entries, createdAt? }) writes ~/.aldo/code-sessions/<thread-id>.json (configurable via $ALDO_CODE_HOME or the test-only sessionsDir option). Atomic via tmp + rename so a crash mid-write can't corrupt a prior save. Preserves createdAt across re-saves; advances updatedAt every time.
+- loadSession(threadId): returns SessionRecord or throws SessionNotFoundError / SessionCorruptError. Both error classes carry a typed `code` field for callers that want to branch on the failure mode.
+- newThreadId(): UUID v4.
+- listSessions(): newest-first by updatedAt; useful for a future `aldo code list` subcommand.
+- sessionPath: anti-path-escape sanitiser; `[^a-zA-Z0-9_-]` chars become `_` so an adversarial `--resume "../../etc/passwd"` lands at `..___..___etc_passwd.json` inside the sessions dir.
+
+State extension:
+- New `hydrate-entries` action that REPLACES the entry list and resets phase to idle / lastError to null. Distinct from reset-conversation (which clears everything); hydrate seeds from a saved snapshot.
+
+App wiring (commands/code/app.tsx):
+- Two new optional props: `initialEntries` and `onPersist`.
+- useEffect on first mount: if initialEntries is non-empty, dispatch hydrate-entries.
+- useEffect on every state.entries change: call onPersist(state.entries) so the sidecar stays current. Skips the pre-hydration mount via a ref so we don't overwrite a saved session with an empty list.
+
+TUI integration (commands/code/tui.ts):
+- threadId = opts.resumeThreadId ?? newThreadId(). On --resume, loadSession; failures emit a clean error and exit 1. On a fresh session, prints both the threadId AND the resume command line so the user knows how to come back.
+- onPersist callback writes the sidecar; failures emit a non-fatal warning (the in-memory conversation is untouched).
+- Headless `aldo code` is unaffected.
+
+CLI: `--resume <thread-id>` flag added; only honored with --tui.
+
+Tests: 93 §11 passing total (+15 Phase E). 7 round-trip persistence tests (entry list verbatim, atomic write, createdAt preserved across re-saves), 4 error paths (not-found / corrupt JSON / corrupt shape / invalid path), 2 anti-path-escape, 2 listSessions, 1 reducer hydrate. tsc clean. Pre-existing CLI flake unchanged.
+
+What's left in §11:
+- Phase F — docs + smoke + bin polish (author-facing guide + e2e against a real local model).
+- Phase G — homebrew + curl|sh installer + signed binaries.
+- DB-side thread linkage: UPDATE runs.thread_id matching the §10 assistant pattern so /runs/<id> groups iterative-coding-loop turns under the same thread. Not in Phase E because it's only valuable when DATABASE_URL is wired; the sidecar handles the local resume case unconditionally.
+- Mutating /model and /tools mid-session.

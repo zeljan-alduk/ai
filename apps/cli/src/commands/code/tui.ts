@@ -23,13 +23,20 @@ import type {
 import { type RuntimeBundle, bootstrap } from '../../bootstrap.js';
 import { loadConfig } from '../../config.js';
 import type { CliIO } from '../../io.js';
-import { writeErr } from '../../io.js';
+import { writeErr, writeLine } from '../../io.js';
 import {
   CLI_CODE_AGENT_NAME,
   CLI_CODE_SYSTEM_PROMPT,
   buildCliCodeSpec,
 } from '../code-spec.js';
 import { CliCodeToolHost } from '../code-tool-host.js';
+import {
+  SessionNotFoundError,
+  loadSession,
+  newThreadId,
+  saveSession,
+} from './persistence.js';
+import type { Entry } from './state.js';
 
 export interface TuiOptions {
   readonly tools?: string;
@@ -40,6 +47,12 @@ export interface TuiOptions {
   readonly noLocalFallback?: boolean;
   /** Optional initial brief; auto-fired by the App on mount. */
   readonly initialBrief?: string;
+  /**
+   * MISSING_PIECES §11 Phase E — resume an existing session by
+   * threadId. The App hydrates from the saved sidecar; subsequent
+   * turns are persisted under the same threadId.
+   */
+  readonly resumeThreadId?: string;
 }
 
 export interface TuiHooks {
@@ -168,6 +181,46 @@ export async function startTui(
     maxCycles: built.spec.iteration?.maxCycles ?? 0,
   };
 
+  // MISSING_PIECES §11 Phase E — session persistence.
+  const threadId = opts.resumeThreadId ?? newThreadId();
+  let initialEntries: readonly Entry[] = [];
+  let createdAt: string | undefined;
+  if (opts.resumeThreadId !== undefined) {
+    try {
+      const record = loadSession(opts.resumeThreadId);
+      initialEntries = record.entries;
+      createdAt = record.createdAt;
+      writeLine(io, `[aldo code] resumed thread ${threadId} (${initialEntries.length} entries)`);
+    } catch (err) {
+      if (err instanceof SessionNotFoundError) {
+        writeErr(io, `error: no saved session for thread-id ${opts.resumeThreadId}`);
+        return 1;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      writeErr(io, `error: failed to load session: ${msg}`);
+      return 1;
+    }
+  } else {
+    writeLine(io, `[aldo code] new session · thread-id ${threadId}`);
+    writeLine(io, `[aldo code] resume later with: aldo code --tui --resume ${threadId}`);
+  }
+
+  const onPersist = (entries: readonly Entry[]): void => {
+    try {
+      saveSession({
+        threadId,
+        workspace: workspaceRoot,
+        entries,
+        ...(createdAt !== undefined ? { createdAt } : {}),
+      });
+    } catch (err) {
+      // Persistence is best-effort; never crash the TUI on a save
+      // failure. The user still has the in-memory conversation.
+      const msg = err instanceof Error ? err.message : String(err);
+      writeErr(io, `[aldo code] warning: session persist failed: ${msg}`);
+    }
+  };
+
   // Lazy-load the ink renderer so non-TUI callers never pay the cost.
   const { mountTui } = await import('./app-render.js');
   await mountTui({
@@ -175,6 +228,8 @@ export async function startTui(
     approvalController,
     sessionInfo,
     onSave,
+    onPersist,
+    initialEntries,
     ...(opts.initialBrief !== undefined ? { initialBrief: opts.initialBrief } : {}),
   });
   return 0;
