@@ -617,3 +617,283 @@ sequencing + integration churn, not invention.
 | **Single mega-MCP that exposes write+shell+git+browser as one server.** | Mixing read/write/execute capabilities in one server breaks the ACL spine. Each server is one capability surface; that's the bet. |
 | **Use the agent loop pattern from inside Claude Code itself (this CLI).** | This CLI runs locally on the operator's machine. Production agents run on the VPS where there's no Claude Code session. The pattern is reproducible (it's not magic), but the runtime has to be ours. |
 | **Defer browser + vision to v2; build everything else first.** | Real possibility — they're orthogonal. Sequencing depends on whether the next picenhancer-class build needs UX iteration (then we need them) or only backend work (then we don't). Decision deferrable to Sprint 5. |
+
+---
+
+## 9. Execution plan for #1 — IterativeAgentRun (next up, drafted 2026-05-04)
+
+Sprint 1 (#5 + #2 + #3) shipped the foundational primitives an agent
+needs to do real coding work: a real prompt-runner, write-capable fs
+tools with a denylist, and an opt-in shell-exec MCP. The natural next
+move is **the spine**: `IterativeAgentRun`. The doc's §3 #1 covers the
+*design*; this section covers the *plan to ship it* — sequenced
+sub-deliverables, each shippable on its own commit, building toward
+the full primitive. Target: **5–7 working days for one engineer**.
+
+The plan is conservative on scope inside each phase so a regression in
+one phase doesn't strand the platform halfway through. The same plan
+adapts if the ordering needs to flex (e.g. Phase D before C if the UI
+work unblocks user feedback faster).
+
+### Phase A — Spec + event surface (Day 1)
+
+**Goal**: the iterative spec validates, the engine knows about
+iterative runs without yet executing them.
+
+**Files**:
+- `platform/api-contract/src/agent-spec.ts` (modify) — add the
+  `iteration` block schema: `maxCycles`, `contextWindow`,
+  `summaryStrategy`, `terminationConditions` (`text-includes` |
+  `tool-result` | `budget-exhausted` discriminated union).
+- `platform/types/src/run-event.ts` (modify) — extend the discriminated
+  union with `cycle.start`, `model.response`, `tool.results`,
+  `history.compressed`, `run.terminated_by`.
+- `platform/engine/src/runtime.ts` (modify, ~30 LoC) — branch in
+  `runAgent`: if `spec.iteration` is present, route to `runIterative`
+  (stub for now, throws `IterativeRuntimeNotImplemented`).
+- Spec validation tests (~6) — defaults, missing fields, invalid
+  termination conditions, schema emission.
+
+**Acceptance**:
+- `pnpm --filter @aldo-ai/api-contract test` green.
+- Engine typecheck green.
+- Runtime selector compiles; throws a typed sentinel when reached.
+
+**Risk**: minor — spec versioning. Leaf specs (no iteration block) keep
+routing to `LeafAgentRun`. Co-exist; no breaking change.
+
+**Commit**: `feat(engine): IterativeAgentRun spec + event scaffolding`
+
+### Phase B — Core loop + termination (Day 2–3)
+
+**Goal**: a single agent can run N turns, call tools in parallel,
+terminate on the conditions declared in the spec.
+
+**Files**:
+- `platform/engine/src/iterative-run.ts` (new, ~350 LoC) — the loop.
+  Pseudocode:
+  ```
+  for cycle in 1..maxCycles:
+    emit cycle.start
+    resp = await gateway.completeWith(req, ctx, hints)
+    emit model.response
+    if no tool calls:
+      if matchesTermination(resp.text): emit run.completed; return
+      append nudge to history; continue
+    results = await Promise.all(toolHost.invoke(...))
+    emit tool.results
+    history.push(assistant msg + tool results)
+    if estimatedTokens(history) > contextWindow * 0.8:
+      history = compressHistory(history, strategy)
+      emit history.compressed
+  emit run.terminated_by { reason: 'maxCycles' }
+  ```
+- Termination matchers: `matchesTextIncludes`, `matchesToolResult`,
+  `matchesBudget` — each ~10 LoC, pure.
+- Tool-failure path: append a synthetic `tool_result` with
+  `isError: true`, continue the loop (the model decides next move).
+
+**Tests** (mocked gateway + toolHost; no real I/O):
+- Termination on `text-includes` within 1 cycle.
+- 3-cycle run with tool calls; terminates on `tool-result` match.
+- `maxCycles` exhaustion → `run.terminated_by { reason: 'maxCycles' }`.
+- Tool failure surfaces as `isError: true` tool_result; loop continues.
+- Parallel tool calls all settle before the next gateway call.
+
+**Acceptance**: engine tests green, `IterativeRuntimeNotImplemented`
+sentinel from Phase A no longer reachable.
+
+**Risk**: parallel tool ordering when results affect each other. v0
+decision: parallel via `Promise.all` — safe because the model only
+sees them after all settle, and re-submits a fresh turn. Sequential
+mode is a future spec extension (`toolCallStrategy: 'sequential'`).
+
+**Commit**: `feat(engine): IterativeAgentRun core loop + termination`
+
+### Phase C — History compression (Day 3–4)
+
+**Goal**: long-running loops don't exceed the context window.
+
+**Files**:
+- `platform/gateway/src/provider.ts` (modify) — optional
+  `estimateTokens(messages): number` on `ProviderAdapter`. Default:
+  chars/4 heuristic in the gateway.
+- `platform/gateway/src/providers/{anthropic,openai-compat,google}.ts`
+  (modify) — adapter-specific override where the provider exposes a
+  counting endpoint (Anthropic does; OpenAI varies).
+- `platform/engine/src/iterative-run.ts` (modify) — implement
+  `compressHistory(history, strategy)`:
+  - **rolling-window**: drop oldest user/assistant pairs until
+    estimated tokens < `contextWindow * 0.8`. Always keep system + last
+    2 turns.
+  - **periodic-summary**: gateway-call the same model with a
+    "summarise this conversation" prompt; replace dropped turns with
+    the summary. Hard cap at 3 summaries per run; fall back to rolling
+    after.
+
+**Tests**:
+- Rolling-window keeps system + last 2 turns; drops mid-history.
+- Periodic-summary triggers exactly once when threshold crossed; cost
+  roll-up includes the summary call.
+- 100-cycle synthetic run (5 KB/cycle) terminates without OOM; emits
+  ≥ 1 `history.compressed` event.
+
+**Acceptance**: synthetic long-run test passes with both strategies.
+
+**Risk**: heuristic underestimates real tokens → compression triggers
+too late. Mitigation: log estimated vs actual (`delta.end.usage.tokensIn`)
+per cycle; tune safety factor in v1.
+
+**Commit**: `feat(engine,gateway): IterativeAgentRun history compression`
+
+### Phase D — Replay UI cycle tree (Day 4–5)
+
+**Goal**: operator can see what the agent did, cycle by cycle.
+
+**Files**:
+- `apps/api/src/routes/runs.ts` (modify) — ensure the new event kinds
+  round-trip cleanly through the existing `RunEvent` zod schema (most
+  of this is type-only after Phase A).
+- `apps/web/components/runs/cycle-tree.tsx` (new, ~150 LoC) —
+  collapsible cycle panels. Each cycle: header (cycle N, model,
+  latency, tokens), body (model text, tool calls + results,
+  compression event if fired).
+- `apps/web/app/runs/[id]/page.tsx` (modify) — render `<CycleTree>`
+  next to the existing flame-graph when the run has `cycle.start`
+  events. Re-uses the semantic-token theme from the wave-13 flame-graph
+  upgrade.
+- Web e2e (Playwright): SQL-fixture an iterative run, assert N cycle
+  panels render with the right headers.
+
+**Acceptance**: `@aldo-ai/web` typecheck + `@aldo-ai/web-e2e` green;
+manual smoke at `/runs/<id>` shows the cycle tree.
+
+**Risk**: layout — lift the flame-graph into a sibling panel rather
+than replacing.
+
+**Commit**: `feat(web/runs): cycle tree for iterative agent runs`
+
+### Phase E — Reference agent + e2e smoke (Day 5–6)
+
+**Goal**: prove the loop end-to-end against real fs + shell tools.
+
+**Files**:
+- `agency/development/local-coder-iterative.yaml` (new) — agent spec:
+  ```yaml
+  apiVersion: aldo-ai/agent.v1
+  name: local-coder-iterative
+  capability_class: reasoning
+  privacy_tier: internal
+  iteration:
+    maxCycles: 30
+    contextWindow: 128000
+    summaryStrategy: rolling-window
+    terminationConditions:
+      - kind: tool-result
+        tool: shell.exec
+        match: { exitCode: 0 }
+  tools:
+    - aldo-fs.fs.read
+    - aldo-fs.fs.write
+    - aldo-fs.fs.mkdir
+    - aldo-shell.shell.exec
+  prompt: |
+    You are a TypeScript engineer. The user gives you a brief.
+    Implement it as one .ts file under /workspace, then run
+    pnpm typecheck. When typecheck passes, emit <task-complete>.
+  ```
+- `apps/api/tests/iterative-smoke.test.ts` (new) — e2e against a
+  stubbed gateway that returns scripted text + tool calls + a final
+  passing typecheck. Asserts: cycle count > 1, typecheck invoked, run
+  ends with `tool-result` termination, output file written.
+- `docs/guides/iterative-agents.md` (new) — author-facing guide:
+  spec shape, termination conditions, ACL setup, recommended cycle
+  budgets.
+
+**Acceptance**: e2e green; manual run against a local Qwen-Coder
+produces a working `hello.ts` that typechecks.
+
+**Risk**: cross-process cleanup — the smoke spawns aldo-fs + aldo-shell
+children; ensure they shut down via the existing tool-host close path.
+
+**Commit**: `feat(agency): local-coder-iterative reference agent + e2e + guide`
+
+### Phase F — Eval harness wiring (optional, Day 6–7)
+
+**Goal**: existing rubric scores iterative runs end-to-end on the final
+output.
+
+**Files**:
+- `platform/eval/src/rubric.ts` (modify) — accept the iterative run
+  shape; score on the final output (final assistant text + final tool
+  result). Per-cycle rubrics deferred.
+- `apps/api/src/routes/eval.ts` (modify) — eval-playground UI shows
+  iterative runs alongside leaf runs.
+
+**Acceptance**: an iterative run scores correctly via the existing
+rubric.
+
+**Commit**: `feat(eval): score iterative agent runs via existing rubric`
+
+### Cross-cutting risks (whole plan)
+
+1. **Token estimation accuracy.** Heuristic underestimates → late
+   compression → OOM the model. Mitigation: log est-vs-actual; tune
+   safety factor.
+2. **Periodic-summary cost.** Hard cap at 3 summaries/run; fall back
+   to rolling.
+3. **Tool-call ordering.** Parallel by default. Sequential is a future
+   spec extension if real runs prove it necessary.
+4. **Spec versioning.** Co-existence solves it: old leaf specs route
+   to `LeafAgentRun`; new specs with `iteration` route to
+   `IterativeAgentRun`. No migration.
+5. **Replay storage.** Iterative runs emit ~10x more events. Defer
+   tier-down retention to a follow-up; v0 stores everything.
+6. **Tool-failure infinite loop.** v0 trusts the model. Aggressive
+   retry caps come later if we see misbehaviour in practice.
+
+### Out of scope (handled by sibling pieces)
+
+- **#9 Approval gates** — iterative loop will gain an `await` point at
+  tool-call time when #9 lands. Until then write-capable tools rely on
+  the protected-paths denylist + allowlists.
+- **#4 Frontier-coding capability** — agent author flips
+  `capability_class: coding-frontier` and the gateway picks Claude/GPT
+  when #4 lands. The loop primitive is capability-agnostic.
+- **#6 Memory across runs** — `parent_run_id` linkage retrofits on top
+  of IterativeAgentRun without breaking the loop.
+- **#7 Browser-MCP** + **#8 Vision** — tool host already registers MCP
+  servers; the loop is tool-agnostic.
+
+### Sequencing summary
+
+| Phase | Days | Output | Depends on |
+|---|---|---|---|
+| A | 1 | Spec + event scaffolding | — |
+| B | 2–3 | Core loop + termination | A |
+| C | 3–4 | History compression | B |
+| D | 4–5 | Replay UI cycle tree | B (events) |
+| E | 5–6 | Reference agent + e2e smoke | B, C, #2, #3 |
+| F | 6–7 | Eval harness wiring | E |
+
+**After Phase E**: the platform runs an iterative coding agent
+end-to-end against a real local model. **After Phase F**: the same
+loop is eval-gated and shows up in the playground.
+
+### What lands second (queued after #1)
+
+The doc's §4 sprint table puts Sprint 3 next: **#9 approval gates +
+#4 frontier-coding capability**. With #1 in place, both become
+non-trivial unlocks:
+
+- **#9** turns write-capable tools (#2, #3, future #7 browser, future
+  aldo-git) safe enough to expose more permissively. Without it the
+  protected-paths denylist is doing all the safety work.
+- **#4** lets the iterative loop reach for a frontier coding model on
+  tenants that have keys, instead of being stuck at local-Qwen quality
+  for hard tasks.
+
+Realistic call: ship #1 first (5–7 days), then commit to #9 + #4 in a
+single sprint (estimated combined effort: ~5 days). Skip #6 (memory)
+until we see a multi-run workflow demand it; skip #7/#8 until UX
+iteration is on the table.
