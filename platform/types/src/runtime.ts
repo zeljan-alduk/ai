@@ -48,6 +48,26 @@ export interface RunEvent {
     | 'composite.usage_rollup'
     | 'composite.iteration'
     /**
+     * MISSING_PIECES §9 — IterativeAgentRun lifecycle events. Emitted
+     * by the leaf-loop runtime (Phase B+) on the iterative agent's own
+     * event stream so the replay UI's cycle tree can reconstruct each
+     * turn. The wire shape is reserved here in Phase A; the runtime
+     * only emits these once the loop body lands.
+     *
+     *  - cycle.start         { cycle: number, model, capabilityClass }
+     *  - model.response      { cycle, text?, toolCalls: ToolCallSummary[] }
+     *  - tool.results        { cycle, results: ToolResultSummary[] }
+     *  - history.compressed  { cycle, strategy, droppedMessages, keptMessages }
+     *
+     * `run.terminated_by` is shared with the composite runtime above —
+     * an iterative leaf reuses the same event when its own
+     * `iteration.terminationConditions` fire.
+     */
+    | 'cycle.start'
+    | 'model.response'
+    | 'tool.results'
+    | 'history.compressed'
+    /**
      * Wave-17 declarative termination. Emitted by the orchestrator
      * (in `@aldo-ai/orchestrator`) on the SUPERVISOR run's event
      * stream when a `termination:` block trigger fires and the run

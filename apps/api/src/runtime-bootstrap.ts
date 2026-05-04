@@ -70,6 +70,7 @@ import {
   NoopTracer,
   PlatformRuntime,
   PostgresRunStore,
+  RealHistoryCompressor,
 } from '@aldo-ai/engine';
 import { Supervisor } from '@aldo-ai/orchestrator';
 import { createMcpToolHost } from './mcp/tool-host.js';
@@ -331,6 +332,13 @@ function finalizeRuntime(deps: Deps, tenantId: string, state: ProviderState): Ru
     tenant,
     checkpointer: new InMemoryCheckpointer(),
     runStore,
+    // MISSING_PIECES §9 Phase C — production runs of iterative leaf
+    // agents compress their history (rolling-window or
+    // periodic-summary, picked per-spec via
+    // `iteration.summaryStrategy`). Without this dep the runtime
+    // defaults to `passThroughCompressor` and a long iterative loop
+    // will OOM the model's context window.
+    historyCompressor: new RealHistoryCompressor(),
   });
 
   // Wave-X — wire the composite orchestrator so agents whose specs

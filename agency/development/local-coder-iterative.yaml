@@ -1,0 +1,90 @@
+apiVersion: aldo-ai/agent.v1
+kind: Agent
+
+# MISSING_PIECES §9 / Phase E — reference iterative coding agent.
+#
+# A single-agent loop that writes a TypeScript file, runs `pnpm typecheck`,
+# and terminates the moment typecheck exits 0 (or maxCycles hits). The
+# spec is the authoritative answer to "how do I write an iterative agent
+# in YAML" — every field below maps onto a concept from the §9 plan.
+#
+# Privacy tier is `internal` (not `sensitive`) so any local model can
+# serve it; operators who want frontier coding flip
+# capability_class to `coding-frontier` (gated on #4 once it lands).
+
+identity:
+  name: local-coder-iterative
+  version: 0.1.0
+  description: >
+    Reference iterative coding agent — writes a single TypeScript file
+    under /workspace, runs pnpm typecheck, terminates on a clean
+    typecheck. Drives the §9 IterativeAgentRun loop end-to-end against
+    a real local model + fs/shell tools.
+  owner: development-team@aldo-tech-labs
+  tags: [development, coding, iterative, reference]
+
+role:
+  team: development
+  pattern: worker
+
+model_policy:
+  capability_requirements: [tool-use, code-fim, structured-output]
+  privacy_tier: internal
+  primary:
+    capability_class: reasoning-medium
+  fallbacks:
+    - capability_class: local-reasoning
+  budget:
+    usd_per_run: 0.50
+    tokens_in_max: 120000
+    tokens_out_max: 8000
+  latency:
+    p95_ms: 120000
+  decoding:
+    mode: free
+    temperature: 0.15
+
+prompt:
+  system_file: prompts/local-coder-iterative.system.md
+
+tools:
+  mcp:
+    - server: aldo-fs
+      allow: [fs.read, fs.write, fs.mkdir]
+    - server: aldo-shell
+      allow: [shell.exec]
+  permissions:
+    network: none
+    filesystem: repo-readwrite
+
+memory:
+  read: []
+  write: []
+  retention: {}
+
+spawn:
+  allowed: []
+
+escalation: []
+subscriptions: []
+
+eval_gate:
+  required_suites: []
+  must_pass_before_promote: false
+
+iteration:
+  max_cycles: 30
+  context_window: 128000
+  summary_strategy: rolling-window
+  termination_conditions:
+    # Halt the moment typecheck passes (exit code 0).
+    - kind: tool-result
+      tool: shell.exec
+      match:
+        exit_code: 0
+        contains: tsc
+    # Belt-and-braces: an explicit sentinel the model can emit.
+    - kind: text-includes
+      text: <task-complete>
+    # Never let the loop spend past the per-run budget cap above.
+    - kind: budget-exhausted

@@ -18,6 +18,8 @@ import type {
   CompositeSubagent,
   EscalationRule,
   EvalGate,
+  IterationSpec,
+  IterationTerminationCondition,
   MemoryPolicy,
   MemoryScope,
   ModelPolicy,
@@ -246,6 +248,34 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
         }
       : undefined;
 
+  const iteration: IterationSpec | undefined =
+    y.iteration !== undefined
+      ? {
+          maxCycles: y.iteration.max_cycles,
+          contextWindow: y.iteration.context_window,
+          summaryStrategy: y.iteration.summary_strategy,
+          terminationConditions: y.iteration.termination_conditions.map(
+            (c): IterationTerminationCondition => {
+              switch (c.kind) {
+                case 'text-includes':
+                  return { kind: 'text-includes', text: c.text };
+                case 'tool-result':
+                  return {
+                    kind: 'tool-result',
+                    tool: c.tool,
+                    match: {
+                      ...(c.match.exit_code !== undefined ? { exitCode: c.match.exit_code } : {}),
+                      ...(c.match.contains !== undefined ? { contains: c.match.contains } : {}),
+                    },
+                  };
+                case 'budget-exhausted':
+                  return { kind: 'budget-exhausted' };
+              }
+            },
+          ),
+        }
+      : undefined;
+
   const sandbox: SandboxConfig | undefined =
     y.sandbox !== undefined
       ? {
@@ -305,6 +335,7 @@ function toAgentSpec(y: AgentV1Yaml): AgentSpec {
     ...(sandbox !== undefined ? { sandbox } : {}),
     ...(composite !== undefined ? { composite } : {}),
     ...(termination !== undefined ? { termination } : {}),
+    ...(iteration !== undefined ? { iteration } : {}),
   };
 
   return spec;

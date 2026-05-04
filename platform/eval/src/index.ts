@@ -70,3 +70,12 @@ export {
 } from './promotion-gate.js';
 
 export { parseVerdict } from './evaluators/rubric.js';
+
+// MISSING_PIECES §9 / Phase F — extractor that adapts an iterative
+// run's event stream into the string shape the existing evaluators
+// consume. Per-cycle scoring is deferred; this is the "score on the
+// final output" path.
+export {
+  iterativeRunOutput,
+  type IterativeOutputBundle,
+} from './iterative-output.js';

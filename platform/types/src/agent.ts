@@ -216,6 +216,50 @@ export interface TerminationConfig {
   readonly successRoles?: readonly string[];
 }
 
+/**
+ * MISSING_PIECES §9 / Phase A — leaf-loop iteration block.
+ *
+ * Distinct from `composite.iteration` (wave-9 multi-agent supervisor
+ * pattern). This block describes a SINGLE-agent loop that talks to the
+ * model, calls tools, and re-feeds the results until one of the
+ * declared termination conditions fires or `maxCycles` is exhausted.
+ *
+ * Co-existence rule: an agent declares EITHER `composite` or
+ * `iteration`. The runtime selects in this order — composite first
+ * (wave-9 supervisor), then iteration (leaf loop), then plain leaf.
+ * The registry-side schema enforces the mutual exclusivity at parse
+ * time so a malformed spec cannot reach the runtime.
+ */
+export type IterationSummaryStrategy = 'rolling-window' | 'periodic-summary';
+
+/**
+ * Discriminated union of declarative termination matchers checked
+ * after every cycle. Order in the spec is preserved; the loop fires
+ * the FIRST match. `budget-exhausted` is checked by the loop itself
+ * against the per-run `Budget` rather than by the gateway, so an
+ * operator can opt INTO an early budget bail-out without changing
+ * the budget cap.
+ */
+export type IterationTerminationCondition =
+  | { readonly kind: 'text-includes'; readonly text: string }
+  | {
+      readonly kind: 'tool-result';
+      readonly tool: string;
+      readonly match: {
+        readonly exitCode?: number;
+        readonly contains?: string;
+      };
+    }
+  | { readonly kind: 'budget-exhausted' };
+
+export interface IterationSpec {
+  readonly maxCycles: number;
+  /** Estimated context-window size in tokens (for the chosen model class). */
+  readonly contextWindow: number;
+  readonly summaryStrategy: IterationSummaryStrategy;
+  readonly terminationConditions: readonly IterationTerminationCondition[];
+}
+
 /** A fully-parsed agent spec (agent.v1). */
 export interface AgentSpec {
   readonly apiVersion: 'aldo-ai/agent.v1';
@@ -249,6 +293,16 @@ export interface AgentSpec {
    * defaults (per-strategy "all subagents finished" + iterative.terminate).
    */
   readonly termination?: TerminationConfig;
+  /**
+   * MISSING_PIECES §9 — optional leaf-loop iteration block. When
+   * present, the engine routes the run to `IterativeAgentRun` (Phase B+)
+   * instead of `LeafAgentRun`. Mutually exclusive with `composite` —
+   * the schema rejects specs that declare both, since the wave-9
+   * supervisor already exposes `composite.strategy: 'iterative'` for
+   * its own multi-agent case. Additive: pre-§9 specs simply omit the
+   * field and route to the existing leaf path.
+   */
+  readonly iteration?: IterationSpec;
 }
 
 export interface AgentRef {

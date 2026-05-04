@@ -125,6 +125,17 @@ export const RunEvent = z.object({
     /** Tool schema fallback warning (engine wave-3 introspection). */
     'tool.schema_fallback',
     'tool.schema_introspection_failed',
+    /**
+     * MISSING_PIECES §9 — IterativeAgentRun lifecycle. Emitted by
+     * the leaf-loop runtime; the cycle-tree replay UI groups these
+     * by `payload.cycle`. Pre-§9 servers omit them; pre-§9 clients
+     * tolerate the new types because the api-contract was already
+     * forward-compatible (zod enum extension is additive).
+     */
+    'cycle.start',
+    'model.response',
+    'tool.results',
+    'history.compressed',
   ]),
   at: z.string(),
   payload: z.unknown(),

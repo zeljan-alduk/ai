@@ -26,6 +26,7 @@ import { PageHeader } from '@/components/page-header';
 import { CompareWithButton } from '@/components/runs-compare/compare-with-button';
 import { CostBreakdownChart } from '@/components/runs/cost-breakdown-chart';
 import { CostRollupCard } from '@/components/runs/cost-rollup-card';
+import { CycleTree } from '@/components/runs/cycle-tree';
 import { ReplayScrubber } from '@/components/runs/replay-scrubber';
 import { RunDetailTabs } from '@/components/runs/run-detail-tabs';
 import { RunThumbs } from '@/components/runs/run-thumbs';
@@ -228,19 +229,26 @@ function RunDetailBody({
     </Card>
   );
 
-  const treePanel =
-    showSubtreeUi && tree !== null && countDescendants(tree) > 0 ? (
-      <RunTree tree={tree} currentRunId={runId} />
-    ) : (
-      <Card>
-        <CardContent>
-          <EmptyState
-            title="No subagent runs."
-            hint="This run isn't part of a composite tree yet."
-          />
-        </CardContent>
-      </Card>
-    );
+  // MISSING_PIECES §9 / Phase D — cycle-tree panel for iterative leaf
+  // runs. Shown when the run carries any `cycle.start` event; otherwise
+  // we fall through to the existing composite tree panel so the tab
+  // contract stays the same.
+  const isIterativeRun = run.events.some((e) => e.type === 'cycle.start');
+
+  const treePanel = isIterativeRun ? (
+    <CycleTree events={run.events} />
+  ) : showSubtreeUi && tree !== null && countDescendants(tree) > 0 ? (
+    <RunTree tree={tree} currentRunId={runId} />
+  ) : (
+    <Card>
+      <CardContent>
+        <EmptyState
+          title="No subagent runs."
+          hint="This run isn't part of a composite tree yet."
+        />
+      </CardContent>
+    </Card>
+  );
 
   const replayPanel =
     run.events.length === 0 ? (

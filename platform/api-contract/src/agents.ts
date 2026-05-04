@@ -161,6 +161,47 @@ export const TerminationWire = z.object({
 });
 export type TerminationWire = z.infer<typeof TerminationWire>;
 
+/**
+ * MISSING_PIECES §9 / Phase A — wire shape for the leaf-loop
+ * `iteration:` block. Mirrors `IterationSpec` in `@aldo-ai/types`
+ * with the same camelCase keys the runtime uses internally; YAML
+ * snake-case lives only on the registry side.
+ *
+ * Distinct from `CompositeWire.iteration` (wave-9 multi-agent
+ * supervisor pattern). The schema rejects specs that declare both
+ * blocks, so a single `AgentDetail` response will only ever carry
+ * one of them.
+ */
+export const IterationSummaryStrategyWire = z.enum(['rolling-window', 'periodic-summary']);
+export type IterationSummaryStrategyWire = z.infer<typeof IterationSummaryStrategyWire>;
+
+export const IterationTerminationConditionWire = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('text-includes'),
+    text: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('tool-result'),
+    tool: z.string().min(1),
+    match: z.object({
+      exitCode: z.number().int().optional(),
+      contains: z.string().min(1).optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal('budget-exhausted'),
+  }),
+]);
+export type IterationTerminationConditionWire = z.infer<typeof IterationTerminationConditionWire>;
+
+export const IterationWire = z.object({
+  maxCycles: z.number().int().positive(),
+  contextWindow: z.number().int().positive(),
+  summaryStrategy: IterationSummaryStrategyWire,
+  terminationConditions: z.array(IterationTerminationConditionWire),
+});
+export type IterationWire = z.infer<typeof IterationWire>;
+
 export const SandboxConfigWire = z.object({
   /** Wall-clock timeout in ms for any tool call. */
   timeoutMs: z.number().int().positive().optional(),
@@ -252,6 +293,13 @@ export const AgentDetail = AgentSummary.extend({
    * only so we can ship the spec + UI now.
    */
   termination: TerminationWire.nullish(),
+  /**
+   * MISSING_PIECES §9 — projected leaf-loop iteration block from the
+   * resolved spec. `null`/omitted means the agent runs as a regular
+   * leaf (single-shot). Mutually exclusive with `composite` at the
+   * spec layer; pre-§9 servers simply omit the field. Additive only.
+   */
+  iteration: IterationWire.nullish(),
   /**
    * Wave-4 (Tier-4) — additive `promptRef` slot. When present, the
    * runtime resolves the prompt body from the prompts-store

@@ -17,6 +17,11 @@ import type {
 } from '@aldo-ai/types';
 import { type InternalAgentRun, LeafAgentRun, type SecretArgResolver } from './agent-run.js';
 import { type Checkpointer, InMemoryCheckpointer } from './checkpointer/index.js';
+import {
+  type HistoryCompressor,
+  IterativeAgentRun,
+  passThroughCompressor,
+} from './iterative-run.js';
 import type { BreakpointStore } from './debugger/breakpoint-store.js';
 import type { PauseController } from './debugger/pause-controller.js';
 import type { NotificationSink } from './notification-sink.js';
@@ -135,6 +140,15 @@ export interface RuntimeDeps {
    * Production wires `PostgresNotificationSink`.
    */
   readonly notificationSink?: NotificationSink;
+  /**
+   * MISSING_PIECES §9 / Phase C — optional history compressor injected
+   * for iterative leaf runs. When absent, the loop never compresses
+   * (passThroughCompressor); production wires the rolling-window /
+   * periodic-summary implementation from `iterative-compression.ts`.
+   * Per-run compression strategy is still picked from
+   * `spec.iteration.summaryStrategy`; this dep is the executor.
+   */
+  readonly historyCompressor?: HistoryCompressor;
 }
 
 /**
@@ -182,6 +196,7 @@ export class CompositeRuntimeMissingError extends Error {
     this.name = 'CompositeRuntimeMissingError';
   }
 }
+
 
 /**
  * Wave-9: lightweight wrapper that satisfies the public AgentRun
@@ -334,6 +349,7 @@ export class PlatformRuntime implements Runtime {
   private readonly sandbox: SandboxRunner | undefined;
   private readonly orchestrator: CompositeOrchestrator | undefined;
   private readonly notificationSink: NotificationSink | undefined;
+  private readonly historyCompressor: HistoryCompressor;
 
   constructor(deps: RuntimeDeps) {
     this.modelGateway = deps.modelGateway;
@@ -349,6 +365,7 @@ export class PlatformRuntime implements Runtime {
     this.sandbox = deps.sandbox;
     this.orchestrator = deps.orchestrator;
     this.notificationSink = deps.notificationSink;
+    this.historyCompressor = deps.historyCompressor ?? passThroughCompressor;
   }
 
   /**
@@ -545,6 +562,50 @@ export class PlatformRuntime implements Runtime {
       const wrapped = new CompositeAgentRun(supervisorId, result, this.runStore);
       this.composites.set(supervisorId, wrapped);
       return wrapped;
+    }
+    // MISSING_PIECES §9 / Phase B — iterative leaf branch.
+    //
+    // When the spec carries an `iteration` block (and we already know
+    // it has no `composite` block; the registry schema rejects specs
+    // that declare both), construct an `IterativeAgentRun` and let it
+    // own the loop. Pre-record the run row first so events from the
+    // iterative loop land on a known parent.
+    if (spec.iteration !== undefined) {
+      const id = (opts?.runId ?? (randomUUID() as RunId)) as RunId;
+      const rootRunId: RunId = opts?.root ?? opts?.parent ?? id;
+      this.runMeta.set(id, { rootRunId });
+      if (this.runStore) {
+        await this.runStore.recordRunStart({
+          runId: id,
+          tenant: this.tenant,
+          ref,
+          ...(opts?.parent !== undefined ? { parent: opts.parent } : {}),
+          root: rootRunId,
+          ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
+        });
+      }
+      const run = new IterativeAgentRun(
+        {
+          id,
+          tenant: this.tenant,
+          ref,
+          spec,
+          inputs,
+          ...(opts?.parent !== undefined ? { parent: opts.parent } : {}),
+        },
+        {
+          modelGateway: this.modelGateway,
+          toolHost: this.toolHost,
+          registry: this.registry,
+          tracer: this.tracer,
+          checkpointer: this.checkpointer,
+          track: (r) => this.runs.set(r.id, r),
+          ...(this.runStore !== undefined ? { runStore: this.runStore } : {}),
+        },
+        this.historyCompressor,
+      );
+      this.runs.set(id, run);
+      return run;
     }
     // Single-agent path. Compose the SpawnOpts so the rootRunId,
     // wave-17 projectId, and wave-X pinned runId are all forwarded

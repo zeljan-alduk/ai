@@ -13,6 +13,24 @@ export type {
   SecretArgResolver,
 } from './agent-run.js';
 
+// MISSING_PIECES §9 — IterativeAgentRun + history compression.
+export {
+  IterativeAgentRun,
+  passThroughCompressor,
+  type HistoryCompressor,
+  type IterativeAgentRunDeps,
+  type IterativeAgentRunOptions,
+} from './iterative-run.js';
+export {
+  RealHistoryCompressor,
+  estimateTokens,
+} from './iterative-compression.js';
+export {
+  firstMatchingTermination,
+  type CycleOutcome,
+  type TerminationDecision,
+} from './iterative-termination.js';
+
 export {
   PlatformRuntime,
   SpawnNotAllowedError,

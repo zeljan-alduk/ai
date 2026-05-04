@@ -365,6 +365,61 @@ const terminationSchema = z
   })
   .strict();
 
+/**
+ * MISSING_PIECES §9 / Phase A — leaf-loop `iteration:` block.
+ *
+ * Authored alongside `composite:` but never together. When present
+ * the engine routes the run to IterativeAgentRun (Phase B+); pre-§9
+ * specs simply omit the block and route to the existing leaf path.
+ *
+ * `termination_conditions` is a discriminated union on `kind` — the
+ * loader preserves the array order so the runtime can fire the FIRST
+ * matching rule (the order is operator-meaningful). YAML is
+ * snake-case across the board (`max_cycles`, `context_window`,
+ * `summary_strategy`, `termination_conditions`, `exit_code`).
+ */
+const iterationSummaryStrategyEnum = z.enum(['rolling-window', 'periodic-summary']);
+
+const iterationToolResultMatchSchema = z
+  .object({
+    exit_code: z.number().int().optional(),
+    contains: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((m) => m.exit_code !== undefined || m.contains !== undefined, {
+    message: 'tool-result match requires at least one of exit_code|contains',
+  });
+
+const iterationTerminationConditionSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('text-includes'),
+      text: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('tool-result'),
+      tool: z.string().min(1),
+      match: iterationToolResultMatchSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('budget-exhausted'),
+    })
+    .strict(),
+]);
+
+const iterationSchema = z
+  .object({
+    max_cycles: z.number().int().positive(),
+    context_window: z.number().int().positive(),
+    summary_strategy: iterationSummaryStrategyEnum,
+    termination_conditions: z.array(iterationTerminationConditionSchema).default([]),
+  })
+  .strict();
+
 // --- top-level -------------------------------------------------------------
 
 export const agentV1YamlSchema = z
@@ -389,7 +444,24 @@ export const agentV1YamlSchema = z
     composite: compositeSchema.optional(),
     /** Wave-17: optional, additive declarative termination block. */
     termination: terminationSchema.optional(),
+    /**
+     * MISSING_PIECES §9 / Phase A — optional leaf-loop iteration block.
+     * Mutually exclusive with `composite` (enforced in the
+     * superRefine below): a supervisor's `composite.strategy:
+     * 'iterative'` is multi-agent, this one is single-agent.
+     */
+    iteration: iterationSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.composite !== undefined && v.iteration !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['iteration'],
+        message:
+          "iteration is a leaf-loop primitive and cannot be combined with composite — use composite.strategy: 'iterative' for the multi-agent supervisor instead",
+      });
+    }
+  });
 
 export type AgentV1Yaml = z.infer<typeof agentV1YamlSchema>;
