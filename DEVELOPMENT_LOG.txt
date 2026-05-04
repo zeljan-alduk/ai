@@ -5567,3 +5567,31 @@ Tests: 65/65 mcp-git (was 61), 12/12 tool-host (was 8), 525/525 apps/api (was 52
 Honest call: 17 of 17 (agent, server) edges that the dry-run brief touches are now resolvable to *some* MCP server — but `aldo-memory` (22 agency-tree references, including all five brief-touching agents) is still not implemented. Items 5.1+5.3 take us from "53% of edges blocked" to "100% of NON-MEMORY edges resolved". The §12.2 / #6 memory MCP is now the literal one thing between us and a real composite dry-run.
 
 Updated agency/dry-runs/2026-05-04-healthz-db.md §9 with the post-update + revised time-to-dry-run table (~4-6 d from now). Updated MISSING_PIECES.md §0 progress log + auto-memory pointer to reflect that aldo-memory is the new last-pole.
+
+2026-05-05T00:10Z — engineer (claude opus 4.7, 1M ctx) — §12.2 / #6 aldo-memory MCP (item 5.2 from the dry-run punch list).
+
+The §13 Phase F post-mortem named aldo-memory as the long pole (3-5 days). v0 ships in this session. Backed by filesystem JSON, not Postgres — and that's the right call for unblocking the dry-run.
+
+mcp-servers/aldo-memory/ (new package, @aldo-ai/mcp-memory):
+- src/policy.ts — tenant allowlist, key shape (no .., /, \, NUL; 256B cap), retention as ISO 8601 duration, scope arity validation. fixedAgentName / fixedRunId optional pins for per-agent server spawning.
+- src/store.ts — JSON files at <root>/<tenant>/<scope>/[<agentName>|<runId>/]<encoded-key>.json. Write-then-rename for atomicity. Scan honours prefix + limit, sorts newest-first by `at`. Delete is idempotent (returns deleted=false when absent).
+- src/tools/{read,write,scan,delete}.ts — each tool 30-60 LoC, all four registered in src/server.ts.
+- src/config.ts — CLI flags + env (ALDO_MEMORY_ROOT, ALDO_MEMORY_TENANTS required; ALDO_MEMORY_FIXED_AGENT, ALDO_MEMORY_FIXED_RUN, ALDO_MEMORY_MAX_KEY_BYTES, ALDO_MEMORY_MAX_VALUE_BYTES optional).
+- src/index.ts — stdio entry.
+- 3 test files: policy.test.ts (16 cases), store.test.ts (9), tools.test.ts (11). Total 36/36 green; covers cross-day continuity (a fresh policy reads prior writes), private+session partitioning, all four tools, and the §12.2 motivation directly.
+
+apps/api/src/mcp/tool-host.ts: aldo-memory branch in defaultServers() — opt-in via ALDO_MEMORY_ENABLED, requires ALDO_MEMORY_ROOT + ALDO_MEMORY_TENANTS, with pass-through for fixed-agent, fixed-run, max-key-bytes, max-value-bytes. Skips registration with a clear stderr message when required env is missing.
+
+apps/api/tests/mcp-tool-host.test.ts: +4 cases — env-gated registration, root+tenants required, fixed-agent / fixed-run pass-through.
+
+Verification:
+- @aldo-ai/mcp-memory: 36/36 tests, tsc clean.
+- @aldo-ai/api: 529/529 tests (was 525), tsc clean.
+- All four servers (aldo-fs, aldo-shell, aldo-git, aldo-memory) wireable through tool-host now.
+
+Out-of-scope (named in the post-mortem follow-on):
+- Postgres backend. Filesystem is correct for v0 — single-process, durable, low-contention. Postgres swap is "swap the impl behind the same MemoryStore interface" when production load forces it.
+- Active TTL sweeping. Recorded retention; no GC. Agency YAMLs treat retention as soft.
+- Memory-shape ACLs beyond tenant + scope. Tool allow-lists already cover the interesting cases.
+
+Net: the agency dry-run is now blocked on **only** the driver harness (item 5.4). That's ~1 day of work and will be tackled next.

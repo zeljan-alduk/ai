@@ -28,6 +28,13 @@ const ENV_KEYS = [
   'ALDO_GIT_TIMEOUT_MS',
   'ALDO_GIT_MAX_TIMEOUT_MS',
   'ALDO_GIT_OUTPUT_TAIL',
+  'ALDO_MEMORY_ENABLED',
+  'ALDO_MEMORY_ROOT',
+  'ALDO_MEMORY_TENANTS',
+  'ALDO_MEMORY_FIXED_AGENT',
+  'ALDO_MEMORY_FIXED_RUN',
+  'ALDO_MEMORY_MAX_KEY_BYTES',
+  'ALDO_MEMORY_MAX_VALUE_BYTES',
 ] as const;
 
 function snapshotEnv(): Record<string, string | undefined> {
@@ -118,6 +125,49 @@ describe('defaultServers — env gating', () => {
     process.env.ALDO_GIT_ENABLED = 'false';
     process.env.ALDO_GIT_ROOT = '/tmp/r';
     expect(Object.keys(defaultServers())).not.toContain('aldo-git');
+  });
+
+  it('does not register aldo-memory when ALDO_MEMORY_ENABLED is unset', () => {
+    expect(Object.keys(defaultServers())).not.toContain('aldo-memory');
+  });
+
+  it('registers aldo-memory when enabled with root + tenants', () => {
+    process.env.ALDO_MEMORY_ENABLED = 'true';
+    process.env.ALDO_MEMORY_ROOT = '/tmp/aldo-mem';
+    process.env.ALDO_MEMORY_TENANTS = 't-acme,t-default';
+    const servers = defaultServers();
+    expect(Object.keys(servers)).toContain('aldo-memory');
+    const args = servers['aldo-memory']?.args ?? [];
+    const idxRoot = args.indexOf('--root');
+    const idxTenants = args.indexOf('--tenants');
+    expect(idxRoot).toBeGreaterThan(-1);
+    expect(args[idxRoot + 1]).toBe('/tmp/aldo-mem');
+    expect(idxTenants).toBeGreaterThan(-1);
+    expect(args[idxTenants + 1]).toBe('t-acme,t-default');
+    expect(args.some((a) => a.includes('aldo-memory/src/index.ts'))).toBe(true);
+  });
+
+  it('does not register aldo-memory when root or tenants is missing', () => {
+    process.env.ALDO_MEMORY_ENABLED = 'true';
+    // missing both root and tenants
+    expect(Object.keys(defaultServers())).not.toContain('aldo-memory');
+    process.env.ALDO_MEMORY_ROOT = '/tmp/x';
+    expect(Object.keys(defaultServers())).not.toContain('aldo-memory'); // tenants still missing
+  });
+
+  it('passes through fixed-agent / fixed-run when set', () => {
+    process.env.ALDO_MEMORY_ENABLED = '1';
+    process.env.ALDO_MEMORY_ROOT = '/tmp/x';
+    process.env.ALDO_MEMORY_TENANTS = 't1';
+    process.env.ALDO_MEMORY_FIXED_AGENT = 'principal';
+    process.env.ALDO_MEMORY_FIXED_RUN = 'run-123';
+    const args = defaultServers()['aldo-memory']?.args ?? [];
+    const idxAgent = args.indexOf('--fixed-agent');
+    const idxRun = args.indexOf('--fixed-run');
+    expect(idxAgent).toBeGreaterThan(-1);
+    expect(args[idxAgent + 1]).toBe('principal');
+    expect(idxRun).toBeGreaterThan(-1);
+    expect(args[idxRun + 1]).toBe('run-123');
   });
 });
 

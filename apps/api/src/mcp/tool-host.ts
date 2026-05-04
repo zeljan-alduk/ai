@@ -121,6 +121,48 @@ export function defaultServers(): Record<string, McpServerSpec> {
     };
   }
 
+  // MISSING_PIECES.md §12.2 / #6 — opt-in scope-aware memory store.
+  // Default OFF; required env: ALDO_MEMORY_ENABLED=true and
+  // ALDO_MEMORY_ROOT=<absolute path>. The agency YAMLs use scopes
+  // `private` (per-agent), `project` / `org` (tenant-shared), and
+  // `session` (per-run); the MCP server expects `tenant` (and
+  // sometimes `agentName` / `runId`) on every call. The dry-run
+  // brief sets ALDO_MEMORY_TENANTS=<csv> as the allowlist.
+  const memoryEnabled = (process.env.ALDO_MEMORY_ENABLED ?? '').toLowerCase();
+  if (memoryEnabled === 'true' || memoryEnabled === '1' || memoryEnabled === 'yes') {
+    const memoryRoot = (process.env.ALDO_MEMORY_ROOT ?? '').trim();
+    const memoryTenants = (process.env.ALDO_MEMORY_TENANTS ?? '').trim();
+    if (memoryRoot.length === 0 || memoryTenants.length === 0) {
+      console.error(
+        '[mcp] aldo-memory: ALDO_MEMORY_ENABLED=true but ALDO_MEMORY_ROOT or ALDO_MEMORY_TENANTS is empty — server NOT registered',
+      );
+    } else {
+      const aldoMemoryEntry = fileURLToPath(
+        new URL('../../../../mcp-servers/aldo-memory/src/index.ts', import.meta.url),
+      );
+      const memoryArgs = [
+        tsxBin,
+        aldoMemoryEntry,
+        '--root',
+        memoryRoot,
+        '--tenants',
+        memoryTenants,
+      ];
+      const passThroughMemory = (envName: string, flag: string): void => {
+        const v = process.env[envName]?.trim();
+        if (v !== undefined && v.length > 0) memoryArgs.push(flag, v);
+      };
+      passThroughMemory('ALDO_MEMORY_FIXED_AGENT', '--fixed-agent');
+      passThroughMemory('ALDO_MEMORY_FIXED_RUN', '--fixed-run');
+      passThroughMemory('ALDO_MEMORY_MAX_KEY_BYTES', '--max-key-bytes');
+      passThroughMemory('ALDO_MEMORY_MAX_VALUE_BYTES', '--max-value-bytes');
+      servers['aldo-memory'] = {
+        command: 'node',
+        args: memoryArgs,
+      };
+    }
+  }
+
   // MISSING_PIECES.md §12.3 / §13 — opt-in git + gh MCP. Default OFF for
   // the same reason as aldo-shell: an agent on a sensitive tenant should
   // never get write access to a working tree without explicit operator

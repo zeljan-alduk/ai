@@ -318,9 +318,50 @@ alias) and 5.3 (`github` alias + 4 new gh tools) **shipped 2026-05-05**.
 |---|---|---|
 | 5.1 `repo-fs` alias | ½ d | ✅ shipped 2026-05-05 |
 | 5.3 `github` alias + 4 gh tools | 1 d | ✅ shipped 2026-05-05 |
-| 5.2 `aldo-memory` MCP | 3–5 d | ⏳ pending |
-| 5.4 Driver harness | 1 d | ⏳ pending (depends on 5.2) |
-| **End-to-end real dry-run** | | **~4–6 days from 2026-05-05** |
+| 5.2 `aldo-memory` MCP | 3–5 d | ✅ shipped 2026-05-05 (filesystem-backed v0) |
+| 5.4 Driver harness | 1 d | ⏳ pending |
+| **End-to-end real dry-run** | | **~1 day from 2026-05-05** |
 
-§12.2 (memory) is now the one item between us and the agency
-primitive shipping.
+§12.2 (memory) is no longer the blocker. **The driver harness is now
+the one remaining piece** before the agency dry-run can fire.
+
+### `aldo-memory` v0 — what shipped (2026-05-05)
+
+`mcp-servers/aldo-memory/` carries the four agency-required tools:
+`memory.read`, `memory.write`, `memory.scan`, `memory.delete`. Storage
+is filesystem-backed JSON at `<root>/<tenant>/<scope>/[<agentName>|<runId>/]<encoded-key>.json`,
+write-then-rename for atomicity. Scope semantics match the existing
+`@aldo-ai/engine` `InMemoryMemoryStore`:
+
+- `private` — partitioned by `agentName` (required on every call).
+- `project`, `org` — partitioned by tenant only.
+- `session` — partitioned by `runId` (required on every call).
+
+Policy gates: tenant allowlist (required at server boot), key shape
+(no `..`, `/`, `\\`, NUL; ≤ 256 bytes), retention is an ISO 8601
+duration (recorded but not actively swept — the existing v0 posture),
+serialised value capped at 256 KiB by default. Optional `fixedAgentName`
+/ `fixedRunId` pin every call's identity for the case where tool-host
+spawns a per-agent server.
+
+Tool-host opt-in via `ALDO_MEMORY_ENABLED=true` + `ALDO_MEMORY_ROOT=<abs>`
++ `ALDO_MEMORY_TENANTS=<csv>`. Optional pass-through env:
+`ALDO_MEMORY_FIXED_AGENT`, `ALDO_MEMORY_FIXED_RUN`,
+`ALDO_MEMORY_MAX_KEY_BYTES`, `ALDO_MEMORY_MAX_VALUE_BYTES`.
+
+**36 mcp-memory tests + 4 new tool-host tests + 529/529 apps/api
+tests** all green; tsc clean across the new package + apps/api.
+
+**What's NOT in v0** (still §12.2 follow-on work, but not blocking
+the dry-run):
+
+- Postgres-backed implementation. The filesystem store is fine for
+  the dry-run and dev. A swap-the-impl Postgres veneer (using the
+  existing pool) lands when production multi-tenant load forces it.
+- Active TTL sweeping. We record the retention; we don't yet GC.
+  The agency YAMLs assume "soft" retention — agents sometimes look
+  past it intentionally — so this is correct v0 behaviour.
+- Memory ACL beyond tenant + scope (e.g. per-agent allowlist). The
+  agent's `tools.mcp[].allow` already covers tool-shape gating; if
+  a future agent should only read `org` but not `private`, the
+  current MemoryStore design supports it via the agency YAML.
