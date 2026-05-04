@@ -58,6 +58,7 @@ import { FounderStory } from '@/components/marketing/founder-story';
 import { HeroCodeSnippet } from '@/components/marketing/hero-code-snippet';
 import { HeroDashboardCycle } from '@/components/marketing/hero-dashboard-cycle';
 import { HonestComparisonV2 } from '@/components/marketing/honest-comparison-v2';
+import { IterativeLoop } from '@/components/marketing/iterative-loop';
 import { McpIntegrations } from '@/components/marketing/mcp-integrations';
 import { NewsletterSignup } from '@/components/marketing/newsletter-signup';
 import { PlatformDemoLoop } from '@/components/marketing/platform-demo-loop';
@@ -121,6 +122,13 @@ export default function HomePage() {
       <UseCases />
       <ReplayAcrossModels />
       <CliQuickstart />
+
+      {/* WAVE-ITER ─── one iterative loop, three surfaces. The platform
+          primitive (IterativeAgentRun) plus the chat panel + aldo code
+          terminal companion that ride on top of it. Sits after the CLI
+          quickstart so a reader who just saw the headless command sees
+          the interactive surface next. */}
+      <IterativeLoop />
 
       {/* PERSONAS ─── three rooms in the same house. */}
       <BuiltForTheWayYouWork />

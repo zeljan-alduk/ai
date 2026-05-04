@@ -5450,3 +5450,35 @@ What's left in §11:
 - Phase G — homebrew + curl|sh installer + signed binaries.
 - DB-side thread linkage: UPDATE runs.thread_id matching the §10 assistant pattern so /runs/<id> groups iterative-coding-loop turns under the same thread. Not in Phase E because it's only valuable when DATABASE_URL is wired; the sidecar handles the local resume case unconditionally.
 - Mutating /model and /tools mid-session.
+
+2026-05-04T13:27Z — engineer (claude opus 4.7, 1M ctx) — MISSING_PIECES §11 Phase F: docs + smoke + landing-page + roadmap + changelog updates.
+
+This commit closes the documentation surface around Wave-Iter and gives the platform a marketing story for what just shipped.
+
+Author-facing guide (docs/guides/aldo-code.md, ~250 lines):
+- Install + headless quickstart (Phase A) with the right flags table
+- Interactive TUI walkthrough (Phase B) with the layout + tool-tile glyph guide
+- Approval gates (Phase C) including the dialog mock + keybind reference
+- Slash commands (Phase D) — full reference table
+- --resume across sessions (Phase E) including ALDO_CODE_HOME override + the path-escape sanitiser note
+- Recommended cycle budgets — the WHY behind maxCycles 50 / contextWindow 128k / rolling-window
+- Honest comparison table vs Claude Code, OpenCode, Aider on 9 axes
+- Troubleshooting — 4 common failure modes (no eligible model / model doesn't tool-use / shell.exec timeout / approval keybinds inert)
+- "What's next" pointing at MISSING_PIECES §11 Phases F (this commit), G (single-binary distribution), and the deferred items
+
+Reference config (apps/cli/src/templates/code-config.example.ts):
+- Three preset shapes (local-only, frontier-coding with --no-local-fallback, read-only-audit) with reasoning fields explaining WHY each value was picked. argvFor(name) helper for wrapper-script integration.
+
+README quick-start: added the `aldo code --tui` invocation alongside the existing `aldo run` example, plus a paragraph on what the TUI brings (streamed conversation + tool tiles + approval dialogs + slash commands + --resume) and a link to docs/guides/aldo-code.md.
+
+Smoke test (apps/cli/tests/code-smoke.e2e.test.ts): gated on ALDO_TEST_LOCAL_MODEL env. Skipped by default so pnpm test stays sub-minute. When set, drives runCode against a real local model with workspace fs tools and asserts the loop terminates within the maxCycles ceiling. Doesn't verify model output quality (a small Qwen-Coder may fail on real tasks; we accept any landed file).
+
+Marketing changelog (apps/web/app/(marketing)/changelog/page.tsx): five new entries prepended for §9 (IterativeAgentRun), Sprint 3 (#4 frontier-coding + #9 approval gates), §10 (assistant retarget), the §10/§9 user-visible UI follow-up (tool tiles + approval banner), and §11 (aldo code TUI). Customer-readable tone; honest about what's deferred.
+
+Landing page (apps/web/app/(marketing)/page.tsx + components/marketing/iterative-loop.tsx): new "One iterative loop. Three surfaces." section between CliQuickstart and BuiltForTheWayYouWork. Three tiles — engine primitive, chat surface, terminal surface — each with bullet points + a deep link. Plus a "what this unlocks" summary calling out the picenhancer-end-to-end ambition explicitly. Static-rendered, semantic tokens, no client islands.
+
+ROADMAP.md: new Wave-Iter section above Wave-4 listing the five #1 / #4 / #9 / §10 / §11 deliverables with crisp summaries; explicit "what this unlocks" + "what's deferred" lists. Last-updated bumped to 2026-05-04. Existing Tier rows untouched.
+
+Verification: tsc clean across @aldo-ai/cli + @aldo-ai/web; 93 §11 vitest cases pass + 1 smoke skipped (no ALDO_TEST_LOCAL_MODEL); 382 web tests still green. Existing pre-existing CLI flakes (bootstrap-persistence + cli.test.ts mcp-ls) unchanged on stashed pre-change tree.
+
+Wave-Iter total (across 9 commits 6c9f3c1..67d5b81 + this commit): ~250 new tests across engine/registry/types/api-contract/api/eval/web/cli; the iterative loop is now the platform's single canonical primitive for tool-using agents, addressable from POST /v1/runs, /v1/assistant/stream, and `aldo code --tui`.

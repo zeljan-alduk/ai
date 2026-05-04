@@ -225,7 +225,18 @@ pnpm --filter @aldo-ai/cli exec aldo run local-summarizer \
 
 # Or boot the API + sign in at http://localhost:3001
 pnpm --filter @aldo-ai/api dev
+
+# Or chat with the iterative coding agent in your terminal:
+pnpm --filter @aldo-ai/cli build:bin
+./apps/cli/dist/aldo code --tui "write hello.ts that exports greet(name)"
 ```
+
+The `aldo code --tui` command boots the [interactive coding TUI](./docs/guides/aldo-code.md):
+streamed conversation, inline tool tiles for fs.read/write/exec,
+approval dialogs at destructive boundaries, slash commands
+(`/help` `/clear` `/save <path>` `/exit`), and cross-session resume
+(`aldo code --tui --resume <thread-id>`). Built on the same
+`IterativeAgentRun` primitive the API + assistant chat panel use.
 
 The CLI's `run` command spawns real model calls via the engine. The
 API does too (since the wave-X bridge — see

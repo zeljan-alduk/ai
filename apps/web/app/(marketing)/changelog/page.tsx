@@ -57,6 +57,89 @@ const TAG_BADGE: Record<Entry['tag'], string> = {
  */
 const ENTRIES: ReadonlyArray<Entry> = [
   {
+    date: '2026-05-04',
+    tag: 'platform',
+    title: 'aldo code — interactive coding TUI for the iterative loop',
+    body:
+      'New CLI subcommand pairing `IterativeAgentRun` with a Claude-Code-style ink TUI. ' +
+      '`aldo code --tui [brief]` boots a multi-turn shell with streaming conversation, ' +
+      'inline tool tiles for fs.read/write + shell.exec (⟳ pending / ✓ ok / ✕ error), ' +
+      'modal approval dialogs for `tools.approvals: always` calls (a/r/v keybinds), ' +
+      'slash commands (/help /clear /save <path> /model /tools /exit), ' +
+      'and cross-session resume via `aldo code --tui --resume <thread-id>` ' +
+      'backed by JSON sidecars at ~/.aldo/code-sessions/. ' +
+      'Headless mode (`aldo code "brief"`) streams RunEvents as JSONL for scripting + CI. ' +
+      'Synthetic AgentSpec built per-invocation; default tool ACL is the full coding kit; ' +
+      '--tools narrows; refs outside the platform vouch-list are silently dropped. ' +
+      '93 vitest cases (parser, reducer, render snapshots, persistence round-trip) + 1 gated smoke. ' +
+      'See docs/guides/aldo-code.md.',
+  },
+  {
+    date: '2026-05-04',
+    tag: 'web',
+    title: 'Assistant chat panel + /runs/[id] — tool tiles + approval banner',
+    body:
+      'The floating assistant panel now renders the new `tool` SSE frame inline as ' +
+      'collapsible tiles between user message and assistant reply, preserving the ' +
+      'chronological "user → tool → assistant text" order. ' +
+      'On /runs/[id], a yellow banner surfaces every pending approval with one-click ' +
+      'Approve and reason-required Reject buttons; the running-status redirect to ' +
+      '/live skips when there are pending approvals so the approver lands on the ' +
+      'page they need. 4-second polling while pending; refreshes the cycle tree on ' +
+      'resolution. Closes the user-visible loop on §10 (assistant retarget) and #9 ' +
+      '(approval gates).',
+  },
+  {
+    date: '2026-05-04',
+    tag: 'platform',
+    title: 'Assistant retargeted onto IterativeAgentRun — tool calls in chat',
+    body:
+      '/v1/assistant/stream now drives the synthetic `__assistant__` agent against ' +
+      'the iterative loop instead of a stub gateway call. The chat panel can answer ' +
+      'questions by calling read-only fs tools (fs.read/list/search/stat) when ' +
+      'ASSISTANT_TOOLS is enabled. Default tool ACL is read-only; operators opt into ' +
+      'write/exec via the env var; refs not in the vouch-list silently dropped. SSE ' +
+      'wire backward-compat: `delta` and `done` frames unchanged; new `tool` frame ' +
+      'for tool calls (older clients ignore unknown types). Each chat turn is a real ' +
+      'Run row replayable via /runs/[id] with the §9 cycle tree. 34 vitest cases ' +
+      '(spec builder, frame translator, chat-shape engine integration).',
+  },
+  {
+    date: '2026-05-04',
+    tag: 'platform',
+    title: 'Approval gates + frontier-coding capability (Sprint 3)',
+    body:
+      'New engine primitive: `tools.approvals: always` on an agent spec suspends the ' +
+      'iterative loop on every gated tool call until an out-of-band approver resolves. ' +
+      'Three new API routes (GET /v1/runs/:id/approvals, POST /approve, POST /reject); ' +
+      'fail-closed on misconfiguration (no controller wired → synthetic rejection so ' +
+      'a destructive tool can never silently dispatch). Plus a new `coding-frontier` ' +
+      'capability class on the gateway: agents that require it route to Claude Opus / ' +
+      'Sonnet / GPT-5 / Gemini-2.5-Pro (whichever the tenant has keys for) and refuse ' +
+      'to fall back to local — local models deliberately do not advertise the ' +
+      'capability so the platform can never silently downgrade a frontier-coding ' +
+      'contract. 31 vitest cases.',
+  },
+  {
+    date: '2026-05-04',
+    tag: 'platform',
+    title: 'IterativeAgentRun — the leaf-loop primitive (MISSING_PIECES §9)',
+    body:
+      'New engine primitive: agents declare an `iteration:` block with maxCycles, ' +
+      'contextWindow, summaryStrategy (rolling-window | periodic-summary), and ' +
+      'declarative termination conditions (text-includes | tool-result | ' +
+      'budget-exhausted). The runtime drives a per-cycle loop — model call → parallel ' +
+      'tool dispatch via Promise.all → maybe-compress history at 80% utilisation → ' +
+      'next cycle. Per-cycle events (cycle.start, model.response, tool.results, ' +
+      'history.compressed) round-trip through the run store; /runs/[id] gains a ' +
+      'collapsible cycle tree replay UI. Reference agent: ' +
+      'agency/development/local-coder-iterative.yaml drives an end-to-end smoke that ' +
+      'writes a real .ts file + runs printf "tsc OK" to terminate via tool-result. ' +
+      'Eval rubric extracts { text, finalToolResult, cycles, terminatedBy } from an ' +
+      'iterative run for the existing string-based evaluators (contains / regex / ' +
+      'rubric / llm_judge). 68 vitest cases.',
+  },
+  {
     date: '2026-05-03',
     tag: 'platform',
     title: 'API ↔ engine bridge — agent runs actually execute end-to-end',

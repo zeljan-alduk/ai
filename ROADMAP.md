@@ -1,10 +1,71 @@
 # ALDO AI — ROADMAP
 
 > Prioritized backlog. Ordered by **what unblocks the first paying customer**, not by code-architectural elegance.
-> **Last updated:** 2026-05-03 (Wave-4 — 6-agent frontend competitive-surface push landed on top of Wave-3)
+> **Last updated:** 2026-05-04 (Wave-Iter — IterativeAgentRun + frontier-coding + approval gates + assistant retarget + `aldo code` TUI)
 > **Sibling:** [`STATUS.md`](./STATUS.md) (what's true today) · [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) (history)
 >
 > Read [`STATUS.md`](./STATUS.md) first. Effort estimates are mine, in elapsed engineering time. Items needing a non-engineering decision (legal, vendor account, customer signature) are flagged ⚠️.
+
+---
+
+## Wave-Iter — what shipped 2026-05-04
+
+The full sweep through MISSING_PIECES §9 / Sprint 3 / §10 / §11. Nine
+commits on top of Wave-4; ~240 new passing tests across the engine,
+gateway, eval, api, web, and cli packages. The platform now has the
+iterative loop addressable from three surfaces (agent runs, the
+floating chat panel, and a Claude-Code-style terminal TUI), the
+`coding-frontier` capability class for cloud-frontier reach, and
+the `#9` approval-gate primitive making write-capable tools safe
+to expose more permissively.
+
+- [x] **#1 IterativeAgentRun** — leaf-loop primitive with declarative
+  termination conditions (text-includes | tool-result | budget-exhausted),
+  per-cycle events (cycle.start / model.response / tool.results /
+  history.compressed), parallel tool dispatch, rolling-window +
+  periodic-summary compression. Reference agent + e2e smoke writes a
+  real .ts on disk + runs printf "tsc OK" to terminate via tool-result.
+  Eval-rubric extractor surfaces { text, finalToolResult, cycles,
+  terminatedBy } for the existing string-based evaluators.
+- [x] **#4 Frontier-coding capability** — new `coding-frontier` class.
+  Claude Opus 4.7 / Sonnet 4.6 / GPT-5 advertise it; local models
+  deliberately do not. Operators set `--no-local-fallback` (CLI) or
+  `fallbacks: []` (spec) to fail fast on tenants without provider keys
+  rather than silently downgrading.
+- [x] **#9 Approval-gate primitive** — engine state machine + per-tool
+  spec config (`tools.approvals: never|always|protected_paths`) + three
+  API routes (GET /approvals, POST /approve, POST /reject) +
+  fail-closed misconfiguration. Yellow banner on /runs/[id] surfaces
+  pending approvals; running-status redirect skips so the approver
+  lands where they need to be.
+- [x] **§10 Assistant retargeted onto IterativeAgentRun** —
+  /v1/assistant/stream drives the synthetic `__assistant__` agent
+  through the iterative loop with read-only fs tools by default.
+  Inline collapsible tool tiles in the chat panel; each turn is a
+  real Run row replayable via /runs/[id].
+- [x] **§11 `aldo code` TUI** — Phases A–E shipped. Headless JSONL
+  mode for scripting; ink TUI with conversation pane / approval
+  dialogs / slash commands (/help /clear /save /model /tools /exit) /
+  cross-session resume via JSON sidecars at ~/.aldo/code-sessions/.
+  Reference: docs/guides/aldo-code.md.
+
+#### What this unlocks
+
+The §11 plan's intent — *the next picenhancer, built end-to-end inside
+ALDO* — is now technically feasible. A user runs `aldo code --tui`,
+hands the agent a brief, the loop iterates against a real model with
+fs/shell tools, destructive boundaries pause for human approval, and
+the session resumes across days. Quality is bounded by the chosen
+model (Qwen-Coder 32B competitive on small files; Claude Sonnet 4.6
+on 200k-context refactors).
+
+#### What's deferred from Wave-Iter
+
+- **§11 Phase F polish** — single-binary distribution (homebrew + curl|sh) + SLSA-flavoured signed-release pipeline. Optional per the plan.
+- **§11 mid-session `/model` and `/tools` mutation** — currently read-only; rebuilding spec + runtime + history transfer is nontrivial.
+- **#6 Memory across runs** — explicit `parent_run_id` linkage + project-scoped memory store. Deferred until a multi-run workflow demands it; the §11 sidecar handles single-thread resume already.
+- **#7 Browser-MCP + #8 Vision capability** — out of the iterative-loop critical path; defer until UX iteration surfaces a need.
+- **DB-side thread linkage for `aldo code`** — UPDATE runs.thread_id matching the §10 assistant pattern so /runs/<id> groups iterative-coding-loop turns alongside the sidecar. ~30 LoC; only valuable when DATABASE_URL is wired.
 
 ---
 
