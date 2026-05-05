@@ -46,6 +46,7 @@ import { bootstrapAsync } from '../bootstrap.js';
 import { loadConfig } from '../config.js';
 import type { CliIO } from '../io.js';
 import { writeErr, writeJson, writeLine } from '../io.js';
+import { runBenchSuite } from './bench-suite.js';
 
 export interface BenchOptions {
   /** Comma-separated layer ids; default `direct,run,code`. */
@@ -60,6 +61,13 @@ export interface BenchOptions {
   readonly maxTokens?: number;
   /** Emit machine-readable JSON instead of human table. */
   readonly json?: boolean;
+  /**
+   * Run a quality × speed eval suite instead of the timing layers.
+   * When set, every other timing-layer flag is ignored and the bench
+   * dispatches to `runBenchSuite`. `--model` becomes required (a
+   * rating is per-model by definition).
+   */
+  readonly suite?: string;
 }
 
 const DEFAULT_PROMPT = 'Reply with exactly: BENCH_TOKEN. No reasoning, no preamble.';
@@ -85,6 +93,25 @@ interface LayerResult {
 }
 
 export async function runBench(opts: BenchOptions, io: CliIO): Promise<number> {
+  // Suite mode short-circuits the timing-layers path. Quality × speed
+  // is a different output shape (table per case, not per iteration), so
+  // the dispatch is a hard branch rather than a layer plug-in.
+  if (opts.suite !== undefined && opts.suite.length > 0) {
+    if (opts.model === undefined || opts.model.length === 0) {
+      writeErr(io, 'error: --suite requires --model <id> (a rating is per-model)');
+      return 1;
+    }
+    return runBenchSuite(
+      {
+        suite: opts.suite,
+        model: opts.model,
+        ...(opts.maxTokens !== undefined ? { maxTokens: opts.maxTokens } : {}),
+        json: opts.json === true,
+      },
+      io,
+    );
+  }
+
   const wantedLayers = (opts.layers ?? DEFAULT_LAYERS.join(','))
     .split(',')
     .map((s) => s.trim().toLowerCase())
@@ -365,7 +392,7 @@ async function runCodeLayer(
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-async function firstDiscoveredModelId(): Promise<string | null> {
+export async function firstDiscoveredModelId(): Promise<string | null> {
   const raw = process.env.ALDO_LOCAL_DISCOVERY;
   if (raw === undefined || raw.trim() === '') return null;
   try {
@@ -387,7 +414,7 @@ async function firstDiscoveredModelId(): Promise<string | null> {
   }
 }
 
-async function firstLocalBaseUrl(): Promise<string | null> {
+export async function firstLocalBaseUrl(): Promise<string | null> {
   // Prefer LM Studio → Ollama (it carries a /v1 prefix in our probe);
   // fall back to whatever the user set in env.
   if (process.env.LM_STUDIO_BASE_URL) return process.env.LM_STUDIO_BASE_URL;

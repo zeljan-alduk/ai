@@ -210,6 +210,54 @@ The scripts live under `scripts/bench/` in the repo and are pure
 zero-dep `tsx` modules — copy them into your own ops runbook if you
 want to track local-model performance over time.
 
+## Quality × speed rating: `aldo bench --suite`
+
+The timing layers above answer "how fast?". They don't answer
+"is the output any good?". For a single-model rating that scores
+both, point `aldo bench` at an eval suite:
+
+```bash
+ALDO_LOCAL_DISCOVERY=lmstudio LM_STUDIO_BASE_URL=http://localhost:1234 \
+  aldo bench --suite local-model-rating --model qwen/qwen3.6-35b-a3b
+```
+
+The `local-model-rating` suite (under
+`agency/eval/local-model-rating/suite.yaml`) contains eight
+model-agnostic cases that probe instruction-following, structured
+output, code reasoning, mid-context retrieval, multi-step inference,
+and refusal compliance. Output:
+
+```
+suite: local-model-rating@0.1.0 · model=qwen/qwen3.6-35b-a3b · 8 cases
+
+  case                    pass  total_ms   tok_in  tok_out  tools    tok/s
+  echo-instruction        pass      1342       24       11      0      8.2
+  json-shape              pass      3120       85       42      0     13.5
+  code-refactor           FAIL     18420     8200     1120      0     60.8
+  needle-in-haystack      pass     44210    48000      320      0      7.2
+  reasoning-multi-step    pass      7820      180      412      0     52.1
+  refusal-when-asked      pass      1810       52       18      0      9.9
+  not-contains-leak       pass      2180       96       36      0     16.5
+  regex-shape-version     pass       940       42        8      0      8.5
+
+# overall: 7/8 cases pass (88%)
+# avg tok/s 22.1 · avg reasoning ratio - · p95 latency 44.2 s
+```
+
+Same command, `--json` for machine consumption. Quality scoring
+reuses the platform's eval harness — pass/fail per case is the
+existing evaluator's call (`contains`, `regex`, `json_schema`,
+`not_contains`, etc.); the bench just timestamps and tabulates.
+
+Exit code mirrors `aldo eval run`: green when the weighted pass
+ratio meets the suite's `passThreshold`. Tune the threshold in
+`suite.yaml` to match what "good enough" means for your operation.
+
+A second suite for your own agents looks identical: drop a
+`<your-suite>/suite.yaml` under `agency/eval/`, optionally with
+prompt fixtures under `prompts/`, and reference the suite by id
+or path on the command line.
+
 ## Privacy tiers
 
 ALDO's privacy router is fail-closed at the gateway layer. An agent

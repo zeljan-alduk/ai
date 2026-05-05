@@ -1,0 +1,31 @@
+The TypeScript function below has a single, specific bug: it mutates the
+input array via `arr.sort()` instead of returning a sorted copy, so the
+caller's array is reordered as a side effect. The function also has a
+trivial "off-by-one" in the median index for even-length arrays — but
+that one is a red herring; the test fixture only feeds odd-length arrays
+in production.
+
+```ts
+export function median(arr: number[]): number {
+  if (arr.length === 0) throw new Error('empty');
+  const sorted = arr.sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted[mid];
+}
+```
+
+Task:
+
+1. Identify the bug as "input mutation via sort()".
+2. Provide a corrected version that does NOT mutate the input.
+3. End your reply with the exact marker `BUGFIX_OK` on its own line.
+
+Reply format:
+
+  - One sentence naming the bug.
+  - The corrected function in a single fenced ts code block.
+  - The marker `BUGFIX_OK` on the last line.
+
+Do not address the off-by-one red herring. Do not propose API changes.
+Do not add tests. The marker `BUGFIX_OK` is mandatory and must appear
+verbatim on its own line.

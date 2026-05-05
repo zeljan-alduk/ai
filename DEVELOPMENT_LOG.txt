@@ -6493,3 +6493,63 @@ The in-process `run` layer reveals platform overhead is ~46ms (no TSX startup ta
 Registry entry added at apps/web/lib/docs/registry.ts. The MLX-specific guide stays as `local-models-mlx` for the deep-dive; the new doc is the top-level entry point.
 
 @aldo-ai/cli typecheck clean. The two trivial test additions for aldo bench (parsing + averages helpers) deferred since the function is mostly orchestration over existing CLI primitives — manual smoke covers the integration.
+
+----------------------------------------
+2026-05-05 23:30 UTC — agent (claude opus 4.7) — `aldo bench --suite` ships: quality × speed model rating
+
+Ran NEXT_TASK.md's handoff. Layered onto the existing `aldo bench` (commit
+8ee8488) a per-model rating path that scores quality + speed in one pass.
+
+(1) `agency/eval/local-model-rating/suite.yaml` (new) + `prompts/`
+(code-refactor.txt, needle-haystack.txt, long-context.txt). Eight cases:
+echo-instruction, json-shape, code-refactor, needle-in-haystack,
+reasoning-multi-step, refusal-when-asked, not-contains-leak,
+regex-shape-version, long-context-recall. tool-chain-read-write deferred
+— bench --suite is a direct-HTTP path with no ToolHost wired; that case
+needs `aldo eval run` via runtime.spawn.
+
+(2) `apps/cli/src/commands/bench-suite.ts` (new). Loads suite YAML (path
+or `agency/eval/<id>/suite.yaml` resolution), expands `input: { file: }`
+into prompt text, fires each case at `/v1/chat/completions` with
+stream=true, captures TTFT + tokensIn/Out + reasoning_content split +
+tool_calls + content. Calls `evaluate()` from @aldo-ai/eval to score
+pass/fail. Renders a fixed-width ASCII table (case · pass · total_ms ·
+tok_in · tok_out · reason% · tok/s) with summary footer.
+
+Direct-HTTP rather than runtime.spawn because:
+ - reasoning_content is wire-level (LM Studio + qwen-style emit it as
+   a separate SSE delta field). The platform's Delta abstraction
+   collapses content+reasoning into textDelta, so the split is invisible
+   beyond the gateway adapter.
+ - A model rating shouldn't carry platform overhead. The other bench
+   layers (run, code) already measure that.
+ - The evaluator harness is pure (string→score), so it's reusable
+   regardless of how the text was produced.
+
+(3) `apps/cli/src/commands/bench.ts` + `cli.ts`: --suite flag dispatches
+to runBenchSuite when set; --model becomes required (rating is
+per-model). Exported `firstLocalBaseUrl` so the suite path reuses the
+same env-var fallback as the direct layer.
+
+(4) `apps/cli/tests/bench-suite.test.ts` (new): 11 active tests +
+1 BENCH_SUITE_LIVE-gated smoke. Covers summarise (passRate / avg tok/s
+/ p95), formatHeader/formatCaseRow/formatSummary inline snapshots, and
+runBenchSuite end-to-end against a stubbed fetch (canned SSE frames).
+
+(5) `apps/web/content/docs/guides/local-models.md`: extended the
+benchmarks section with a "Quality × speed rating" subsection +
+example output.
+
+Smoked: `pnpm --filter @aldo-ai/cli test` — all bench-suite tests pass.
+Typecheck clean. Biome clean. Pre-existing failures untouched
+(tests/cli.test.ts mcp-ls expectation; apps/web-e2e eval-playground
+RegExp).
+
+Next surfaces (deferred, raised by user mid-turn):
+ - Web UI on the landing page that enumerates local models + runs the
+   suite from the browser.
+ - Aggressive local-LLM port-scan (default ports first, then full
+   localhost sweep) so discovery doesn't depend on env vars.
+ - tool-chain-read-write case once the platform grows an event-stream
+   evaluator kind (or once we accept piping bench --suite through
+   runtime.spawn for that one case).

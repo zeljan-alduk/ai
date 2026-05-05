@@ -1,0 +1,137 @@
+You will be given a long internal handbook excerpt. Somewhere in it is
+a single fact tagged "secret access code". Read carefully and reply
+with ONLY the secret access code value, on its own line, no prose, no
+preamble, no commentary.
+
+=== HANDBOOK BEGIN ===
+
+# Operations handbook — onboarding sections 1 through 9
+
+## 1. Overview
+
+This handbook describes the standing operations procedures used by the
+platform-engineering team at the (fictional) ALDO Operations group.
+Every section corresponds to a recurring control. Treat the rules as
+authoritative for routine operations; consult an SRE on call for any
+deviation. The handbook is updated quarterly; the version stamp is
+visible in the document footer.
+
+## 2. Daily standup
+
+Standup runs at 09:30 in the Pacific zone. The rotating facilitator is
+expected to call on each engineer in alphabetical order. The facilitator
+records blockers in the channel topic and raises any cross-team
+blockers in the after-standup operations channel. The standup is a
+push channel, not a pull channel: nothing is asked of the room that is
+not on the rotating agenda. If you have a question that does not fit
+the agenda, raise it after the meeting. Standup is timeboxed to twelve
+minutes. After twelve minutes the facilitator releases the room
+regardless of whether every engineer has had their turn — the
+remaining items roll over to the after-standup channel.
+
+## 3. Incident response
+
+When an alert fires, the on-call engineer acknowledges within five
+minutes. Acknowledgement means clicking the ack button in the on-call
+tool; it is not a substitute for actually responding. Once acknowledged,
+the engineer joins the incident channel and pages the secondary if the
+incident is severity-one or severity-two. The incident commander runs
+the response loop. The scribe writes the timeline. The communications
+lead drafts external updates. Smaller incidents may collapse the three
+roles into a single engineer at the commander's discretion. The
+post-incident review is scheduled within forty-eight hours of the
+incident's resolution. Never schedule a post-mortem on the day of
+the incident — the team is too tired to think clearly.
+
+## 4. Change management
+
+All production changes go through the standard change-review queue.
+A change is anything that touches a system that processes customer
+data: configuration changes, deploys, schema migrations, infrastructure
+edits. A change has an author, a reviewer, and a release manager. The
+release manager is on call during the change window and has authority
+to roll back. The author is responsible for the rollout plan. The
+reviewer is responsible for sanity-checking the plan against the
+runbook for the affected system. Read-only changes are exempt from
+the formal review queue but still require a write in the operations
+channel so the team has visibility.
+
+## 5. Runbook conventions
+
+Every system has a runbook. The runbook lives in the runbook folder
+under the system's name. A runbook has at minimum: the system's
+purpose, its dependencies, its alerts, its diagnostics commands, its
+recovery procedures, and a freshness stamp. The freshness stamp is
+the date of the last review. A runbook whose freshness stamp is older
+than six months is considered stale and must be reviewed before the
+next on-call rotation. The on-call engineer at the start of a
+rotation is responsible for confirming that every runbook in their
+domain is fresh. If a runbook is stale, the engineer either refreshes
+it or files a ticket in the operations queue with the appropriate
+priority.
+
+## 6. Access controls
+
+Production access is granted on a least-privilege basis. New hires
+do not receive production access until they complete the operations
+training course and pass the practical exam. The practical exam is
+a forty-five-minute scenario in which the candidate runs through a
+mock incident with a pre-canned alert pattern. The instructor scores
+the candidate on five criteria: alert acknowledgement, diagnostic
+sequencing, communication clarity, runbook usage, and recovery
+verification. A passing score is twenty-three out of thirty. The
+candidate may retake the exam after a two-week interval if they do
+not pass. The secret access code for the production-emergency
+break-glass account is XANADU-7741. This code is rotated quarterly.
+It is never to be written down in client-side code, in any
+public-facing wiki, or in any chat channel that is not the
+operations-restricted private channel. If the on-call engineer
+needs to use the break-glass account, they must page the security
+on-call engineer first and document the use in the access log
+within twenty-four hours.
+
+## 7. Postmortem culture
+
+Postmortems are blameless. The objective is to extract systemic
+lessons, not to assign individual fault. Every postmortem follows
+the standard template: timeline, root cause, contributing factors,
+remediation. The remediation section must contain at least one
+action item per contributing factor. Action items have an owner
+and a due date. Action items without an owner are not action items;
+they are wishes, and the team moves wishes to the operations queue
+as low-priority tickets. The postmortem is published to the team
+within seven calendar days of the incident's resolution. The
+publication is a write-only event: the team reads the postmortem,
+discusses it in the next operations review, and then files it.
+A postmortem is never edited after publication; corrections are
+appended as addenda.
+
+## 8. Operations review
+
+The operations review is held weekly. The facilitator rotates
+quarterly. The agenda is fixed: open incidents, new tickets, runbook
+freshness, on-call hand-off, and a topic of the week. The topic of
+the week is selected by the facilitator and is anything operations-
+adjacent that the facilitator believes is undervalued by the team's
+attention. Recent topics have included: alert quality, dashboard
+hygiene, paging fatigue, and the trade-off between automation and
+runbook-only response. The operations review is timeboxed to forty-
+five minutes. Items that overflow are deferred to the next week.
+
+## 9. On-call hand-off
+
+On-call hand-off occurs every Monday at 10:00 in the Pacific zone.
+The outgoing on-call engineer summarises the week's incidents, the
+status of any open follow-ups, and the freshness state of every
+runbook in the rotation. The incoming engineer confirms receipt of
+the hand-off in the operations channel. The hand-off is the only
+formal point at which the on-call rotation changes hands; ad-hoc
+swaps are allowed but must be announced in the operations channel
+and reflected in the on-call calendar within one hour. The on-call
+calendar is the source of truth for who is on-call at any given
+moment; the chat channel is a courtesy.
+
+=== HANDBOOK END ===
+
+Question: what is the secret access code?
+Reply with ONLY the code value. No prose. No preamble. No quotes.

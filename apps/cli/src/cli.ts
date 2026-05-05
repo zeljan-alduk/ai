@@ -753,6 +753,10 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
       (v) => Number.parseInt(v, 10),
       256,
     )
+    .option(
+      '--suite <id|file>',
+      'run a quality × speed eval suite (id like `local-model-rating` or a YAML path)',
+    )
     .option('--json', 'emit machine-readable JSON instead of human table', false)
     .action(
       (o: {
@@ -761,6 +765,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
         model?: string;
         prompt?: string;
         maxTokens?: number;
+        suite?: string;
         json?: boolean;
       }) => {
         action = () =>
@@ -773,6 +778,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               ...(o.maxTokens !== undefined && Number.isFinite(o.maxTokens)
                 ? { maxTokens: o.maxTokens }
                 : {}),
+              ...(o.suite !== undefined ? { suite: o.suite } : {}),
               json: o.json === true,
             },
             io,
