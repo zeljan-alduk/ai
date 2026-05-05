@@ -67,6 +67,19 @@ describe('parseSlashCommand', () => {
     expect(parseSlashCommand('/tools')).toEqual({ kind: 'tools' });
   });
 
+  it('parses /diff', () => {
+    expect(parseSlashCommand('/diff')).toEqual({ kind: 'diff' });
+  });
+
+  it('parses /plan', () => {
+    expect(parseSlashCommand('/plan')).toEqual({ kind: 'plan' });
+  });
+
+  it('parses /go and /execute alias', () => {
+    expect(parseSlashCommand('/go')).toEqual({ kind: 'go' });
+    expect(parseSlashCommand('/execute')).toEqual({ kind: 'go' });
+  });
+
   it('is case-insensitive on the command name', () => {
     expect(parseSlashCommand('/HELP')).toEqual({ kind: 'help' });
     expect(parseSlashCommand('/Save foo.md')).toEqual({ kind: 'save', path: 'foo.md' });
@@ -80,9 +93,20 @@ describe('parseSlashCommand', () => {
 
 describe('HELP_TEXT', () => {
   it('contains every supported command + key keybind', () => {
-    for (const name of ['/help', '/clear', '/save', '/model', '/tools', '/exit']) {
+    for (const name of [
+      '/help',
+      '/clear',
+      '/save',
+      '/model',
+      '/tools',
+      '/exit',
+      '/diff',
+      '/plan',
+      '/go',
+    ]) {
       expect(HELP_TEXT).toContain(name);
     }
+    expect(HELP_TEXT).toContain('@path/to/file');
     expect(HELP_TEXT).toContain('Ctrl+C');
     expect(HELP_TEXT).toContain('Ctrl+D');
     expect(HELP_TEXT).toContain('approve');

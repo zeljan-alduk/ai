@@ -26,7 +26,7 @@ import type {
   RunEvent,
   ValidationResult,
 } from '@aldo-ai/types';
-import { type RuntimeBundle, bootstrap } from '../bootstrap.js';
+import { type RuntimeBundle, bootstrap, bootstrapAsync } from '../bootstrap.js';
 import { loadConfig } from '../config.js';
 import type { CliIO } from '../io.js';
 import { writeErr, writeLine } from '../io.js';
@@ -36,6 +36,7 @@ import {
   buildCliCodeSpec,
 } from './code-spec.js';
 import { CliCodeToolHost } from './code-tool-host.js';
+import { expandAtReferences } from '../lib/at-references.js';
 
 export interface CodeOptions {
   /** Comma-separated `--tools server.name,server.name`. */
@@ -64,6 +65,10 @@ export interface CodeOptions {
    * by threadId. Only honored when --tui is set.
    */
   readonly resumeThreadId?: string;
+  /** `--model <id>` pin: filters the gateway registry to a single model. */
+  readonly model?: string;
+  /** `--models <path>` override: replaces the shipped catalog YAML. */
+  readonly modelsYamlPath?: string;
 }
 
 export interface CodeHooks {
@@ -104,6 +109,8 @@ export async function runCode(
         noLocalFallback: opts.noLocalFallback === true,
         ...(initialBrief !== null ? { initialBrief } : {}),
         ...(opts.resumeThreadId !== undefined ? { resumeThreadId: opts.resumeThreadId } : {}),
+        ...(opts.model !== undefined ? { model: opts.model } : {}),
+        ...(opts.modelsYamlPath !== undefined ? { modelsYamlPath: opts.modelsYamlPath } : {}),
       },
       io,
       {
@@ -153,14 +160,25 @@ export async function runCode(
   };
 
   // --- 4. Bootstrap ------------------------------------------------------
+  // Use bootstrapAsync so live local-discovery (Ollama / LM Studio /
+  // vLLM / llama.cpp / MLX) merges into the gateway registry. Tests
+  // inject a sync override via `hooks.bootstrap` and skip the async
+  // path. Without this, `aldo code` could only route to catalog rows
+  // — same gap that bit `aldo run` until the discovery merge landed.
   const cfg = (hooks.loadConfig ?? loadConfig)();
   let bundle: RuntimeBundle;
   try {
-    bundle = (hooks.bootstrap ?? bootstrap)({
+    const bootstrapOpts = {
       config: cfg,
       agentRegistryOverride: registryShim,
       toolHost: new CliCodeToolHost({ root: workspaceRoot }),
-    });
+      ...(opts.model !== undefined ? { pinModelId: opts.model } : {}),
+      ...(opts.modelsYamlPath !== undefined ? { modelsYamlPath: opts.modelsYamlPath } : {}),
+    };
+    bundle =
+      hooks.bootstrap !== undefined
+        ? hooks.bootstrap(bootstrapOpts)
+        : await bootstrapAsync(bootstrapOpts);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     writeErr(io, `error: bootstrap failed: ${msg}`);
@@ -179,12 +197,33 @@ export async function runCode(
     }),
   );
 
+  // §11 — `@path` inline references. Every `@<relative-path>` token in
+  // the brief expands to a fenced code block with the file's contents.
+  // Mirrors how Claude Code / Aider / Codex inject context. Pure;
+  // failures (missing path, traversal attempt, binary file, oversize
+  // file) leave the token in place with an inline marker so the LLM
+  // sees the gap.
+  const expanded = expandAtReferences(briefText, { workspaceRoot });
+  for (const ref of expanded.references) {
+    if (ref.status !== 'ok') {
+      writeLine(
+        io,
+        JSON.stringify({
+          kind: 'reference.skipped',
+          token: ref.token,
+          status: ref.status,
+          ...(ref.reason !== undefined ? { reason: ref.reason } : {}),
+        }),
+      );
+    }
+  }
+
   let okExit = true;
   try {
     const run = await bundle.runtime.runAgent(
       { name: CLI_CODE_AGENT_NAME },
       {
-        messages: [{ role: 'user', content: briefText }],
+        messages: [{ role: 'user', content: expanded.expanded }],
         systemPrompt: CLI_CODE_SYSTEM_PROMPT,
       },
     );

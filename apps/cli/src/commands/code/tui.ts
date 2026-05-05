@@ -10,7 +10,7 @@
  * pull in the React + ink graph.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve as resolvePath } from 'node:path';
 import { InMemoryApprovalController } from '@aldo-ai/engine';
 import type {
@@ -20,7 +20,7 @@ import type {
   RunEvent,
   ValidationResult,
 } from '@aldo-ai/types';
-import { type RuntimeBundle, bootstrap } from '../../bootstrap.js';
+import { type RuntimeBundle, bootstrap, bootstrapAsync } from '../../bootstrap.js';
 import { loadConfig } from '../../config.js';
 import type { CliIO } from '../../io.js';
 import { writeErr, writeLine } from '../../io.js';
@@ -37,6 +37,7 @@ import {
   saveSession,
 } from './persistence.js';
 import type { Entry } from './state.js';
+import { expandAtReferences } from '../../lib/at-references.js';
 
 export interface TuiOptions {
   readonly tools?: string;
@@ -53,6 +54,10 @@ export interface TuiOptions {
    * turns are persisted under the same threadId.
    */
   readonly resumeThreadId?: string;
+  /** `--model <id>` pin: filters the gateway registry to a single model. */
+  readonly model?: string;
+  /** `--models <path>` override: replaces the shipped catalog YAML. */
+  readonly modelsYamlPath?: string;
 }
 
 export interface TuiHooks {
@@ -102,12 +107,18 @@ export async function startTui(
   const approvalController = new InMemoryApprovalController();
   let bundle: RuntimeBundle;
   try {
-    bundle = (hooks.bootstrap ?? bootstrap)({
+    const bootstrapOpts = {
       config: cfg,
       agentRegistryOverride: registryShim,
       toolHost: new CliCodeToolHost({ root: workspaceRoot }),
       approvalController,
-    });
+      ...(opts.model !== undefined ? { pinModelId: opts.model } : {}),
+      ...(opts.modelsYamlPath !== undefined ? { modelsYamlPath: opts.modelsYamlPath } : {}),
+    };
+    bundle =
+      hooks.bootstrap !== undefined
+        ? hooks.bootstrap(bootstrapOpts)
+        : await bootstrapAsync(bootstrapOpts);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     writeErr(io, `error: bootstrap failed: ${msg}`);
@@ -126,7 +137,10 @@ export async function startTui(
     onEvent: (ev: RunEvent) => void,
     signal: AbortSignal,
   ): Promise<{ ok: boolean; output: string | null }> => {
-    const turnHistory = [...history, { role: 'user' as const, content: brief }];
+    // §11 — inline @path expansion. Same helper the headless mode
+    // uses; pure read-only of the workspace, no tool call required.
+    const expanded = expandAtReferences(brief, { workspaceRoot });
+    const turnHistory = [...history, { role: 'user' as const, content: expanded.expanded }];
     const run = await bundle.runtime.runAgent(
       { name: CLI_CODE_AGENT_NAME },
       { messages: turnHistory, systemPrompt: CLI_CODE_SYSTEM_PROMPT },
@@ -174,12 +188,69 @@ export async function startTui(
     return target;
   };
 
+  // /diff — derive a unified diff over the paths the agent has
+  // touched this session. When the workspace is a git repo, shell
+  // out to `git diff --no-color -- <paths>` so the output uses the
+  // tree's actual changeset (handles renames + new files via
+  // --intent-to-add hints). When there's no git repo, fall back to
+  // a flat list with file sizes — better than nothing.
+  const onDiff = async (modifiedPaths: readonly string[]): Promise<string> => {
+    if (modifiedPaths.length === 0) {
+      return 'no files modified this session.';
+    }
+    const isGit = existsSync(resolvePath(workspaceRoot, '.git'));
+    if (!isGit) {
+      const lines = modifiedPaths.map((p) => {
+        const target = resolvePath(workspaceRoot, p);
+        try {
+          const st = statSync(target);
+          return `  · ${p}  (${st.size} bytes)`;
+        } catch {
+          return `  · ${p}  (missing)`;
+        }
+      });
+      return `${modifiedPaths.length} file(s) modified (no git repo at ${workspaceRoot}):\n${lines.join('\n')}`;
+    }
+    const { spawnSync } = await import('node:child_process');
+    // `git diff --no-color HEAD -- <paths>` covers staged + unstaged
+    // changes against the last commit. New (untracked) files don't
+    // show up in `git diff` without `--intent-to-add`, so we run
+    // `git status --short` alongside and concatenate when there are
+    // any untracked rows the diff missed.
+    const diff = spawnSync('git', ['diff', '--no-color', 'HEAD', '--', ...modifiedPaths], {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+    const status = spawnSync('git', ['status', '--short', '--', ...modifiedPaths], {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+    const diffOut = (diff.stdout ?? '').trim();
+    const statusOut = (status.stdout ?? '').trim();
+    if (diffOut.length === 0 && statusOut.length === 0) {
+      return `${modifiedPaths.length} path(s) recorded but git reports no changes (file may have been written + reverted, or written outside the working tree).`;
+    }
+    const parts: string[] = [];
+    if (statusOut.length > 0) {
+      parts.push('## git status\n' + statusOut);
+    }
+    if (diffOut.length > 0) {
+      parts.push('## git diff\n' + diffOut);
+    }
+    return parts.join('\n\n');
+  };
+
   const sessionInfo = {
     capabilityClass: built.spec.modelPolicy.primary.capabilityClass,
     toolRefs: built.toolRefs,
     workspace: workspaceRoot,
     maxCycles: built.spec.iteration?.maxCycles ?? 0,
   };
+
+  // Resolve the current git branch (best-effort; undefined when not
+  // a git repo). One-shot at TUI start; the status line is informational
+  // — refreshing per turn would just be branch-checkout chatter.
+  const branch = await resolveGitBranch(workspaceRoot);
 
   // MISSING_PIECES §11 Phase E — session persistence.
   const threadId = opts.resumeThreadId ?? newThreadId();
@@ -228,11 +299,35 @@ export async function startTui(
     approvalController,
     sessionInfo,
     onSave,
+    onDiff,
     onPersist,
     initialEntries,
+    ...(branch !== undefined ? { branch } : {}),
     ...(opts.initialBrief !== undefined ? { initialBrief: opts.initialBrief } : {}),
   });
   return 0;
+}
+
+/**
+ * Resolve the current git branch at the workspace root. Returns
+ * undefined when the path isn't a git repo, when git isn't on PATH,
+ * or when HEAD is detached (`git symbolic-ref` returns non-zero in
+ * that case). Best-effort — never throws.
+ */
+async function resolveGitBranch(root: string): Promise<string | undefined> {
+  if (!existsSync(resolvePath(root, '.git'))) return undefined;
+  try {
+    const { spawnSync } = await import('node:child_process');
+    const res = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    if (res.status !== 0) return undefined;
+    const out = (res.stdout ?? '').trim();
+    return out.length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readAssistantText(payload: unknown): string | null {

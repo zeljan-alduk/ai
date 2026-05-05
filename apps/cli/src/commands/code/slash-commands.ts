@@ -31,6 +31,19 @@ export type SlashCommand =
   | { readonly kind: 'save'; readonly path: string }
   | { readonly kind: 'model' }
   | { readonly kind: 'tools' }
+  // §11 / Wave-Agency follow-up: peer-of-Claude-Code surface.
+  // /diff   — show a unified diff of files the agent has touched in
+  //           this session (uses git when available; falls back to
+  //           a flat list of modified paths).
+  // /plan   — toggle plan mode. Next turn drafts a plan rather than
+  //           executing tools. The agent's system prompt is augmented
+  //           to refuse tool calls and finish with a numbered list.
+  // /go     — leave plan mode + execute the most recently drafted
+  //           plan (or whatever the user types next) with the full
+  //           tool ACL in scope.
+  | { readonly kind: 'diff' }
+  | { readonly kind: 'plan' }
+  | { readonly kind: 'go' }
   | { readonly kind: 'unknown'; readonly raw: string };
 
 /**
@@ -65,6 +78,13 @@ export function parseSlashCommand(text: string): SlashCommand | null {
       return { kind: 'model' };
     case 'tools':
       return { kind: 'tools' };
+    case 'diff':
+      return { kind: 'diff' };
+    case 'plan':
+      return { kind: 'plan' };
+    case 'go':
+    case 'execute':
+      return { kind: 'go' };
     default:
       return { kind: 'unknown', raw: trimmed };
   }
@@ -78,7 +98,13 @@ export const HELP_TEXT = [
   '  /save <path>        write the transcript as markdown to <path>',
   '  /model              show the active capability class',
   '  /tools              show the active tool list',
+  '  /diff               show a unified diff of files changed this session',
+  '  /plan               next turn drafts a plan; no tools fire',
+  '  /go                 leave plan mode + execute',
   '  /exit               exit (same as Ctrl+D)',
+  '',
+  'Inline references:',
+  '  @path/to/file       expand the file contents inline (refused outside workspace)',
   '',
   'Keybinds:',
   '  Enter               send message',

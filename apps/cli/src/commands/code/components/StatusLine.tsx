@@ -12,13 +12,33 @@ import type { RunPhase, TelemetryRollup } from '../state.js';
 export function StatusLine({
   phase,
   telemetry,
+  branch,
+  planMode,
 }: {
   phase: RunPhase;
   telemetry: TelemetryRollup;
+  /** Current git branch resolved at TUI start. Undefined when no git repo. */
+  branch?: string;
+  /** True when /plan mode is on; renders a visible PLAN tag. */
+  planMode?: boolean;
 }) {
   return (
     <Box>
       <PhaseTag phase={phase} />
+      {planMode === true ? (
+        <>
+          <Text dimColor> · </Text>
+          <Text color="magenta" bold>
+            [PLAN]
+          </Text>
+        </>
+      ) : null}
+      {branch !== undefined && branch.length > 0 ? (
+        <>
+          <Text dimColor> · </Text>
+          <Text dimColor>⎇ {branch}</Text>
+        </>
+      ) : null}
       <Text dimColor> · </Text>
       <Text dimColor>{telemetry.model ?? 'no model yet'}</Text>
       <Text dimColor>

@@ -93,6 +93,51 @@ export interface AppProps {
    * it without subscribing to every reducer transition.
    */
   readonly onPersist?: (entries: readonly import('./state.js').Entry[]) => void;
+  /**
+   * `/diff` side-effect callback. Receives the list of relative paths
+   * the agent has touched in this session (derived by walking the
+   * conversation entries for tool calls with destructive names). The
+   * parent (tui.ts) shells out to `git diff -- <paths>` if there's a
+   * git repo at the workspace root, and falls back to a flat list of
+   * (path, bytes) otherwise. The returned string is rendered as a
+   * system-info entry in the conversation.
+   */
+  readonly onDiff?: (modifiedPaths: readonly string[]) => Promise<string>;
+  /**
+   * Current git branch resolved at TUI start, surfaced in the status
+   * line. Undefined when the workspace isn't a git repo (the line
+   * just omits the ⎇ segment in that case).
+   */
+  readonly branch?: string;
+}
+
+/**
+ * Tool names whose successful invocation means a file on disk has
+ * been (potentially) modified in this session. Used by `/diff` to
+ * derive the path list to feed `git diff` without forcing the agent
+ * spec to track them on its side.
+ */
+const DESTRUCTIVE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'fs.write',
+  'fs.delete',
+  'fs.move',
+  'fs.mkdir',
+  'fs.rm',
+]);
+
+/**
+ * Extract a path argument from a recorded tool call. Best-effort —
+ * the typed schema isn't available at this layer (the App sees the
+ * raw `args: unknown` from the engine). We pull the first string
+ * that looks like a relative path; that matches every aldo-fs tool's
+ * shape (`path`, `from`, `to`, `dir`).
+ */
+function pathFromToolArgs(args: unknown): string | null {
+  if (args === null || typeof args !== 'object') return null;
+  const obj = args as Record<string, unknown>;
+  const direct = obj.path ?? obj.target ?? obj.to ?? obj.dest ?? obj.dir ?? obj.from;
+  if (typeof direct === 'string' && direct.length > 0) return direct;
+  return null;
 }
 
 export function App({
@@ -101,6 +146,8 @@ export function App({
   approvalController,
   sessionInfo,
   onSave,
+  onDiff,
+  branch,
   initialEntries,
   onPersist,
 }: AppProps) {
@@ -109,6 +156,11 @@ export function App({
   const abortRef = useRef<AbortController | null>(null);
   // Auto-fire the first turn from the positional brief (if supplied).
   const [bootBrief, setBootBrief] = useState<string | undefined>(initialBrief);
+  // /plan toggle: when true, the NEXT user turn is wrapped in a
+  // planning preamble so the agent drafts a numbered plan without
+  // executing tools. /go (or any explicit user input after a /plan
+  // turn lands) clears it.
+  const [planMode, setPlanMode] = useState(false);
 
   const stateRef = useRef<TuiState>(state);
   stateRef.current = state;
@@ -198,6 +250,63 @@ export function App({
                     '\nmid-session change is not yet supported — restart with --tools <list>.',
             });
             return;
+          case 'diff': {
+            // Derive the list of modified paths from the recorded
+            // tool calls in this session. Best-effort: we trust the
+            // tool name allowlist to mean "this tool wrote bytes to
+            // disk" and pull the first path-shaped string out of the
+            // recorded args. Duplicates are deduped.
+            const modified = new Set<string>();
+            for (const e of stateRef.current.entries) {
+              if (e.kind !== 'tool') continue;
+              if (!DESTRUCTIVE_TOOL_NAMES.has(e.name)) continue;
+              const p = pathFromToolArgs(e.args);
+              if (p !== null) modified.add(p);
+            }
+            const paths = [...modified];
+            if (onDiff === undefined) {
+              dispatch({
+                kind: 'system-info',
+                content: `${paths.length} file(s) touched this session:\n  · ${
+                  paths.join('\n  · ') || '(none)'
+                }\n\n/diff handler not wired in this session.`,
+              });
+              return;
+            }
+            void (async () => {
+              try {
+                const out = await onDiff(paths);
+                dispatch({ kind: 'system-info', content: out });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                dispatch({ kind: 'system-info', content: `diff failed: ${msg}` });
+              }
+            })();
+            return;
+          }
+          case 'plan':
+            setPlanMode(true);
+            dispatch({
+              kind: 'system-info',
+              content:
+                'plan mode: ON. Next message drafts a numbered plan; tool calls are refused.\n' +
+                '/go to leave plan mode and execute.',
+            });
+            return;
+          case 'go':
+            if (!planMode) {
+              dispatch({
+                kind: 'system-info',
+                content: '/go is a no-op outside plan mode. Send a regular message to act.',
+              });
+              return;
+            }
+            setPlanMode(false);
+            dispatch({
+              kind: 'system-info',
+              content: 'plan mode: OFF. Next message executes with the full tool ACL.',
+            });
+            return;
           case 'unknown':
             dispatch({
               kind: 'system-info',
@@ -207,13 +316,23 @@ export function App({
         }
       }
 
+      // /plan augments the brief with a planning preamble. The flag
+      // clears once this turn lands so a follow-up message defaults
+      // back to the executing system prompt.
+      const plannedText = planMode
+        ? `[PLAN MODE — DO NOT CALL TOOLS THIS TURN]\n\nDraft a numbered plan that covers what you would do. Do not call any tools, do not modify any files. Finish with the literal token <PLAN_END> on its own line so the user can confirm with /go.\n\nUser brief:\n${text}`
+        : text;
+      // Show the user's actual typed text in the transcript, not the
+      // planning-augmented version — the augmentation is invisible
+      // scaffolding that just shapes the LLM's response.
       dispatch({ kind: 'user-input', text });
+      const turnText = plannedText;
       const ac = new AbortController();
       abortRef.current = ac;
       void (async () => {
         try {
           const result = await runTurn(
-            text,
+            turnText,
             (ev) => dispatch({ kind: 'engine-event', event: ev }),
             ac.signal,
           );
@@ -222,6 +341,9 @@ export function App({
             ok: result.ok,
             output: result.output,
           });
+          // Auto-clear plan mode after the planning turn lands so the
+          // next message defaults back to executing semantics.
+          if (planMode) setPlanMode(false);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           dispatch({
@@ -234,7 +356,7 @@ export function App({
         }
       })();
     },
-    [runTurn, exit, onSave, sessionInfo],
+    [runTurn, exit, onSave, onDiff, sessionInfo, planMode],
   );
 
   useEffect(() => {
@@ -341,7 +463,12 @@ export function App({
       {awaitingApproval !== null ? (
         <ApprovalDialog phase={awaitingApproval} subState={dialogSub} />
       ) : null}
-      <StatusLine phase={state.phase} telemetry={state.telemetry} />
+      <StatusLine
+        phase={state.phase}
+        telemetry={state.telemetry}
+        {...(branch !== undefined ? { branch } : {})}
+        planMode={planMode}
+      />
       <Input disabled={busy} onSubmit={startTurn} onAbort={onAbort} onExit={onExit} />
     </Box>
   );

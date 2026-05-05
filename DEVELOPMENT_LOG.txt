@@ -6119,3 +6119,62 @@ Verification:
 Files changed: apps/cli/src/cli.ts, apps/cli/src/commands/run.ts.
 
 Net of this turn: ALDO CLI runs real inference against a local LM Studio instance; the wedge that was hiding the path (catalog stubs out-ranking discovered rows) is now operator-controllable via `--models`. The deeper fix — merging live-discovery into the CLI's runtime registry the same way the API does — is a single-file change to apps/cli/src/bootstrap.ts; queued as a follow-up so this commit stays scoped.
+
+2026-05-05T19:55Z — engineer (claude opus 4.7, 1M ctx) — `aldo code` peer-of-Claude-Code feature wave: @path refs, /diff, /plan + /go, status line branch + plan flag, --model + --models on `aldo code`.
+
+User asked for ALDO CLI to be as powerful as Claude Code / Codex / opencode. Shipped the four highest-leverage gaps in one focused wave. All four routes through the existing iterative-loop primitive — no new agent shapes, no protocol changes.
+
+apps/cli/src/lib/at-references.ts (new):
+- Pure helper expandAtReferences(brief, { workspaceRoot, maxBytesPerFile? }) that replaces every `@<relative-path>` in a brief with a fenced code block containing the file's contents. Mirrors how Claude Code / Aider / Codex inject context.
+- Refusals: absolute paths (skipped, leaves the token), `..` traversal (skipped), missing files (not-found marker), binary files (binary marker, no body), oversize files (truncated with byte-count tail).
+- Token regex: leading char alphanumeric / `_` / `.`; body the path-safe set; LAST char must NOT be `.` or `/` so trailing punctuation in prose ("see @hello.ts.") doesn't get gobbled.
+- 9 new tests covering single + multi expansion, language tag inference, traversal refusal, missing/binary/oversize markers, trailing-period boundary, and brief preservation when no tokens.
+
+Wiring:
+- apps/cli/src/commands/code.ts (headless): expansion runs once on the brief before runAgent. Per-reference status lines emit as `{kind: "reference.skipped"}` JSONL events when the resolver couldn't pull the body.
+- apps/cli/src/commands/code/tui.ts (TUI): same expansion inside runTurn so every interactive turn supports `@path` too.
+
+apps/cli/src/commands/code/slash-commands.ts:
+- Three new slash commands: /diff, /plan, /go (alias /execute).
+- HELP_TEXT extended; lists every command + the @path inline-reference syntax.
+- 3 new parse-tests + the help-text assertion bumped.
+
+apps/cli/src/commands/code/app.tsx (TUI dispatcher):
+- AppProps gains optional `onDiff: (paths) => Promise<string>` and `branch?: string`.
+- /diff: walks the recorded entries, pulls every tool entry whose name is in DESTRUCTIVE_TOOL_NAMES (fs.write, fs.delete, fs.move, fs.mkdir, fs.rm), extracts the first path-shaped string from its args (best-effort), and hands the deduped list to the parent's onDiff. The parent (tui.ts) shells out to `git diff --no-color HEAD -- <paths>` + `git status --short` when a `.git` exists at the workspace; falls back to a flat list of `path · bytes` otherwise. Output renders as a system-info entry in the conversation.
+- /plan: toggles a new App-local planMode flag on. When set, the NEXT user turn is wrapped in a planning preamble ("[PLAN MODE — DO NOT CALL TOOLS THIS TURN]\n\nDraft a numbered plan…") before being passed to runTurn. The user's actual typed text is what shows up in the transcript — the augmentation is invisible scaffolding that just shapes the LLM's response. planMode auto-clears after the planning turn lands so the next message defaults back to executing semantics.
+- /go: clears planMode (or a no-op + system-info reminder if not in plan mode).
+
+apps/cli/src/commands/code/components/StatusLine.tsx:
+- New optional `branch` and `planMode` props. When planMode is on, renders a magenta `[PLAN]` tag right after the phase tag. When branch is set, renders `⎇ <branch>` between the tags and the model id.
+
+apps/cli/src/commands/code/tui.ts:
+- New onDiff handler (described above).
+- New resolveGitBranch(root) helper: spawns `git rev-parse --abbrev-ref HEAD`, returns undefined when not a git repo / git not on PATH / detached HEAD.
+- branch resolved once at TUI start and threaded through to App + StatusLine.
+
+Two CLI gaps that fell out of dogfood:
+- `aldo code` was using sync `bootstrap()` (catalog only, no live discovery). Switched to `bootstrapAsync` like `aldo run` did earlier today. Now `aldo code` sees Ollama / LM Studio / vLLM / llama.cpp / MLX models when ALDO_LOCAL_DISCOVERY is set.
+- `aldo code` had no `--model` or `--models` flags. Added both, threaded through TuiOptions/CodeOptions to bootstrap's `pinModelId` + `modelsYamlPath`. Same shape as `aldo run`.
+
+End-to-end smoke against LM Studio + qwen/qwen3.6-35b-a3b:
+
+  $ aldo code --workspace ./tmp --capability-class local-reasoning \
+        --max-cycles 1 --tools "" --model qwen/qwen3.6-35b-a3b \
+        "In one short sentence, what does @sample.js do?"
+  …
+  {"output":"This code defines a function named `add` that takes two arguments and returns their sum."}
+  309 input tokens (file body + brief), 191 output, $0.
+
+Verification:
+- @aldo-ai/cli typecheck clean.
+- 214/214 cli tests pass + 1 skipped (was 202; +12 new tests across at-references + slash-commands). Same single pre-existing `mcp ls` failure unrelated to this commit.
+
+What's not in this commit (queued):
+- Persistent shell session (cd state across shell.exec calls). aldo-shell MCP would need to track per-session cwd; non-trivial. Captured for next.
+- /web <url> tool. Net-new.
+- /task <agent> <brief> subagent dispatch.
+- Hooks (pre/post-tool, pre/post-run scripts).
+- MCP discovery in TUI.
+
+Net of this turn: ALDO CLI now has the four features every modern AI coding tool ships — inline file refs, plan mode, diff command, branch+plan-aware status line — plus all of them work against either local LM Studio/Ollama or hosted ai.aldo.tech via the same routing decision the hybrid CLI introduced earlier. The gap to Claude Code / Codex / Aider is meaningfully narrower; the remaining big-ticket items (persistent shell, web fetch, subagents, hooks) are queued.

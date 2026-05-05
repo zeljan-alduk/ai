@@ -206,6 +206,8 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     .option('--stdin', 'read the brief from stdin', false)
     .option('--tui', 'launch the interactive ink-based TUI shell (Phase B)', false)
     .option('--resume <thread-id>', 'resume a saved TUI session by thread-id (Phase E)')
+    .option('--model <id>', 'pin the gateway to a single model id (filters the registry)')
+    .option('--models <path>', 'override the catalog YAML the gateway loads')
     .action(
       (
         briefArgs: string[],
@@ -219,6 +221,8 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           stdin?: boolean;
           tui?: boolean;
           resume?: string;
+          model?: string;
+          models?: string;
         },
       ) => {
         const brief = briefArgs.length > 0 ? briefArgs.join(' ') : undefined;
@@ -240,6 +244,8 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               stdin: o.stdin === true,
               tui: o.tui === true,
               ...(o.resume !== undefined ? { resumeThreadId: o.resume } : {}),
+              ...(o.model !== undefined ? { model: o.model } : {}),
+              ...(o.models !== undefined ? { modelsYamlPath: o.models } : {}),
             },
             io,
           );
