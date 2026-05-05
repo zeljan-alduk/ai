@@ -68,6 +68,9 @@ import { getDefaultProjectIdForTenant, getProjectBySlug } from '../projects-stor
 // Wave-16 — per-tenant monthly run quota. enforceMonthlyQuota throws
 // HTTP 402 `quota_exceeded` if the tenant is over their plan cap.
 import { enforceMonthlyQuota } from '../quotas.js';
+// MISSING_PIECES §12.5 — engagement budget cap. Refuses dispatch when
+// the tenant has crossed their configured USD ceiling.
+import { evaluateTenantBudget } from '../tenant-budget-store.js';
 import { getDiscovered, loadModelCatalog } from './models.js';
 
 const RunIdParam = z.object({ id: z.string().min(1) });
@@ -117,6 +120,17 @@ export function runsRoutes(deps: Deps): Hono {
     // Runs BEFORE the agent lookup so a quota-blocked tenant doesn't
     // pay the registry roundtrip on every denied request.
     await enforceMonthlyQuota(deps, tenantId, 'run', 1);
+    // MISSING_PIECES §12.5 — engagement budget cap. Refuses dispatch
+    // with HTTP 402 `tenant_budget_exceeded` when the tenant has hit
+    // their configured USD ceiling. NULL cap = no check; soft cap
+    // (hardStop=false) is observability-only and falls through.
+    const budget = await evaluateTenantBudget(deps.db, tenantId);
+    if (!budget.allowed) {
+      throw new HttpError(402, 'tenant_budget_exceeded', budget.reason ?? 'tenant budget exceeded', {
+        capUsd: budget.capUsd,
+        totalUsd: budget.totalUsd,
+      });
+    }
     const detail = await deps.agentStore.get(tenantId, parsed.data.agentName);
     if (detail === null) {
       throw notFound(`agent not found: ${parsed.data.agentName}`);

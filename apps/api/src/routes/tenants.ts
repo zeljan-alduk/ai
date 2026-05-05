@@ -29,9 +29,34 @@
 import { SeedDefaultResponse } from '@aldo-ai/api-contract';
 import { copyTenantAgents } from '@aldo-ai/registry';
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { getAuth } from '../auth/middleware.js';
 import { type Deps, SEED_TENANT_UUID } from '../deps.js';
-import { HttpError } from '../middleware/error.js';
+import { HttpError, validationError } from '../middleware/error.js';
+import {
+  evaluateTenantBudget,
+  getTenantBudgetCap,
+  upsertTenantBudgetCap,
+} from '../tenant-budget-store.js';
+
+const BudgetCapBody = z.object({
+  /**
+   * Tenant USD ceiling. `null` removes the cap (the historical
+   * default). Numbers must be > 0.
+   */
+  usdMax: z.number().positive().nullable(),
+  /**
+   * Inclusive lower bound the rolling sum starts from. ISO-8601 string;
+   * omit / null = since-tenant-creation.
+   */
+  usdWindowStart: z.string().datetime().nullable().optional(),
+  /**
+   * `true` = in-flight runs receive a typed termination at the next
+   * boundary when crossed. `false` = the cap fires the existing
+   * `budget_threshold` notification but the run continues.
+   */
+  hardStop: z.boolean().optional(),
+});
 
 export function tenantsRoutes(deps: Deps): Hono {
   const app = new Hono();
@@ -50,6 +75,53 @@ export function tenantsRoutes(deps: Deps): Hono {
     });
     const body = SeedDefaultResponse.parse(result);
     return c.json(body);
+  });
+
+  /**
+   * `GET /v1/tenants/me/budget-cap` — read the engagement-level USD
+   * cap for the caller's tenant. Returns `{ cap: null }` when no cap
+   * is configured (the historical default — runs are unbounded).
+   *
+   * MISSING_PIECES §12.5.
+   */
+  app.get('/v1/tenants/me/budget-cap', async (c) => {
+    const auth = getAuth(c);
+    const cap = await getTenantBudgetCap(deps.db, auth.tenantId);
+    const verdict = await evaluateTenantBudget(deps.db, auth.tenantId);
+    return c.json({
+      cap,
+      currentUsd: verdict.totalUsd,
+      // `softCap` reflects the configured row only — when no cap is
+      // set, `softCap` is false and `allowed` is true.
+      softCap: verdict.softCap,
+      allowed: verdict.allowed,
+    });
+  });
+
+  /**
+   * `PUT /v1/tenants/me/budget-cap` — upsert the engagement cap.
+   * Send `{ usdMax: null }` to clear it. The window start is
+   * optional; omitting it pins the cap against tenant-creation.
+   */
+  app.put('/v1/tenants/me/budget-cap', async (c) => {
+    const auth = getAuth(c);
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      throw validationError('request body must be JSON');
+    }
+    const parsed = BudgetCapBody.safeParse(body);
+    if (!parsed.success) {
+      throw validationError('invalid budget-cap body', parsed.error.issues);
+    }
+    const cap = await upsertTenantBudgetCap(deps.db, {
+      tenantId: auth.tenantId,
+      usdMax: parsed.data.usdMax,
+      usdWindowStart: parsed.data.usdWindowStart ?? null,
+      hardStop: parsed.data.hardStop ?? true,
+    });
+    return c.json({ cap });
   });
 
   return app;
