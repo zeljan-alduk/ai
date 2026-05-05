@@ -1,10 +1,104 @@
 # ALDO AI — ROADMAP
 
 > Prioritized backlog. Ordered by **what unblocks the first paying customer**, not by code-architectural elegance.
-> **Last updated:** 2026-05-04 (Wave-Iter — IterativeAgentRun + frontier-coding + approval gates + assistant retarget + `aldo code` TUI)
+> **Last updated:** 2026-05-05 (Wave-Agency — engagement budget cap + customer engagement surface + hybrid CLI + Telegram/email channels + live:network dogfood)
 > **Sibling:** [`STATUS.md`](./STATUS.md) (what's true today) · [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) (history)
 >
 > Read [`STATUS.md`](./STATUS.md) first. Effort estimates are mine, in elapsed engineering time. Items needing a non-engineering decision (legal, vendor account, customer signature) are flagged ⚠️.
+
+---
+
+## Wave-Agency — what shipped 2026-05-05
+
+The five items between *"the agency primitive ships"* and *"a friendly
+first customer can run it overnight without us watching."* Five
+commits on top of Wave-Iter; ~59 new passing tests across `apps/api`,
+`apps/cli`, `platform/integrations`. The platform now has every
+ingredient to take an unsupervised multi-day agency engagement: a
+hard spend ceiling, a customer-facing queue + sign-off surface, a
+hybrid local/hosted CLI, approval-from-anywhere via Telegram + email,
+and a live:network dogfood smoke that produces a real signal from
+local Ollama for $0.
+
+- [x] **§13 / live:network dogfood smoke** — operator-invokable end-to-end
+  dispatch against any provider the operator has configured (incl. local
+  Ollama for $0). Three harness gaps fixed during dogfood: cache poisoning
+  between sibling tests, undefined `runStoreCount` in failure paths,
+  no programmatic `failureReason`. New `tests/agency-dry-run/run-live-network.mjs`
+  prints the post-mortem plus a tail line with `ok / runStoreCount /
+  failureReason / spawn count`. Env-gated by `ALDO_DRY_RUN_LIVE=1` so CI
+  never burns inference. The agency primitive now ships in three forms
+  (stub / live no-network / live:network).
+- [x] **§12.5 engagement-level budget cap** — migration 028 +
+  `tenant_budget_caps` (per-tenant USD ceiling, optional rolling-window
+  start, hard-stop vs soft-cap). POST /v1/runs returns HTTP 402
+  `tenant_budget_exceeded` when the cap is reached (capUsd + totalUsd
+  in the error envelope). Soft caps fire the existing
+  `budget_threshold` notification without terminating in-flight runs.
+  GET / PUT /v1/tenants/me/budget-cap; `usdMax: null` clears the
+  ceiling. 12 new tests.
+- [x] **§14-A Hybrid CLI** — `aldo run --route auto|local|hosted`. Pure
+  routing helper compares the agent's required capability classes
+  against what local-discovery says is reachable; local-only agents
+  stay local; cloud-tier agents delegate to ai.aldo.tech via REST when
+  `ALDO_API_TOKEN` is set. Thin REST wrapper around POST /v1/runs +
+  GET /v1/runs/:id polling; transient poll non-200s log to stderr
+  without killing the run. The agency primitive is now reachable from
+  a user's laptop without re-implementing the orchestrator client-side.
+  18 new tests.
+- [x] **§14-B Telegram + Email channels** — two new IntegrationRunners
+  on the existing fan-out primitive. Telegram: `api.telegram.org/bot/sendMessage`
+  with chat_id + MarkdownV2-formatted text, hostname locked, reserved
+  chars escaped, bot token never logged. Email: Resend transactional
+  API with Bearer auth + html + text bodies. New `approval_requested`
+  event kind so an operator can subscribe a Telegram bot and approve
+  a run from their phone. Bot tokens + Resend api keys go through the
+  wave-7 secrets envelope. 11 new tests.
+- [x] **§12.4 customer engagement surface** — migration 029 + three new
+  tables (`engagements`, `engagement_milestones`, `engagement_comments`).
+  Slugged engagements with active/paused/complete/archived status,
+  milestones with sign-off + reject + rejection reason captured,
+  threaded comments in three kinds (`comment`, `change_request`,
+  `architecture_decision`). Sign-off pins the customer's user id and a
+  server timestamp; reject is terminal so the agency can't silently
+  re-sign work the customer already turned down. 10 endpoints, all
+  tenant-scoped. 14 new tests. UI follow-up; the wire surface is
+  complete and the platform owner can drive a friendly-first-customer
+  engagement through it via REST today.
+
+#### What this unlocks
+
+The original §12 *"unattended single-engineer-replacement engagement"*
+goalpost is now an integration + UI exercise, not a research one.
+With Wave-Agency a customer can:
+
+1. Have an engagement created with a budget cap, milestones, and
+   architectural-decision comments.
+2. Run the agency end-to-end against either their local Ollama (for
+   the local-only agents) or against ai.aldo.tech (for cloud-tier
+   ones), via the same `aldo run` invocation.
+3. Get an approval ping on Telegram or email when the agency hits a
+   gated tool call, and resolve it from a phone.
+4. Sign off (or reject with a reason) the agency's milestones via
+   REST today, via UI when §12.4's customer-facing pages land.
+5. Stop overnight runs from burning $200 on a stuck loop — the
+   tenant cap fires before dispatch.
+
+#### What's deferred from Wave-Agency
+
+- **§12.4 customer-facing UI** — the `/engagements` and
+  `/engagements/[slug]` pages with milestones, comments, and a sign-off
+  flow. Wire surface is complete; the page work is purely frontend.
+- **In-flight run termination on cap crossing** — POST /v1/runs is the
+  highest-leverage gate (every run starts there); the next chunk wires
+  the same check inside the iterative loop's pre-step termination
+  predicate so a stuck run also stops. The supervisor pre-spawn hook
+  is the same shape.
+- **Live:network harness instrumentation** — the smoke wedges between
+  bootstrap and `runtime.runAgent` on a fresh disposable worktree;
+  needs per-stage instrumentation + fast-fail timeouts so the operator
+  sees "stuck in stage X for 60s" instead of silence. Captured in
+  DEVELOPMENT_LOG.txt.
 
 ---
 

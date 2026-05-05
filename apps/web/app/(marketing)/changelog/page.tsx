@@ -57,6 +57,89 @@ const TAG_BADGE: Record<Entry['tag'], string> = {
  */
 const ENTRIES: ReadonlyArray<Entry> = [
   {
+    date: '2026-05-05',
+    tag: 'platform',
+    title: 'Customer engagement surface — milestones, sign-off, change requests',
+    body:
+      'New API surface at /v1/engagements. Threads grouped runs by thread_id but lacked ' +
+      'engagement-shaped semantics; the new endpoints add slugged engagements with ' +
+      'status (active/paused/complete/archived), milestones with sign-off + reject + ' +
+      'rejection reason captured, and threaded comments in three kinds (comment, ' +
+      'change_request, architecture_decision). Sign-off pins the customer’s user id and ' +
+      'a server timestamp so an audit trail exists for every approved milestone; ' +
+      'rejecting a milestone is terminal (a fresh milestone is required for re-review) ' +
+      'so the agency can’t silently re-sign work the customer already turned down. ' +
+      'Tenant-scoped throughout. The customer-facing UI lands as a follow-up; the wire ' +
+      'surface is complete and the platform owner can drive a friendly-first-customer ' +
+      'engagement through it via REST today. 14 new tests; 568/568 apps/api green.',
+  },
+  {
+    date: '2026-05-05',
+    tag: 'platform',
+    title: 'Telegram + Email integration channels — approval-from-anywhere',
+    body:
+      'Two new IntegrationRunners on the existing fan-out primitive. Telegram posts to ' +
+      'api.telegram.org/bot/sendMessage with chat_id + MarkdownV2-formatted text ' +
+      '(reserved chars escaped so a `.` or `(` never desyncs the parser; bot token ' +
+      'never logged); hostname is locked. Email v0 supports Resend transactional API ' +
+      'with Bearer auth + html + text bodies and a tags field carrying the event id ' +
+      'for idempotency. New event kind `approval_requested` for the approval-gate ' +
+      'fan-out so an operator can subscribe a Telegram bot and approve a run from ' +
+      'their phone while away from a keyboard. Bot tokens + Resend api keys go ' +
+      'through the same wave-7 secrets envelope so neither hits the DB in cleartext. ' +
+      '11 new tests; 30/30 @aldo-ai/integrations green.',
+  },
+  {
+    date: '2026-05-05',
+    tag: 'platform',
+    title: 'Hybrid CLI — `aldo run --route auto|local|hosted`',
+    body:
+      '`aldo run` now decides local-vs-hosted automatically by comparing the agent’s ' +
+      'required capability classes against what local-discovery says is reachable. ' +
+      'Local-only agents (privacy_tier: sensitive, capability_class: local-reasoning) ' +
+      'stay on the user’s machine; cloud-tier agents delegate to ai.aldo.tech via REST ' +
+      'when the user has set ALDO_API_TOKEN. `--route hosted` and `--route local` ' +
+      'override the auto rule with a typed error if the requested side can’t serve ' +
+      '(no ALDO_API_TOKEN, etc.). The hosted runner is a thin REST wrapper around ' +
+      'POST /v1/runs + GET /v1/runs/:id polling; transient poll non-200s log to stderr ' +
+      'without killing the run; HostedRunTimeoutError fires when the run never reaches ' +
+      'a terminal status. The agency primitive is now reachable from a user’s laptop ' +
+      'without re-implementing the orchestrator on the client side. 18 new tests.',
+  },
+  {
+    date: '2026-05-05',
+    tag: 'platform',
+    title: 'Engagement-level budget cap — hard ceiling for unsupervised runs',
+    body:
+      'Per-run caps (modelPolicy.budget.usdMax) bound a single iterative loop. An ' +
+      'unsupervised agency engagement spans 100+ runs across the supervisor’s ' +
+      'composite tree; a stuck loop on a frontier model can burn $200 overnight if no ' +
+      'tenant-level ceiling fires. New `tenant_budget_caps` table with per-tenant USD ' +
+      'ceiling, optional rolling-window start, and hard-stop vs soft-cap toggle. POST ' +
+      '/v1/runs now refuses dispatch with HTTP 402 tenant_budget_exceeded when the cap ' +
+      'is reached (capUsd + totalUsd in the error envelope). Soft caps fire the ' +
+      'existing budget_threshold notification without terminating in-flight runs. New ' +
+      'GET/PUT /v1/tenants/me/budget-cap endpoints; usdMax: null clears the ceiling. ' +
+      '12 new tests.',
+  },
+  {
+    date: '2026-05-05',
+    tag: 'eval',
+    title: 'Live:network agency dry-run — operator-invokable, $0 against local Ollama',
+    body:
+      '§13 / item 5.5b finished closing: `runDryRun({mode: \'live:network\'})` now ' +
+      'produces a real signal against any provider the operator has configured, ' +
+      'including local Ollama (free). Three harness gaps fixed during dogfood: cache ' +
+      'poisoning between sibling tests, undefined runStoreCount in failure paths, no ' +
+      'programmatic failureReason. New apps/api/tests/agency-dry-run/run-live-network.mjs ' +
+      'operator script prints the post-mortem and a tail line with ' +
+      'ok / runStoreCount / failureReason / spawn count. The smoke is env-gated by ' +
+      'ALDO_DRY_RUN_LIVE=1 so CI never burns inference. The agency primitive ships in ' +
+      'three forms (stub / live no-network / live:network) and the harness is now ' +
+      'instrumented enough to find what’s wrong with a real dispatch instead of ' +
+      'crashing on its own internals.',
+  },
+  {
     date: '2026-05-04',
     tag: 'platform',
     title: 'aldo code — interactive coding TUI for the iterative loop',

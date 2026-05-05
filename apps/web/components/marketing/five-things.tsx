@@ -96,8 +96,12 @@ export function FiveThings() {
                 +n more in flight
               </p>
               <p className="mt-3 text-[15px] leading-snug text-fg-muted">
-                We ship something net-new every wave. Read the changelog or open the roadmap to see
-                what&rsquo;s coming next — SSO/SAML, OCI Helm publish, bidirectional git sync.
+                We ship something net-new every wave. Latest:{' '}
+                <span className="text-fg">approval-from-anywhere</span> via Telegram + email,
+                a <span className="text-fg">hybrid CLI</span> that auto-routes between local
+                Ollama and the hosted plane, a <span className="text-fg">customer engagement
+                surface</span> with milestones + sign-off, and a tenant-level{' '}
+                <span className="text-fg">spend ceiling</span> that hard-stops runaway runs.
               </p>
             </div>
             <div className="mt-5 flex flex-wrap gap-3 text-sm">

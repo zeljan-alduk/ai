@@ -50,9 +50,41 @@ const TAG_BADGE: Record<NonNullable<Item['tag']>, string> = {
 
 const NOW: ReadonlyArray<Item> = [
   {
+    tag: 'web',
+    title: 'Customer engagement UI — milestones, sign-off, comments',
+    body:
+      'The Wave-Agency push (2026-05-05) shipped the engagement-surface API: ' +
+      '/v1/engagements, milestones with sign-off + reject + reason captured, ' +
+      'threaded comments in three kinds (comment / change_request / ' +
+      'architecture_decision), all tenant-scoped. The customer-facing pages ' +
+      '(/engagements list, /engagements/[slug] detail with milestone timeline + ' +
+      'comment thread + sign-off button) are the natural follow-up — purely ' +
+      'frontend, the wire surface is complete.',
+    horizon: 'this week',
+  },
+  {
     tag: 'platform',
-    title: 'API ↔ engine bridge — soak + composite/MCP fully exercised',
-    body: 'Bridge shipped 2026-05-03 with default API_INLINE_EXECUTOR=true and live local-discovery. Soaking now against real workloads; authoring tool-using composite demo agents (e.g. code-reviewer-local: aldo-fs read → local Ollama → review) so the composite + MCP paths are proven end-to-end, not just wired.',
+    title: 'In-flight termination on tenant budget-cap crossing',
+    body:
+      'Wave-Agency landed the engagement-level USD cap at the POST /v1/runs ' +
+      'gate (HTTP 402 tenant_budget_exceeded). The next chunk wires the same ' +
+      'check inside the iterative loop’s pre-step termination predicate so a ' +
+      'stuck run also stops mid-cycle, plus the supervisor pre-spawn hook so ' +
+      'the composite tree halts before fanning out children.',
+    horizon: 'this week',
+  },
+  {
+    tag: 'eval',
+    title: 'live:network harness instrumentation — fast-fail on per-stage progress',
+    body:
+      'The Wave-Agency dogfood smoke surfaced a real signal: the live:network ' +
+      'run wedges between bootstrap and runtime.runAgent on a fresh disposable ' +
+      'worktree (process at 0% CPU, no Ollama traffic, no .aldo-memory ' +
+      'directory). The harness needs per-stage instrumentation + fast-fail ' +
+      'timeouts so a single dispatch reports "stuck in stage X for 60s" instead ' +
+      'of going silent. After that, the dogfood-against-local-Ollama story ' +
+      'turns up either nothing (✅) or a real punch list ($0 of inference, ' +
+      'either way).',
     horizon: 'this week',
   },
   {

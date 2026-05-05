@@ -171,7 +171,29 @@ export const STATIC_DOC_PAGES: ReadonlyArray<DocPage> = [
     slug: 'guides/integrations',
     section: 'guides',
     title: 'Integrations',
-    summary: 'Slack, Discord, GitHub, generic webhooks — secrets-encrypted at rest.',
+    summary:
+      'Slack, Discord, GitHub, webhooks, Telegram, email — secrets-encrypted at rest. Includes the approval-from-anywhere story (subscribe a Telegram bot to `approval_requested` and approve from your phone).',
+  },
+  {
+    slug: 'guides/engagements',
+    section: 'guides',
+    title: 'Customer engagements',
+    summary:
+      'The engagement-shaped surface threads lacked: status, milestones with sign-off + reject, change-request comments, architectural-decision pins. Wire surface for unsupervised multi-day agency engagements.',
+  },
+  {
+    slug: 'guides/budget-caps',
+    section: 'guides',
+    title: 'Spend caps',
+    summary:
+      'Per-run caps bound a single iterative loop; tenant-level engagement caps bound an entire multi-day run. Hard caps return HTTP 402; soft caps fire `budget_threshold` and let the run continue.',
+  },
+  {
+    slug: 'guides/hybrid-cli',
+    section: 'guides',
+    title: 'Hybrid CLI (`aldo run --route`)',
+    summary:
+      'Local-only agents stay local; cloud-tier agents delegate to ai.aldo.tech. `--route auto` (default) decides; `--route local` and `--route hosted` override. The agency primitive reachable from a laptop.',
   },
   {
     slug: 'guides/api-keys',

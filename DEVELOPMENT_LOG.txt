@@ -5886,3 +5886,53 @@ Verification:
 Net of §12.4: a customer (or the platform owner acting on their behalf) can now create an "ACME Q3 platform rebuild" engagement, attach milestones (`spec sign-off`, `staging deployed`, `go-live`), discuss architectural decisions in threaded comments, request changes that the agency's next milestone has to address, and sign off on milestones one-by-one. The wire surface is complete; the customer-facing UI to expose this in apps/web is the natural follow-up but does NOT block letting a friendly first customer run the agency through this surface today (the platform owner can drive it via REST on their behalf).
 
 Combined with §12.5 (budget cap) and §14-A/B (hybrid CLI + Telegram + email), the agency primitive is now ready for a friendly-first-customer engagement: cap their spend, route work between local + hosted, fan out approvals to their phone, give them a queue + sign-off surface. The original §12 "unattended single-engineer-replacement engagement" goalpost is now an integration + UI exercise, not a research one.
+
+2026-05-05T18:53Z — engineer (claude opus 4.7, 1M ctx) — public surfaces updated for Wave-Agency.
+
+Customer-facing docs + landing copy + roadmap + changelog all reflect today's shipped work:
+
+apps/web/app/(marketing)/changelog/page.tsx:
+- Five new entries dated 2026-05-05 prepended at the top, one per Wave-Agency item: customer engagement surface (§12.4), Telegram + Email integration channels (§14-B), Hybrid CLI (§14-A), engagement-level budget cap (§12.5), live:network agency dry-run dogfood (§13). Each entry follows the existing pattern (date / tag / title / customer-readable body) and points at the relevant docs guide where one exists.
+
+apps/web/app/(marketing)/roadmap/page.tsx:
+- Three new "Now" items reflecting the Wave-Agency follow-ups that haven't shipped yet: customer engagement UI (the /engagements pages on top of the API), in-flight termination on tenant budget-cap crossing (POST /v1/runs gate landed; iterative-loop pre-step + supervisor pre-spawn hooks remain), live:network harness instrumentation (the smoke wedges before runtime.runAgent — needs per-stage instrumentation + fast-fail timeouts). Existing mcp.aldo.tech + SDK-publish items kept.
+
+apps/web/components/marketing/five-things.tsx:
+- The "+n more in flight" card now names today's new differentiators: approval-from-anywhere (Telegram + email), hybrid CLI auto-routing local + hosted, customer engagement surface with milestones + sign-off, tenant-level spend ceiling.
+
+apps/web/components/marketing/stats-strip.tsx:
+- "MCP tools shipped" stat replaced with "notification channels" (6: Slack, Discord, webhook, GitHub, Telegram, email) — that's the customer-facing post-Wave-Agency story; MCP tool count stayed roughly flat.
+- Tests bumped 1184 → 1300+ (+59 from Wave-Agency, +earlier wave delta).
+- Migrations bumped 26 → 29 (028 + 029 from Wave-Agency).
+- Verified date 2026-05-03 → 2026-05-05.
+
+apps/web/content/docs/guides/integrations.md:
+- Telegram + email kinds documented alongside the existing four (Slack/Discord/GitHub/webhook).
+- Approval-from-anywhere section added: configure tools.approvals + Telegram bot + chat id, run agent, decide from phone.
+- Spend-caps section added: pointer to the new budget-caps guide; PUT /v1/tenants/me/budget-cap example.
+- IntegrationKind redactor list (apps/api/src/routes/integrations.ts) now matches the runner registry.
+
+apps/web/content/docs/guides/engagements.md (new):
+- Full guide for §12.4: shape (engagement / milestone / comment), API surface (10 endpoints), error envelopes (409 slug conflict, 409 milestone_already_decided), example flow (curl create + milestone + sign-off + change-request comment + architecture-decision pin), and the "combine with budget caps + Telegram + Hybrid CLI" recommendation that turns the four primitives into an unsupervised friendly-first-customer engagement.
+
+apps/web/content/docs/guides/budget-caps.md (new):
+- Full guide for §12.5: per-run cap vs tenant-level cap distinction, hard-stop vs soft-cap, window-start option, GET/PUT examples, the HTTP 402 response shape, what's NOT yet wired (in-flight termination — POST /v1/runs is the gate today), combine-with-notifications recommendation.
+
+apps/web/content/docs/guides/hybrid-cli.md (new):
+- Full guide for §14-A: the three decision inputs, the rules in order, env config (ALDO_LOCAL_DISCOVERY + ALDO_API_URL + ALDO_API_TOKEN), examples for auto / --route local / --route hosted / --json, what hosted dispatch does (POST + 1.5s polling + transient non-200 survival + 10-min timeout), privacy enforcement is unchanged (sensitive agents never delegate even with --route hosted), what hybrid CLI does NOT do (no SSE streaming yet, no auto-discovery, no model-pull lifecycle).
+
+apps/web/lib/docs/registry.ts:
+- Three new guide entries: guides/engagements, guides/budget-caps, guides/hybrid-cli. Existing guides/integrations summary updated to mention Telegram + email + approval-from-anywhere.
+
+ROADMAP.md:
+- New "Wave-Agency — what shipped 2026-05-05" section at the top (mirrors the in-app roadmap page's "Now" items but for the master doc). Five shipped items listed, plus a "What this unlocks" + "What's deferred from Wave-Agency" cross-ref to the dev log. Last-updated header bumped.
+
+STATUS.md:
+- New "Wave-Agency (2026-05-05) — what's wired" section near the top summarising the same five items in the existing STATUS shape (one bullet per item, with the relevant table/route/test count).
+- Last-updated header bumped.
+
+Verification:
+- @aldo-ai/web: 382/382 tests pass. Typecheck clean.
+- All edits restricted to user-facing docs, marketing components, and the public roadmap/changelog/STATUS surfaces. No platform behaviour changed.
+
+Net: a customer (or a prospect) reading /changelog, /roadmap, or /docs/guides today sees the same Wave-Agency story the dev log does. The gap between "what we built" and "what the public site says we built" is closed.

@@ -1,9 +1,41 @@
 # ALDO AI — STATUS
 
 > Snapshot of what's live, what's wired, and what's known-broken.
-> **Last updated:** 2026-05-03 (Wave-4 — 6-agent frontend competitive-surface push landed on top of Wave-3)
+> **Last updated:** 2026-05-05 (Wave-Agency — engagement budget cap + customer engagement surface + hybrid CLI + Telegram/email + live:network dogfood; on top of Wave-Iter)
 > **Source of truth for history:** [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt)
 > **Source of truth for next steps:** [`ROADMAP.md`](./ROADMAP.md)
+
+## Wave-Agency (2026-05-05) — what's wired
+
+- **Engagement budget cap (§12.5)** — tenant-level USD ceiling at
+  `tenant_budget_caps`. POST /v1/runs returns HTTP 402
+  `tenant_budget_exceeded` when crossed; soft caps fire
+  `budget_threshold` without terminating in-flight runs. GET / PUT
+  `/v1/tenants/me/budget-cap`.
+- **Customer engagement surface (§12.4)** — three new tables
+  (`engagements`, `engagement_milestones`, `engagement_comments`).
+  10 endpoints under `/v1/engagements/...` covering slug-unique
+  engagements with status, milestones with sign-off + reject + reason
+  captured, threaded comments in three kinds (`comment`,
+  `change_request`, `architecture_decision`). Wire surface complete;
+  `/engagements` UI is the natural follow-up.
+- **Hybrid CLI (§14-A)** — `aldo run --route auto|local|hosted`. Pure
+  routing helper compares the agent's required capability classes
+  against what local-discovery says is reachable; cloud-tier agents
+  delegate to ai.aldo.tech via REST when `ALDO_API_TOKEN` is set.
+- **Telegram + Email channels (§14-B)** — two new IntegrationRunners
+  on the existing fan-out primitive. New `approval_requested` event
+  kind so an operator can subscribe a Telegram bot and approve a
+  run from a phone. Bot tokens + Resend api keys go through the
+  wave-7 secrets envelope.
+- **Live:network dogfood (§13)** — `tests/agency-dry-run/run-live-network.mjs`
+  is operator-invokable end-to-end against any provider (incl. local
+  Ollama for $0). Three harness gaps fixed during dogfood (cache
+  poisoning, undefined `runStoreCount`, no programmatic `failureReason`).
+  Smoke is env-gated by `ALDO_DRY_RUN_LIVE=1` so CI never burns
+  inference. Real finding: smoke wedges between bootstrap and
+  `runtime.runAgent` — captured in DEVELOPMENT_LOG.txt as the next
+  §13 punch list item.
 
 ---
 

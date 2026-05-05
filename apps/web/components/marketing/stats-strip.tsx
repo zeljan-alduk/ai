@@ -20,22 +20,22 @@ const STATS: ReadonlyArray<{ value: string; label: string; sub?: string }> = [
     sub: '5 local + 4 frontier — capability routed',
   },
   {
-    value: '8',
-    label: 'MCP tools shipped',
-    sub: '@aldo-ai/mcp-platform stdio + HTTP',
+    value: '6',
+    label: 'notification channels',
+    sub: 'Slack · Discord · webhook · GitHub · Telegram · email',
   },
   {
     value: '50+',
     label: 'product surfaces',
-    sub: 'pages in the app today',
+    sub: 'pages + REST endpoints',
   },
   {
-    value: '1,184',
+    value: '1,300+',
     label: 'tests in CI',
     sub: 'across 9 packages, green on every push',
   },
   {
-    value: '26',
+    value: '29',
     label: 'sequential migrations',
     sub: 'monotonic, replayable, never reordered',
   },
@@ -46,7 +46,7 @@ const STATS: ReadonlyArray<{ value: string; label: string; sub?: string }> = [
   },
 ];
 
-export const STATS_VERIFIED_ON = '2026-05-03';
+export const STATS_VERIFIED_ON = '2026-05-05';
 
 export function StatsStrip() {
   return (
