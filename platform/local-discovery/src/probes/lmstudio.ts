@@ -53,8 +53,14 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
       provider: 'lmstudio',
       providerKind: 'openai-compat',
       locality: 'local',
-      capabilityClass: 'local-reasoning',
-      provides: ['streaming'],
+      // Per-family override (embeddings) honored; default stays
+      // local-reasoning. Mirrors ollama.ts, which had this right
+      // months ago — lmstudio.ts was hardcoding a `streaming`-only
+      // provides set, leaving qwen3.x / deepseek-r1 / codellama
+      // unable to satisfy any agent's tool-use / reasoning /
+      // structured-output capability requirements.
+      capabilityClass: caps.capabilityClass ?? 'local-reasoning',
+      provides: caps.provides,
       privacyAllowed: ['public', 'internal', 'sensitive'],
       effectiveContextTokens,
       cost: { usdPerMtokIn: 0, usdPerMtokOut: 0 },

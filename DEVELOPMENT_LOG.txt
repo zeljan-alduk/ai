@@ -6296,3 +6296,31 @@ Fix: add an explicit `process.exit(failureExitCode)` at the failureWithStages bo
 Verification at runtime:
 - Live mode: 6 runs in store, ok=true, post-mortem renders 5 spawns + 3 rollups + cost line.
 - Live:network: 7 stages reported, stages: 6 OK + 1 FAILED. failureReason carries the full nested-child error so an operator sees exactly which leaf refused to dispatch.
+
+2026-05-05T21:15Z — engineer (claude opus 4.7, 1M ctx) — both follow-up fixes shipped + verified against LM Studio.
+
+(1) platform/local-discovery/src/probes/lmstudio.ts — root cause was even simpler than expected. The probe called `lookupCapabilities(id)` and stored it in `caps`, then ignored the result and pushed `provides: ['streaming']` hardcoded. ollama.ts used `caps.provides` correctly months ago; lmstudio.ts had drifted. One-line fix: `provides: caps.provides` + `capabilityClass: caps.capabilityClass ?? 'local-reasoning'` (mirrors ollama.ts exactly). Also added a Gemma-4 rule to model-capabilities.ts since LM Studio shipped that family and the probe was returning the bare-streaming fallback. Verification: `lookupCapabilities('qwen/qwen3.6-35b-a3b')` now returns family=qwen-3 with 7 caps including tool-use + structured-output + reasoning + 128k-context — exactly the four the agency YAML's code-reviewer requires.
+
+(2) apps/api/tests/agency-dry-run/run-live-network.mjs — added explicit `process.exit(r.ok ? 0 : 1)` at the end of the success branch (the failure branch already had one). Without this, the harness function returned a failure record in <1s but the spawned MCP server children (aldo-fs / aldo-shell / aldo-git / aldo-memory, all stdio-attached) kept the Node event loop alive — operator running on CI saw a 10-min false hang. The OS reaps the children when the parent exits, so this is safe.
+
+Verification — re-ran the live:network harness with both fixes:
+
+Before:
+  composite-running FAILED 946ms — code-reviewer failed:
+    no eligible model: class="local-reasoning":
+    no model provides required caps [tool-use, 128k-context, structured-output, reasoning]
+  process hung 12+ minutes, had to be killed.
+
+After:
+  composite-running FAILED 5611ms — code-reviewer failed:
+    [openai-compat:qwen/qwen3-4b] HTTP 400:
+    "'response_format.type' must be 'json_schema' or 'text'"
+  process exited cleanly with exit code 1.
+
+Two real things changed: (a) capability filter now PASSES — code-reviewer was actually dispatched (router picked qwen/qwen3-4b — alphabetically first qwen3-family model, deterministic); (b) failure surfaced one layer deeper, exposing a third gap: the openai-compat adapter sends `response_format: { type: 'json_object' }` when the agent spec has `decoding.mode: json`, but LM Studio's stricter spec only accepts `'json_schema'` or `'text'`. NOT fixed in this commit; captured as the next punch list item.
+
+Verification of unrelated tests:
+- @aldo-ai/local-discovery: 89/89 tests, typecheck clean.
+- @aldo-ai/api: dry-run subset 14/14 pass + 1 properly skipped, typecheck clean.
+
+Net: agency dry-run against LM Studio now (a) routes through capability filtering correctly so qwen3.6 / qwen3-4b actually get picked, (b) exits the process when the run is done so operators don't see false hangs. The remaining `decoding.mode: json` ↔ LM Studio mismatch is the next chunk — three paths captured in the roadmap (per-provider response_format mapping; downgrade `json_object` → `text` when target doesn't accept; author local-friendly agency variants with `decoding.mode: free`).

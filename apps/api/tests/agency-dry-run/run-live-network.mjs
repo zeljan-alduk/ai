@@ -29,6 +29,14 @@ try {
   if (r.failureReason) {
     process.stderr.write(`failureReason=${r.failureReason}\n`);
   }
+  // Hard-exit so dangling stdio refs from MCP server child processes
+  // (aldo-fs / aldo-shell / aldo-git / aldo-memory, all spawned via
+  // the engine's tool host) don't keep the Node event loop alive.
+  // Without this, a failed composite-running stage records the failure
+  // in <1s but the process hangs ~10 minutes waiting on the children
+  // — operator running the smoke on CI sees a false hang. The OS
+  // reaps the children when the parent exits.
+  process.exit(r.ok ? 0 : 1);
 } catch (err) {
   console.error('LIVE:NETWORK MODE THREW:', err);
   process.exit(1);

@@ -58,6 +58,27 @@ const TAG_BADGE: Record<Entry['tag'], string> = {
 const ENTRIES: ReadonlyArray<Entry> = [
   {
     date: '2026-05-05',
+    tag: 'eval',
+    title: 'Agency dry-run unblocked at $0 — LM Studio probe stamps real `provides` + harness exits cleanly',
+    body:
+      'Two real findings from re-running the agency dry-run harness against ' +
+      'LM Studio + qwen/qwen3.6-35b-a3b. (1) The LM Studio probe in ' +
+      '@aldo-ai/local-discovery called `lookupCapabilities(id)` and stored the ' +
+      'result, then ignored it and pushed `provides: ["streaming"]` hardcoded. ' +
+      "ollama.ts had this right months ago; lmstudio.ts had drifted. One-line " +
+      'fix; qwen3.6 / qwen3-4b now correctly tag tool-use + structured-output + ' +
+      'reasoning + 128k-context. Added a Gemma-4 family rule too. (2) The ' +
+      'live:network harness recorded a stage failure in <1s but kept the Node ' +
+      'event loop alive for 10+ minutes because the spawned MCP server children ' +
+      '(aldo-fs / aldo-shell / aldo-git / aldo-memory, all stdio-attached) ' +
+      "didn't unref. Explicit `process.exit(r.ok ? 0 : 1)` in run-live-network.mjs. " +
+      'After both fixes, the harness lands the failure in 5611ms and exits with ' +
+      'code 1 cleanly — operators on CI no longer see a false 10-minute hang. ' +
+      'One layer deeper of failure now visible (openai-compat `response_format: ' +
+      "json_object` not accepted by LM Studio); captured on the roadmap.",
+  },
+  {
+    date: '2026-05-05',
     tag: 'platform',
     title: 'aldo code — peer parity with Claude Code / Codex / Aider',
     body:

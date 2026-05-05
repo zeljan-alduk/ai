@@ -202,6 +202,14 @@ const RULES: readonly CapabilityRule[] = [
     family: 'llama-3.1+',
   },
 
+  // ── Gemma 4 — Google's flagship 31B / 70B class. Conservative on
+  // tool-use until LM Studio / Ollama wire the templates (same
+  // posture as gemma-3 below); claims structured-output + 128k.
+  {
+    match: /\bgemma-?4\b/,
+    provides: ['streaming', 'structured-output', '128k-context'],
+    family: 'gemma-4',
+  },
   // ── Gemma 3 — Google's series supports tool-use in principle, but
   // Ollama's stock chat template returns `does not support tools` on
   // /v1/chat/completions. Same situation as deepseek-r1. Conservative:
