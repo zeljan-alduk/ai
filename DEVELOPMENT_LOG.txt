@@ -6083,3 +6083,39 @@ Verification:
 - All edits are tenant-scoped through the existing auth-proxy + bearer-auth flow; cross-tenant access is impossible because every server fetch authenticates with the caller's session.
 
 Net of Wave-Agency follow-ups (tasks #6, #7, #8): the customer engagement surface is now reachable via /engagements; the budget-cap protects in-flight runs as well as new dispatches; the live:network smoke produces a per-stage trace that names the actual blocker (backend-engineer requires `code-fim` which local Ollama doesn't claim — a real product finding worth fixing in a follow-up). The agency primitive is ready for a friendly first-customer engagement; what remains is the YAML-side fix to let backend-engineer fall back to a local-friendly capability, and authoring eval suites that catch real regressions.
+
+2026-05-05T19:42Z — engineer (claude opus 4.7, 1M ctx) — `aldo run` LM Studio smoke + new `--models` flag.
+
+User asked to verify ALDO CLI inference works against LM Studio with `qwen/qwen3.6-35b-a3b`. Smoke worked end-to-end after a small CLI fix.
+
+What we ran:
+1. `curl http://localhost:1234/v1/chat/completions` against qwen/qwen3.6-35b-a3b — 200 OK, model is loaded (it's a thinking model so it spent the 20-token budget on `reasoning_content`; ALIVE never made it to `content`, but the inference path worked).
+2. `aldo models discover --json` with `ALDO_LOCAL_DISCOVERY=lmstudio LM_STUDIO_BASE_URL=http://localhost:1234`. Returned all four LM Studio models (qwen3.6-35b-a3b, qwen3-4b, gemma-4-31b, nomic-embed-text-v1.5) with `capabilityClass: local-reasoning`.
+3. Wrote a throwaway agent fixture under `/tmp/aldo-cli-test-…/agents/qwen-smoke.yaml`: privacy_tier=sensitive, primary.capability_class=local-reasoning, no tools, no fallbacks.
+4. Tried `aldo run qwen-smoke --dry-run` → CLI picked `mlx-llama-3.3-70b-instruct-4bit (mlx)` from the shipped catalog instead of the discovered LM Studio model. Real run produced "fetch failed" because MLX isn't running.
+
+Two real CLI gaps surfaced:
+
+**Gap A — `aldo run` had no `--models` flag.** The shipped catalog (`platform/gateway/fixtures/models.yaml`) ships MLX stub entries for `local-reasoning`. They have a `baseUrl` field so they pass the bootstrap's enable filter, alongside the discovered LM Studio rows. The gateway router picks deterministically and (in this case) MLX wins. There was no way to filter the catalog from the run command — only `aldo agents check` accepted `--models`.
+
+Fix: added `--models <path>` flag to `aldo run` (apps/cli/src/cli.ts), threaded through to `RunOptions.modelsYamlPath` and forwarded to `bootstrap({ modelsYamlPath })` in apps/cli/src/commands/run.ts. Bootstrap already supported the field; it just wasn't exposed.
+
+**Gap B — `aldo run` doesn't merge `discover()` output into the registry.** apps/api/src/runtime-bootstrap.ts merges discovered models alongside catalog rows; the CLI's bootstrap.ts loads only the YAML. Even after Gap A is fixed, an empty `--models <path>` to a catalog with `models: []` produces "no eligible model" because discovery isn't merged. NOT fixed in this commit — captured as a follow-up.
+
+Workaround for the smoke: hand-wrote a one-off `models.yaml` containing only the qwen3.6-35b-a3b row at LM Studio's URL. With `--models ./models.yaml`:
+
+  - `aldo run qwen-smoke --dry-run` → "would use qwen/qwen3.6-35b-a3b (lmstudio); ceiling $0.00"
+  - `aldo run qwen-smoke --inputs '{"task":"reply ALIVE-VIA-ALDO"}' --json` → ok=true, output="ALIVE-VIA-ALDO", 7082ms, $0.
+  - Streaming variant — "what is a sub-agent orchestrator?" → "A sub-agent orchestrator is a central AI component that delegates tasks to specialized sub-agents…" → done in 15240ms, $0.
+
+Both runs went end-to-end through `aldo run` → @aldo-ai/gateway → openai-compat adapter → LM Studio → qwen/qwen3.6-35b-a3b → streaming completion → CLI text/JSON output.
+
+Cosmetic gap in the streaming tail: text mode prints `done in <ms>ms, $0 on unknown`. The openai-compat adapter doesn't surface the chosen model id in the final usage record, so the formatter falls back to "unknown". Not a correctness issue — captured as a polish follow-up.
+
+Verification:
+- @aldo-ai/cli typecheck clean.
+- `--models <path>` flag tested manually with both empty and populated fixtures.
+
+Files changed: apps/cli/src/cli.ts, apps/cli/src/commands/run.ts.
+
+Net of this turn: ALDO CLI runs real inference against a local LM Studio instance; the wedge that was hiding the path (catalog stubs out-ranking discovered rows) is now operator-controllable via `--models`. The deeper fix — merging live-discovery into the CLI's runtime registry the same way the API does — is a single-file change to apps/cli/src/bootstrap.ts; queued as a follow-up so this commit stays scoped.

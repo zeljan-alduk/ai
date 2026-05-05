@@ -255,6 +255,10 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     .addOption(new Option('--model <name>', 'model override').hideHelp(false))
     .option('--json', 'emit final result as JSON instead of streaming text', false)
     .option('--dry-run', 'print the chosen model + estimate; do not call the provider', false)
+    .option(
+      '--models <path>',
+      'override the catalog YAML the gateway loads (filter out shipped stubs that out-rank a discovered local model)',
+    )
     .addOption(
       new Option(
         '--route <mode>',
@@ -273,6 +277,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           json?: boolean;
           dryRun?: boolean;
           route?: 'auto' | 'local' | 'hosted';
+          models?: string;
         },
       ) => {
         action = () =>
@@ -285,6 +290,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               json: o.json === true,
               dryRun: o.dryRun === true,
               route: o.route ?? 'auto',
+              ...(o.models !== undefined ? { modelsYamlPath: o.models } : {}),
             },
             io,
           );

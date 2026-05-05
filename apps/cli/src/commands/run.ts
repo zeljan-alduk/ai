@@ -59,6 +59,14 @@ export interface RunOptions {
    * delegates to the hosted plane. `local`/`hosted` force the side.
    */
   readonly route?: RoutingOverride;
+  /**
+   * Override the catalog YAML the gateway loads. Useful when the
+   * shipped catalog has stub rows that out-rank a discovered local
+   * model — point this at a fixture containing only the rows you
+   * want eligible (or an empty fixture so discovered rows win
+   * unconditionally).
+   */
+  readonly modelsYamlPath?: string;
 }
 
 export interface RunHooks {
@@ -137,7 +145,10 @@ export async function runRun(
   // Step 3: bootstrap.
   let bundle: RuntimeBundle;
   try {
-    bundle = (hooks.bootstrap ?? bootstrap)({ config: cfg });
+    bundle = (hooks.bootstrap ?? bootstrap)({
+      config: cfg,
+      ...(opts.modelsYamlPath !== undefined ? { modelsYamlPath: opts.modelsYamlPath } : {}),
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     writeErr(io, `error: bootstrap failed: ${msg}`);
