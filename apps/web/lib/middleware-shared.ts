@@ -63,6 +63,12 @@ const PUBLIC_BOUNDED: ReadonlyArray<string> = [
   '/deck',
   // In-house status page — public, no auth.
   '/status',
+  // Local-models discovery + bench rating. The whole point of this
+  // surface is "click, see your local LLMs, rate them" — gating it
+  // on signup would defeat the demo. The API endpoints it calls
+  // (/v1/models/discover, /v1/models/scan, /v1/bench/*) are also
+  // on the API allow-list and SSRF-guarded to private networks.
+  '/local-models',
 ];
 
 export function isPublicPath(pathname: string): boolean {

@@ -54,6 +54,60 @@ const StartBenchSuiteRequest = z
     message: 'exactly one of `suiteId` or `yaml` must be set',
   });
 
+/**
+ * SSRF guard. The bench route is unauthenticated (it's the demo),
+ * so the user-supplied `baseUrl` must be restricted to networks the
+ * caller plausibly owns: loopback (127.0.0.0/8, ::1, localhost) and
+ * the standard RFC1918 ranges (10/8, 172.16/12, 192.168/16) plus
+ * link-local (169.254/16).
+ *
+ * Anything else — public IPs, cloud-metadata addresses (169.254.169.254
+ * is link-local but matches in CIDR; the explicit deny below kills it),
+ * AWS/GCP/Azure metadata services — is rejected with HTTP 400.
+ *
+ * `localhost` resolves later via the runtime's DNS, but we don't trust
+ * resolution: a hostile DNS could rebind to a public IP between this
+ * check and the fetch. So we only allow literal hostnames `localhost`
+ * + IP-literal `baseUrl`s that match the private-network CIDRs.
+ */
+const PRIVATE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']);
+const CLOUD_METADATA_HOSTS = new Set(['169.254.169.254', 'metadata.google.internal']);
+
+export function isPrivateBaseUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  if (CLOUD_METADATA_HOSTS.has(host)) return false;
+  if (PRIVATE_HOSTNAMES.has(host)) return true;
+  // Strip IPv6 brackets so `[::1]` is matched above and `[fc00::1]`
+  // (unique-local) flows through the IPv4 branches as a non-match.
+  if (host.startsWith('[') && host.endsWith(']')) {
+    const inner = host.slice(1, -1);
+    if (inner === '::1') return true;
+    // IPv6 unique-local (fc00::/7) — fc00 + fd00 prefixes.
+    if (inner.startsWith('fc') || inner.startsWith('fd')) return true;
+    return false;
+  }
+  // IPv4 literal — split into octets and match RFC1918 + loopback +
+  // link-local.
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (m === null) return false;
+  const [, a, b] = m as unknown as [string, string, string, string, string];
+  const o1 = Number.parseInt(a, 10);
+  const o2 = Number.parseInt(b, 10);
+  if (o1 === 127) return true; // loopback
+  if (o1 === 10) return true; // 10/8
+  if (o1 === 192 && o2 === 168) return true; // 192.168/16
+  if (o1 === 172 && o2 >= 16 && o2 <= 31) return true; // 172.16/12
+  if (o1 === 169 && o2 === 254) return true; // link-local (catches metadata via CLOUD_METADATA_HOSTS check above)
+  return false;
+}
+
 export function benchSuiteRoutes(deps: Deps): Hono {
   void deps;
   const app = new Hono();
@@ -113,6 +167,17 @@ export function benchSuiteRoutes(deps: Deps): Hono {
       throw validationError('invalid bench/suite request', parsed.error.issues);
     }
     const body = parsed.data;
+
+    // SSRF guard. The route is on the public allow-list (it's the
+    // marketing demo) so we MUST refuse a baseUrl that points at a
+    // public address. The check runs BEFORE the fetch — we don't
+    // resolve DNS, we just match the hostname literal.
+    if (!isPrivateBaseUrl(body.baseUrl)) {
+      throw validationError(
+        'baseUrl must be a loopback or private-network address (127.0.0.1, 10/8, 172.16/12, 192.168/16, link-local, IPv6 unique-local). Public addresses and cloud-metadata hosts are refused.',
+        [],
+      );
+    }
 
     // Resolve the suite. For `suiteId`, anchor the lookup at the
     // server-configured suite root (so the API doesn't trust an

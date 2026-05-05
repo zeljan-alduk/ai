@@ -76,6 +76,16 @@ const PUBLIC_PATH_EXACT = new Set<string>([
   // without auth (Swagger UI / Redoc / openapi-generator).
   '/openapi.json',
   '/openapi.yaml',
+  // Local-models demo (public marketing surface). These endpoints
+  // either (a) probe localhost and return a model list — no tenant
+  // data — or (b) run a bench rating against a private-network
+  // baseUrl. POST /v1/bench/suite is SSRF-guarded inside the route
+  // handler so the user-supplied baseUrl can only reach loopback /
+  // RFC1918 addresses.
+  '/v1/models/discover',
+  '/v1/models/scan',
+  '/v1/bench/suites',
+  '/v1/bench/suite',
 ]);
 
 /**

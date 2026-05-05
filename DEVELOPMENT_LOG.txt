@@ -6708,3 +6708,42 @@ secondary doesn't break any spec.
 
 386 → 382 web tests (4 deleted with the section's pin tests).
 Typecheck clean.
+
+----------------------------------------
+2026-05-06 00:15 UTC — agent (claude opus 4.7) — open /local-models to the public + SSRF guard
+
+User noticed `/local-models` was behind auth — defeats the whole "click
+the button, see your local LLMs" pitch. Three coordinated changes:
+
+(1) `apps/web/lib/middleware-shared.ts` — added `/local-models` to
+    `PUBLIC_BOUNDED`. Unauth'd visitors who click the hero CTA now
+    land on the page instead of bouncing to `/login?next=/local-models`.
+
+(2) `apps/api/src/auth/middleware.ts` — added the four backing
+    endpoints (`/v1/models/discover`, `/v1/models/scan`,
+    `/v1/bench/suites`, `/v1/bench/suite`) to `PUBLIC_PATH_EXACT`.
+    The auth-proxy already passes through with no `Authorization`
+    header when there's no session, so the path lights up end-to-end.
+
+(3) `apps/api/src/routes/bench-suite.ts` — added an SSRF guard
+    (`isPrivateBaseUrl`) on the POST. Now that the route is open to
+    the world, the user-supplied `baseUrl` could otherwise turn the
+    API into a port-scan + arbitrary-host fetcher. Whitelist:
+       - 127.0.0.0/8 (loopback)
+       - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC1918)
+       - 169.254.0.0/16 (link-local)
+       - ::1, fc00::/7 (IPv6 loopback + ULA)
+       - literal `localhost` / `0.0.0.0`
+    Explicitly denies `169.254.169.254` and `metadata.google.internal`
+    (cloud metadata services) before the link-local rule lets them
+    through. Non-http(s) schemes refused. DNS is not resolved at
+    guard time — we only match the literal hostname so a hostile DNS
+    rebind between guard and fetch is moot (the rebound host won't
+    match the whitelist).
+
+Tests: +9 (3 SSRF whitelist, 3 SSRF deny, 3 public-allow-list
+end-to-end via `env.rawApp` without auth header). Existing tests
+updated to use `127.0.0.1` instead of `fake.local` since the new
+guard rejects unresolvable hostnames.
+
+Final: web 383 / API 580 / discovery 101 / bench-suite 7 — all green.

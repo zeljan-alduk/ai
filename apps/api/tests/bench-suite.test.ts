@@ -8,6 +8,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { isPrivateBaseUrl } from '../src/routes/bench-suite.js';
 import { type TestEnv, setupTestEnv } from './_setup.js';
 
 describe('GET /v1/bench/suites', () => {
@@ -94,7 +95,7 @@ cases:
         body: JSON.stringify({
           yaml,
           model: 'fake-model',
-          baseUrl: 'http://fake.local',
+          baseUrl: 'http://127.0.0.1:1234',
         }),
       });
       expect(res.status).toBe(200);
@@ -143,7 +144,7 @@ cases:
     const res = await env.app.request('/v1/bench/suite', {
       method: 'POST',
       headers: { ...env.authHeader, 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'm', baseUrl: 'http://fake' }),
+      body: JSON.stringify({ model: 'm', baseUrl: 'http://127.0.0.1:1234' }),
     });
     expect(res.status).toBe(400);
   });
@@ -156,10 +157,83 @@ cases:
         suiteId: 'local-model-rating',
         yaml: 'name: x',
         model: 'm',
-        baseUrl: 'http://fake',
+        baseUrl: 'http://127.0.0.1:1234',
       }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('isPrivateBaseUrl (SSRF guard)', () => {
+  it('accepts loopback and RFC1918 ranges', () => {
+    for (const ok of [
+      'http://127.0.0.1:1234',
+      'http://localhost:11434',
+      'http://10.0.0.5:8000',
+      'http://172.16.4.1:8080',
+      'http://172.31.255.255:1234',
+      'http://192.168.1.50:8080',
+      'http://[::1]:1234',
+      'http://[fc00::1]:8080',
+      'http://169.254.0.5:1234',
+    ]) {
+      expect(isPrivateBaseUrl(ok)).toBe(true);
+    }
+  });
+
+  it('rejects public IPs, cloud-metadata, and non-http schemes', () => {
+    for (const bad of [
+      'http://8.8.8.8:80',
+      'http://api.openai.com',
+      'http://172.32.0.1:80', // outside 172.16/12
+      'http://192.169.1.1:80', // outside 192.168/16
+      'http://169.254.169.254/latest/meta-data', // AWS metadata
+      'http://metadata.google.internal/computeMetadata/v1/',
+      'file:///etc/passwd',
+      'gopher://127.0.0.1:1234',
+    ]) {
+      expect(isPrivateBaseUrl(bad)).toBe(false);
+    }
+  });
+
+  it('refuses unparseable URLs', () => {
+    expect(isPrivateBaseUrl('not a url')).toBe(false);
+    expect(isPrivateBaseUrl('')).toBe(false);
+  });
+});
+
+describe('public allow-list', () => {
+  let env: TestEnv;
+  beforeAll(async () => {
+    env = await setupTestEnv({});
+  });
+  afterAll(async () => {
+    await env.teardown();
+  });
+
+  it('GET /v1/bench/suites is reachable without an auth header', async () => {
+    const res = await env.rawApp.request('/v1/bench/suites');
+    expect(res.status).toBe(200);
+  });
+
+  it('GET /v1/models/discover is reachable without an auth header', async () => {
+    const res = await env.rawApp.request('/v1/models/discover');
+    expect(res.status).toBe(200);
+  });
+
+  it('POST /v1/bench/suite rejects a public baseUrl with 400', async () => {
+    const res = await env.rawApp.request('/v1/bench/suite', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        suiteId: 'local-model-rating',
+        model: 'fake',
+        baseUrl: 'http://8.8.8.8',
+      }),
+    });
+    expect(res.status).toBe(400);
+    const text = await res.text();
+    expect(text).toContain('private-network');
   });
 });
 

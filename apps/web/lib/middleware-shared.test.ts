@@ -40,6 +40,11 @@ describe('isPublicPath', () => {
     expect(isPublicPath('/signup-foo')).toBe(false);
   });
 
+  it('treats /local-models as public so the Scan-local-models hero CTA works without auth', () => {
+    expect(isPublicPath('/local-models')).toBe(true);
+    expect(isPublicPath('/local-models/anything')).toBe(true);
+  });
+
   // Wave-11 marketing surface — the public face of the product.
   describe('marketing routes', () => {
     it('treats the marketing homepage / as public', () => {
