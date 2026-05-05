@@ -111,6 +111,15 @@ export interface BootstrapOptions {
    * matching the behaviour every other unattended caller sees).
    */
   readonly approvalController?: ApprovalController;
+  /**
+   * Pin the gateway's eligible-model set to a single id. When set,
+   * the model registry is filtered down to ONLY this model, so the
+   * router has no choice. Used by `aldo run --model <id>` to force
+   * a specific model when the catalog contains several that satisfy
+   * the agent's primary capability class. Throws via the registry
+   * builder if the id doesn't match any enabled model.
+   */
+  readonly pinModelId?: string;
 }
 
 /** Construct the runtime bundle. Pure; never makes a network call here. */
@@ -127,7 +136,21 @@ export function bootstrap(opts: BootstrapOptions): RuntimeBundle {
   for (const m of allModels) {
     if (modelIsEnabled(m, opts.config)) enabledIds.add(m.id);
   }
-  const enabledModels = allModels.filter((m) => enabledIds.has(m.id));
+  let enabledModels = allModels.filter((m) => enabledIds.has(m.id));
+  // --model <id> pin: filter the registry to a single row. Throws a
+  // typed error if the id doesn't match anything enabled — better than
+  // silently routing to a different model the user didn't ask for.
+  if (opts.pinModelId !== undefined) {
+    const pinned = enabledModels.filter((m) => m.id === opts.pinModelId);
+    if (pinned.length === 0) {
+      throw new Error(
+        `--model '${opts.pinModelId}' did not match any enabled model. Enabled ids: ${
+          enabledModels.map((m) => m.id).slice(0, 8).join(', ') || '(none)'
+        }${enabledModels.length > 8 ? ` (+${enabledModels.length - 8} more)` : ''}`,
+      );
+    }
+    enabledModels = pinned;
+  }
   const modelRegistry = createModelRegistry(enabledModels);
 
   // Adapters. Register them only when at least one enabled model uses them.
@@ -189,22 +212,118 @@ export function bootstrap(opts: BootstrapOptions): RuntimeBundle {
 }
 
 /**
- * Async variant of `bootstrap` that auto-wires a `PostgresRunStore` when
- * `cfg.databaseUrl` is non-empty. Falls back to the in-memory path
- * otherwise. The CLI's `run` command goes through this so persistence
- * is automatic when the user has `DATABASE_URL` set.
+ * Async variant of `bootstrap` that:
  *
- * The store is built via `@aldo-ai/storage`'s `fromDatabaseUrl`, which
- * picks the right driver (pg / Neon / pglite) from the URL — agents
- * never see the driver name.
+ *  - Auto-wires a `PostgresRunStore` when `cfg.databaseUrl` is non-empty
+ *    (falls back to the in-memory path otherwise). The store is built
+ *    via `@aldo-ai/storage`'s `fromDatabaseUrl`, which picks the right
+ *    driver (pg / Neon / pglite) from the URL — agents never see the
+ *    driver name.
+ *
+ *  - Merges live local-discovery output (Ollama / vLLM / llama.cpp /
+ *    LM Studio / MLX) into the gateway model registry alongside the
+ *    YAML catalog rows, mirroring `apps/api/src/runtime-bootstrap.ts`.
+ *    Without this, `aldo run` could only route to catalog rows; an
+ *    operator running e.g. LM Studio with a model the catalog doesn't
+ *    list would fail "no eligible model" even though the model is
+ *    sitting on localhost. Catalog rows still win on id collision so
+ *    explicit YAML stays authoritative.
+ *
+ *    Discovery is opt-in via `ALDO_LOCAL_DISCOVERY=<sources>` (e.g.
+ *    `ollama` or `ollama,lmstudio`). Unset = no discovery; the legacy
+ *    catalog-only behaviour.
+ *
+ * The CLI's `run` command goes through this so persistence + discovery
+ * are automatic.
  */
 export async function bootstrapAsync(opts: BootstrapOptions): Promise<RuntimeBundle> {
-  const cfgUrl = opts.config.databaseUrl;
-  if (opts.runStore !== undefined || cfgUrl === undefined || cfgUrl.length === 0) {
-    return bootstrap(opts);
+  // 1. Discovery merge (independent of run-store wiring).
+  const merged = await mergeLocalDiscoveryIntoOpts(opts);
+
+  // 2. Run store auto-wire.
+  const cfgUrl = merged.config.databaseUrl;
+  if (merged.runStore !== undefined || cfgUrl === undefined || cfgUrl.length === 0) {
+    return bootstrap(merged);
   }
   const runStore = await createDefaultRunStore(cfgUrl);
-  return bootstrap({ ...opts, runStore });
+  return bootstrap({ ...merged, runStore });
+}
+
+/**
+ * Internal helper. Probes the operator's local LLM engines via
+ * `@aldo-ai/local-discovery`, projects each discovered model into the
+ * shape the gateway's catalog YAML produces, and writes a temp models
+ * file that contains the original catalog ∪ discovered rows (catalog
+ * wins on id collision). Returns the same opts with `modelsYamlPath`
+ * pointed at the merged file. No-op when discovery isn't configured.
+ *
+ * Why the temp-file approach: `bootstrap()` reads from a single YAML
+ * path and can't take a hand-built `RegisteredModel[]`. Generating a
+ * temp file keeps `bootstrap()` unchanged and keeps every other
+ * caller (tests, `aldo agents check`) on the same path. The temp file
+ * lives for the process lifetime and is cleaned up on exit.
+ */
+async function mergeLocalDiscoveryIntoOpts(opts: BootstrapOptions): Promise<BootstrapOptions> {
+  const raw = process.env.ALDO_LOCAL_DISCOVERY;
+  if (raw === undefined || raw.trim() === '') return opts;
+
+  let discovered: readonly RegisteredModel[] = [];
+  try {
+    const { discover, parseDiscoverySources } = await import('@aldo-ai/local-discovery');
+    const sources = parseDiscoverySources(raw);
+    if (sources.length === 0) return opts;
+    const baseUrls: Record<string, string> = {};
+    if (process.env.OLLAMA_BASE_URL) baseUrls.ollama = process.env.OLLAMA_BASE_URL;
+    if (process.env.LM_STUDIO_BASE_URL) baseUrls.lmstudio = process.env.LM_STUDIO_BASE_URL;
+    if (process.env.VLLM_BASE_URL) baseUrls.vllm = process.env.VLLM_BASE_URL;
+    if (process.env.LLAMACPP_BASE_URL) baseUrls.llamacpp = process.env.LLAMACPP_BASE_URL;
+    const probed = await discover({
+      sources,
+      baseUrls: baseUrls as Partial<Readonly<Record<typeof sources[number], string>>>,
+    });
+    // Strip discovery-only fields the YAML schema doesn't carry.
+    discovered = probed.map((d) => {
+      const { source: _src, discoveredAt: _at, ...row } = d;
+      void _src;
+      void _at;
+      return row as unknown as RegisteredModel;
+    });
+  } catch {
+    // Discovery failures degrade to catalog-only — better than failing
+    // the whole bootstrap because a probe timed out.
+    return opts;
+  }
+  if (discovered.length === 0) return opts;
+
+  // Read the catalog the operator already pointed at (or the default).
+  const baseYamlPath = opts.modelsYamlPath ?? defaultModelsYamlPath();
+  const baseText = await import('node:fs/promises').then((m) => m.readFile(baseYamlPath, 'utf8'));
+  const catalogModels = parseModelsYaml(baseText);
+  const catalogIds = new Set(catalogModels.map((m) => m.id));
+  const merged: RegisteredModel[] = [
+    ...catalogModels,
+    ...discovered.filter((d) => !catalogIds.has(d.id)),
+  ];
+
+  // Write merged rows to a temp YAML so `bootstrap()` (which reads a
+  // path) sees the union. Order: discovered rows come AFTER catalog
+  // rows so the router's stable ordering keeps catalog rows
+  // first-pick when both serve the same capability class — matches
+  // the API's "catalog-first" merge semantics.
+  const yaml = await import('yaml').then((m) => m);
+  const out = yaml.stringify({
+    apiVersion: 'aldo/models.v1',
+    kind: 'ModelCatalog',
+    models: merged,
+  });
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const os = await import('node:os');
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aldo-cli-merged-models-'));
+  const tmpPath = path.join(tmpDir, 'models.yaml');
+  await fs.writeFile(tmpPath, out, 'utf8');
+
+  return { ...opts, modelsYamlPath: tmpPath };
 }
 
 /**

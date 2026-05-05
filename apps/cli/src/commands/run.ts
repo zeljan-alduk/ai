@@ -32,7 +32,7 @@ import type {
   ToolResultPart,
   UsageRecord,
 } from '@aldo-ai/types';
-import { type RuntimeBundle, bootstrap } from '../bootstrap.js';
+import { type RuntimeBundle, bootstrap, bootstrapAsync } from '../bootstrap.js';
 import { type Config, ProviderNotEnabledError, findProvider, loadConfig } from '../config.js';
 import type { CliIO } from '../io.js';
 import {
@@ -145,10 +145,18 @@ export async function runRun(
   // Step 3: bootstrap.
   let bundle: RuntimeBundle;
   try {
-    bundle = (hooks.bootstrap ?? bootstrap)({
+    // Use bootstrapAsync so live local-discovery + auto-wired RunStore
+    // both fire when their env signals are set. Tests inject a sync
+    // override via `hooks.bootstrap` and skip the async layer.
+    const bootstrapOpts = {
       config: cfg,
       ...(opts.modelsYamlPath !== undefined ? { modelsYamlPath: opts.modelsYamlPath } : {}),
-    });
+      ...(opts.model !== undefined ? { pinModelId: opts.model } : {}),
+    };
+    bundle =
+      hooks.bootstrap !== undefined
+        ? hooks.bootstrap(bootstrapOpts)
+        : await bootstrapAsync(bootstrapOpts);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     writeErr(io, `error: bootstrap failed: ${msg}`);
