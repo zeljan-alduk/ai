@@ -65,6 +65,11 @@ const MARKETING_PATHS: ReadonlyArray<string> = [
   '/sales',
   '/vs',
   '/status',
+  // The hero "Scan local models" CTA — public, marketing-style page.
+  // Lives under `(marketing)/local-models/`; this entry suppresses
+  // the authenticated sidebar in the root layout so the marketing
+  // top nav + footer take over.
+  '/local-models',
 ];
 
 function isMarketingPath(pathname: string): boolean {

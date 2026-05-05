@@ -6747,3 +6747,47 @@ updated to use `127.0.0.1` instead of `fake.local` since the new
 guard rejects unresolvable hostnames.
 
 Final: web 383 / API 580 / discovery 101 / bench-suite 7 — all green.
+
+----------------------------------------
+2026-05-06 00:20 UTC — agent (claude opus 4.7) — /local-models is now actually-public marketing-style
+
+Three earlier commits opened the route guards (web middleware + API
+allow-list + SSRF guard), but the page was still inside the
+authenticated app shell — the root layout was rendering the Sidebar
+(with its login-gated links) around the page content, so an
+unauth'd visitor saw a half-broken authenticated chrome.
+
+Three fixes:
+
+(1) Moved `app/local-models/page.tsx` → `app/(marketing)/local-models/
+    page.tsx`. The `(marketing)` route group has its own layout
+    (top nav + footer, no sidebar), so the page now inherits the
+    marketing chrome.
+
+(2) Added `/local-models` to the root layout's `MARKETING_PATHS`
+    list so `isChromelessPath()` returns true. This short-circuits
+    `loadSidebarUser()` and the sidebar render entirely — the root
+    layout becomes a pass-through wrapper, and the marketing
+    layout's chrome takes over.
+
+(3) Rewrote the page itself in marketing style: centered hero,
+    "Public demo · no signup" eyebrow, big H1, descriptive subhead,
+    then `<LocalModelsShell />`. Replaced the authenticated-app
+    `PageHeader` component (which assumes the sidebar layout). Added
+    a footer hint pointing at the CLI command + the docs guide.
+
+(4) Removed the `Local models` entry from the authenticated-app
+    sidebar — it was added in an earlier commit but a marketing
+    surface doesn't belong in the in-app navigation.
+
+Now an unauth'd click on the hero "Scan local models" button:
+ - middleware passes (in PUBLIC_BOUNDED).
+ - root layout sees isChromelessPath('/local-models') = true →
+   renders children directly with no sidebar fetch, no Sidebar.
+ - (marketing) layout wraps with MarketingTopNav + MarketingFooter.
+ - page renders the centered hero + LocalModelsShell.
+ - shell's API calls (/v1/models/discover etc.) are on the API
+   allow-list and the auth-proxy passes through with no bearer.
+
+Tests stay green: web 383, API 580 (the SSRF + public-allow-list
+suite from the previous commit still covers the API side).
