@@ -41,6 +41,18 @@ export interface Config {
   readonly runUsdCap?: number;
   /** Postgres URL if the environment has one (engineer B reads this; we just discover it). */
   readonly databaseUrl?: string;
+  /**
+   * MISSING_PIECES §14-A — hybrid CLI. When set, `aldo run` can delegate
+   * runs that need cloud-tier capabilities to the hosted control plane
+   * instead of failing locally. Both pieces are env-driven so dev
+   * never accidentally ships a hosted credential.
+   *   ALDO_API_URL    — base URL (defaults to https://ai.aldo.tech).
+   *   ALDO_API_TOKEN  — bearer api key minted at /settings/api-keys.
+   * `hostedEnabled` is `true` only when both are present.
+   */
+  readonly hostedApiUrl?: string;
+  readonly hostedApiToken?: string;
+  readonly hostedEnabled: boolean;
   /** Where we discovered values; useful for error messages. */
   readonly sources: readonly string[];
 }
@@ -102,11 +114,21 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
 
   const databaseUrl = nonEmpty(env.DATABASE_URL);
 
+  // §14-A — hybrid mode. Both pieces must be present for the CLI to
+  // consider delegating; either-only is a misconfiguration that we
+  // surface explicitly when the user asks for `--hosted`.
+  const hostedApiUrl = nonEmpty(env.ALDO_API_URL) ?? 'https://ai.aldo.tech';
+  const hostedApiToken = nonEmpty(env.ALDO_API_TOKEN);
+  const hostedEnabled = hostedApiToken !== undefined;
+
   return {
     providers,
     defaultPrivacy,
     ...(runUsdCap !== undefined ? { runUsdCap } : {}),
     ...(databaseUrl !== undefined ? { databaseUrl } : {}),
+    hostedApiUrl,
+    ...(hostedApiToken !== undefined ? { hostedApiToken } : {}),
+    hostedEnabled,
     sources,
   };
 }

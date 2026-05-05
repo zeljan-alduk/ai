@@ -5770,3 +5770,45 @@ Verification:
 Net of this turn: harness can now find what's wrong rather than crash on its own gaps; budget cap protects unsupervised runs from overnight runaway spend. Supervisor + iterative-run pre-step hooks deferred to a follow-up — the API-boundary check stops *new* runs but doesn't terminate in-flight ones. POST /v1/runs is the highest-leverage gate (every run starts there); follow-up adds the same check inside the iterative loop's pre-step termination predicate so a stuck run also stops.
 
 Next: §14-A Hybrid CLI (apps/cli) — local-only agents run locally, cloud agents delegate to hosted ai.aldo.tech.
+
+2026-05-05T18:29Z — engineer (claude opus 4.7, 1M ctx) — §14-A Hybrid CLI shipped.
+
+`aldo run` now decides local-vs-hosted based on a pure routing helper that compares the agent's required capability classes against what local-discovery says is reachable. `--route hosted|local` overrides; default `auto`.
+
+apps/cli/src/config.ts:
+- New Config fields: `hostedApiUrl` (default 'https://ai.aldo.tech', overridable via ALDO_API_URL), `hostedApiToken` (ALDO_API_TOKEN), `hostedEnabled` (true iff token set). Both are env-driven so dev never accidentally ships a hosted credential.
+
+apps/cli/src/lib/routing-decision.ts (new):
+- Pure `decideRouting(inputs)` — no env, no network, no provider touch.
+- Decision rules in order:
+  1. `--hosted` wins (errors if no token).
+  2. `--local` wins (gateway downstream rejects unrouteable later).
+  3. Auto: if any local capability class satisfies primary or any fallback → local. Empty probe set → local (preserves pre-§14-A behaviour for callers that opt out of probing). Otherwise hosted (if token), else error with hint.
+- `collectRequiredCapabilityClasses(spec)` exported for downstream UI use.
+
+apps/cli/src/lib/hosted-runner.ts (new):
+- Thin REST wrapper around POST /v1/runs + GET /v1/runs/:id polling. v0 polls; SSE wiring deferred (would need new API endpoint).
+- `HostedDispatchError` (4xx with code envelope), `HostedRunTimeoutError` (terminal status not reached in maxWaitMs).
+- Transient poll errors (non-200 GETs) log to stderr but don't kill the run.
+
+apps/cli/src/commands/run.ts:
+- New RunOptions.route: 'auto' | 'local' | 'hosted'; new RunHooks.hostedRunner + .probeLocalCapabilityClasses test seams.
+- Step 5.5 routing decision inserted between budget cap + dry-run. error → exit 1; hosted → runHosted(); local → existing path.
+- `runHosted()`: dispatches via hosted runner, prints final RunDetail in same shape (text or JSON) as local.
+- `defaultProbeLocalCapabilityClasses()`: respects "no `ALDO_LOCAL_DISCOVERY` set = empty set" so existing tests don't accidentally hit the dev-host's Ollama. Fires real probe when user opts in.
+
+apps/cli/src/cli.ts:
+- New `--route <mode>` option on `run <agent>` with `auto|local|hosted` enum and `auto` default.
+
+Tests:
+- tests/routing-decision.test.ts (9): every override + auto-mode rule.
+- tests/hosted-runner.test.ts (5): dispatch ok / 4xx error / queued→running→completed polling / timeout / transient poll error survives.
+- tests/run-hybrid.test.ts (4): --route hosted no-token → typed error; --route hosted with stub dispatch; auto local-satisfied → gateway invoked + dispatch NOT called; auto mismatch → hosted dispatched.
+
+Verification:
+- @aldo-ai/cli: 202/202 tests pass + 1 skipped, +18 new §14-A tests (was 184 baseline). 1 pre-existing unrelated failure on `mcp ls` stub stays — confirmed by stashing changes and re-running.
+- Typecheck clean.
+
+Net: a user with local Ollama + an ALDO_API_TOKEN can now `aldo run principal` and get the right dispatch automatically. Local-only agents stay local; cloud-tier agents delegate to ai.aldo.tech. The agency primitive is now reachable from a user's laptop without re-implementing the orchestrator on the client side.
+
+Next: §14-B NotificationFanOut + Telegram + Email — approval-from-anywhere channels for unsupervised runs.

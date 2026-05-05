@@ -255,6 +255,14 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
     .addOption(new Option('--model <name>', 'model override').hideHelp(false))
     .option('--json', 'emit final result as JSON instead of streaming text', false)
     .option('--dry-run', 'print the chosen model + estimate; do not call the provider', false)
+    .addOption(
+      new Option(
+        '--route <mode>',
+        'auto | local | hosted (§14-A hybrid CLI; default auto)',
+      )
+        .choices(['auto', 'local', 'hosted'])
+        .default('auto'),
+    )
     .action(
       (
         agentName: string,
@@ -264,6 +272,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
           model?: string;
           json?: boolean;
           dryRun?: boolean;
+          route?: 'auto' | 'local' | 'hosted';
         },
       ) => {
         action = () =>
@@ -275,6 +284,7 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               ...(o.model !== undefined ? { model: o.model } : {}),
               json: o.json === true,
               dryRun: o.dryRun === true,
+              route: o.route ?? 'auto',
             },
             io,
           );

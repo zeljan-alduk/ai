@@ -35,6 +35,16 @@ import type {
 import { type RuntimeBundle, bootstrap } from '../bootstrap.js';
 import { type Config, ProviderNotEnabledError, findProvider, loadConfig } from '../config.js';
 import type { CliIO } from '../io.js';
+import {
+  type HostedRunnerConfig,
+  type HostedRunOptions,
+  runOnHostedApi,
+} from '../lib/hosted-runner.js';
+import {
+  type RoutingOverride,
+  collectRequiredCapabilityClasses,
+  decideRouting,
+} from '../lib/routing-decision.js';
 import { writeErr, writeJson, writeLine } from '../io.js';
 
 export interface RunOptions {
@@ -43,6 +53,12 @@ export interface RunOptions {
   readonly model?: string;
   readonly json?: boolean;
   readonly dryRun?: boolean;
+  /**
+   * MISSING_PIECES §14-A — hybrid CLI override. `auto` (default)
+   * runs locally when a local model can serve the agent, otherwise
+   * delegates to the hosted plane. `local`/`hosted` force the side.
+   */
+  readonly route?: RoutingOverride;
 }
 
 export interface RunHooks {
@@ -52,6 +68,17 @@ export interface RunHooks {
   readonly loadConfig?: typeof loadConfig;
   /** Test seam: where to look for `agents/<name>.yaml`. Defaults to CWD. */
   readonly agentsDir?: string;
+  /**
+   * Test seam: override the hosted runner so we can simulate a remote
+   * dispatch without opening a network connection.
+   */
+  readonly hostedRunner?: typeof runOnHostedApi;
+  /**
+   * Test seam: override the local-discovery probe used to derive the
+   * `localCapabilityClasses` set for the routing decision. Defaults
+   * to the real probe.
+   */
+  readonly probeLocalCapabilityClasses?: (cfg: Config) => Promise<ReadonlySet<string>>;
 }
 
 /**
@@ -132,6 +159,38 @@ export async function runRun(
     spec = withCappedBudget(spec, cfg.runUsdCap);
   }
 
+  // Step 5.5: §14-A hybrid CLI routing decision. Local first when
+  // a local model can serve the agent's capability class (or any of
+  // its fallbacks). Otherwise delegate to the hosted plane when
+  // ALDO_API_TOKEN is set. `--route hosted|local` forces a side and
+  // surfaces a typed error when that side can't serve the request.
+  const override: RoutingOverride = opts.route ?? 'auto';
+  const probeLocalClasses =
+    hooks.probeLocalCapabilityClasses ?? defaultProbeLocalCapabilityClasses;
+  const localClasses = await probeLocalClasses(cfg);
+  const decision = decideRouting({
+    spec,
+    localCapabilityClasses: localClasses as ReadonlySet<
+      AgentSpec['modelPolicy']['primary']['capabilityClass']
+    >,
+    hostedEnabled: cfg.hostedEnabled,
+    override,
+  });
+  if (decision.mode === 'error') {
+    writeErr(io, `error: ${decision.reason}`);
+    return 1;
+  }
+  if (decision.mode === 'hosted') {
+    if (opts.dryRun === true) {
+      writeLine(
+        io,
+        `dry-run: would dispatch '${spec.identity.name}' to hosted ${cfg.hostedApiUrl ?? '(unset)'} (${decision.reason})`,
+      );
+      return 0;
+    }
+    return runHosted(spec, inputs, cfg, opts, hooks, io);
+  }
+
   // Step 6: --dry-run path. Choose a model via the router, print, exit.
   if (opts.dryRun === true) {
     return runDryRun(bundle, spec, io);
@@ -194,6 +253,146 @@ export async function runRun(
   }
 
   return ok ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------
+// hybrid runner — §14-A
+
+async function runHosted(
+  spec: AgentSpec,
+  inputs: unknown,
+  cfg: Config,
+  opts: RunOptions,
+  hooks: RunHooks,
+  io: CliIO,
+): Promise<number> {
+  if (cfg.hostedApiToken === undefined || cfg.hostedApiUrl === undefined) {
+    writeErr(
+      io,
+      'error: hosted dispatch requires both ALDO_API_URL and ALDO_API_TOKEN. Mint a key at https://ai.aldo.tech/settings/api-keys.',
+    );
+    return 1;
+  }
+  const startedAt = Date.now();
+  const dispatch = hooks.hostedRunner ?? runOnHostedApi;
+  const hostedCfg: HostedRunnerConfig = {
+    baseUrl: cfg.hostedApiUrl,
+    token: cfg.hostedApiToken,
+  };
+  const hostedOpts: HostedRunOptions = {
+    agentName: spec.identity.name,
+    agentVersion: spec.identity.version,
+    inputs,
+    verbose: opts.json !== true,
+  };
+  try {
+    const detail = await dispatch(hostedCfg, hostedOpts, io);
+    const elapsedMs = Date.now() - startedAt;
+    const usage = aggregateUsage(detail.usage);
+    const finalOutput = lastAssistantText(detail) ?? '';
+    const ok = detail.status === 'completed';
+    if (opts.json === true) {
+      writeJson(io, {
+        ok,
+        output: finalOutput,
+        ...(usage !== undefined ? { usage } : {}),
+        ...(usage?.model !== undefined ? { model: usage.model } : {}),
+        elapsedMs,
+        runId: detail.id,
+        route: 'hosted',
+      });
+    } else {
+      const usd = usage?.usd ?? 0;
+      const model = usage?.model ?? 'unknown';
+      writeLine(io, `\nhosted run ${detail.id}: ${detail.status}`);
+      writeLine(io, `done in ${elapsedMs}ms, $${formatUsd(usd)} on ${model}`);
+    }
+    return ok ? 0 : 1;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    writeErr(io, `error: hosted dispatch failed: ${msg}`);
+    return 1;
+  }
+}
+
+function aggregateUsage(rows: ReadonlyArray<{
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+  readonly usd: number;
+  readonly model: string;
+}>): { tokensIn: number; tokensOut: number; usd: number; model: string } | undefined {
+  if (rows.length === 0) return undefined;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let usd = 0;
+  // Last row's model wins — the run-detail array is ordered; the
+  // final model is the most recently invoked.
+  let model = rows[rows.length - 1]?.model ?? 'unknown';
+  for (const r of rows) {
+    tokensIn += r.tokensIn;
+    tokensOut += r.tokensOut;
+    usd += r.usd;
+    model = r.model;
+  }
+  return { tokensIn, tokensOut, usd, model };
+}
+
+function lastAssistantText(detail: {
+  readonly events: ReadonlyArray<{ readonly type: string; readonly payload?: unknown }>;
+}): string | undefined {
+  for (let i = detail.events.length - 1; i >= 0; i--) {
+    const ev = detail.events[i];
+    if (ev === undefined) continue;
+    if (ev.type === 'run.completed') {
+      const p = (ev.payload ?? {}) as { output?: unknown };
+      if (typeof p.output === 'string' && p.output.length > 0) return p.output;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Default local-discovery probe — wraps `@aldo-ai/local-discovery` so
+ * the routing decision can compare against what's actually reachable.
+ * Returns the SET of capabilityClass strings any locally-loaded model
+ * advertises. Empty when nothing local is up.
+ *
+ * Hybrid CLI semantics: if the user hasn't explicitly opted into
+ * discovery via `ALDO_LOCAL_DISCOVERY`, we return an empty set so
+ * `decideRouting` falls through to local execution (preserving the
+ * pre-§14-A behaviour). The probe still fires when the user opts in
+ * (e.g. `ALDO_LOCAL_DISCOVERY=ollama`) — that's when the routing
+ * decision can confidently delegate cloud-tier agents to hosted.
+ */
+async function defaultProbeLocalCapabilityClasses(
+  _cfg: Config,
+): Promise<ReadonlySet<string>> {
+  const raw = process.env.ALDO_LOCAL_DISCOVERY;
+  if (raw === undefined || raw.trim() === '') return new Set();
+  try {
+    const { discover, parseDiscoverySources } = await import('@aldo-ai/local-discovery');
+    const sources = parseDiscoverySources(raw);
+    if (sources.length === 0) return new Set();
+    const baseUrls: Record<string, string> = {};
+    if (process.env.OLLAMA_BASE_URL) baseUrls.ollama = process.env.OLLAMA_BASE_URL;
+    if (process.env.LM_STUDIO_BASE_URL) baseUrls.lmstudio = process.env.LM_STUDIO_BASE_URL;
+    if (process.env.VLLM_BASE_URL) baseUrls.vllm = process.env.VLLM_BASE_URL;
+    if (process.env.LLAMACPP_BASE_URL) baseUrls.llamacpp = process.env.LLAMACPP_BASE_URL;
+    const discovered = await discover({
+      sources,
+      baseUrls: baseUrls as Partial<Readonly<Record<typeof sources[number], string>>>,
+    });
+    const out = new Set<string>();
+    for (const m of discovered) {
+      if (m.capabilityClass !== undefined) out.add(m.capabilityClass);
+    }
+    return out;
+  } catch {
+    // Discovery failures degrade to "no local capability classes",
+    // which steers the router to hosted (when available) or to a
+    // typed error explaining what to set.
+    return new Set();
+  }
 }
 
 // ---------------------------------------------------------------------------
