@@ -59,6 +59,58 @@ const ENTRIES: ReadonlyArray<Entry> = [
   {
     date: '2026-05-05',
     tag: 'platform',
+    title: 'aldo code — peer parity with Claude Code / Codex / Aider',
+    body:
+      'Eight new features across two commits land aldo CLI peer-of-Claude-Code: ' +
+      '`@path` inline file references (every `@<relative-path>` in a brief expands ' +
+      'to a fenced block with the file body — refuses absolute paths and `..` ' +
+      'traversal, marks binary + oversize files), `/diff` (unified diff of session-' +
+      'modified files via `git diff`), `/plan` + `/go` (the next turn drafts a ' +
+      'numbered plan with no tool calls; `/go` clears the flag), status line ' +
+      'with branch + plan-mode + model + cost, persistent shell session ' +
+      '(`shell.cd` / `shell.pwd` / `shell.export` / `shell.unset` / `shell.env` — ' +
+      'a subsequent `shell.exec` inherits the cwd + env, the way humans expect a ' +
+      'shell to work), `/web <url>` (fetch + HTML strip + 256 KB cap into a system ' +
+      'entry), `/mcp` (lists every tool the session has access to, grouped by ' +
+      'server), `/task <agent> <brief>` (dispatches a focused subagent through ' +
+      'the same supervisor as the main run), and a hooks system (' +
+      '`~/.aldo/hooks.json` + `<workspace>/.aldo/hooks.json` with preRun / postRun ' +
+      '/ preTool / postTool entries, env-injected ALDO_RUN_ID + ALDO_TOOL_NAME + ' +
+      'ALDO_TOOL_ARGS_JSON + ALDO_TOOL_RESULT_JSON, failures log but never tear ' +
+      'down a run). Smoked end-to-end against LM Studio + qwen/qwen3.6-35b-a3b: ' +
+      '`/task` dispatched a subagent that returned a real code review of a ' +
+      '`function add(a,b)` snippet flagging the type-coercion bug; `/plan` ' +
+      'produced a 3-step numbered plan to add `divide(a,b)` to `@sum.ts`. ' +
+      '225/225 cli tests + 1 skipped (was 184 baseline). 29/29 mcp-shell tests ' +
+      '(was 22). Typecheck clean across both packages.',
+  },
+  {
+    date: '2026-05-05',
+    tag: 'platform',
+    title: '`aldo run` + `aldo code` — live local-discovery merge + --model pin',
+    body:
+      'Two real CLI gaps closed. (1) The CLI bootstrap previously loaded only ' +
+      'the YAML catalog; discovered models (Ollama / LM Studio / vLLM / llama.cpp ' +
+      '/ MLX) never reached the gateway registry, so `aldo run` could only route ' +
+      'to catalog rows. apps/api/src/runtime-bootstrap.ts had done the merge for ' +
+      'months — this commit ports the same logic. `aldo run` (and `aldo code`) ' +
+      'now go through `bootstrapAsync`, which probes local-discovery when ' +
+      'ALDO_LOCAL_DISCOVERY is set, projects discovered rows into the ' +
+      'RegisteredModel shape, and merges them with the catalog (catalog wins on ' +
+      'id collision so explicit YAML stays authoritative). (2) `--model <id>` ' +
+      'was parsed but never wired into the runtime — silently ignored. New ' +
+      '`BootstrapOptions.pinModelId` filters the enabled-models list down to a ' +
+      'single id before the registry is built; `aldo run --model X` and ' +
+      '`aldo code --model X` both forward through. Tested end-to-end: ' +
+      '`ALDO_LOCAL_DISCOVERY=lmstudio aldo run qwen-smoke --model ' +
+      'qwen/qwen3.6-35b-a3b --inputs ' + "'{\"task\":\"reply ALIVE\"}'" + ' --json` → ' +
+      '`{"ok":true,"output":"ALIVE","elapsedMs":7287}`. New `--models <path>` ' +
+      'flag on both commands lets an operator filter the catalog when the ' +
+      'shipped one ranks differently than they want.',
+  },
+  {
+    date: '2026-05-05',
+    tag: 'platform',
     title: 'Customer engagement surface — milestones, sign-off, change requests',
     body:
       'New API surface at /v1/engagements. Threads grouped runs by thread_id but lacked ' +

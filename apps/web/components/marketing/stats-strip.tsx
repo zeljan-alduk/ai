@@ -30,7 +30,7 @@ const STATS: ReadonlyArray<{ value: string; label: string; sub?: string }> = [
     sub: 'pages + REST endpoints',
   },
   {
-    value: '1,300+',
+    value: '1,400+',
     label: 'tests in CI',
     sub: 'across 9 packages, green on every push',
   },

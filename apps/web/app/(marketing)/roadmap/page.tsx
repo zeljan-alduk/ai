@@ -50,6 +50,29 @@ const TAG_BADGE: Record<NonNullable<Item['tag']>, string> = {
 
 const NOW: ReadonlyArray<Item> = [
   {
+    tag: 'platform',
+    title: 'preTool / postTool hooks fire from inside the engine dispatch loop',
+    body:
+      "The Wave-CLI hooks system loads `~/.aldo/hooks.json` + `<workspace>/.aldo/hooks.json` and " +
+      'fires preRun / postRun around every TUI turn. preTool and postTool entries are loaded but ' +
+      "don't fire yet — that needs a hook point inside the engine's tool-dispatch loop so we can " +
+      'shell out before/after every tool call without forcing every caller to instrument. The ' +
+      'lib + settings shape are stable; this is a one-engine-PR change.',
+    horizon: 'this week',
+  },
+  {
+    tag: 'platform',
+    title: 'Local-model tool-use coaching for thinking-style models',
+    body:
+      'qwen3.6 / DeepSeek-R1 / similar thinking models reason about which tools to call and then ' +
+      'emit the calls as prose instead of `tool_call` deltas. The aldo CLI infrastructure routes ' +
+      "fine; the system prompt + `tool_choice: \"auto\"` flag in the openai-compat adapter " +
+      "doesn't reliably nudge them to emit structured calls. Two-day fix: stronger system prompt " +
+      'for the iterative loop + an adapter knob for `tool_choice: "required"` when the agent ' +
+      "spec opts in. Captured during the Wave-CLI dogfood against LM Studio.",
+    horizon: 'this week',
+  },
+  {
     tag: 'web',
     title: 'Customer engagement UI — milestones, sign-off, comments',
     body:

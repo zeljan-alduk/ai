@@ -137,7 +137,79 @@ Type `/help` in the TUI for the full list.
 | `/save <path>` | Write the transcript as Markdown to `<path>` (resolves under `--workspace` when relative) |
 | `/model` | Show the active capability class (read-only in v0; mid-session swap is a follow-up) |
 | `/tools` | Show the active tool list |
+| `/diff` | Unified diff of files modified this session via `git diff HEAD -- <paths>`; falls back to a flat path · bytes list when there's no git repo at the workspace root |
+| `/plan` | Toggle plan mode on. The next turn drafts a numbered plan with no tool calls; the agent finishes with the literal `<PLAN_END>` token. The flag auto-clears after that turn lands |
+| `/go` (or `/execute`) | Leave plan mode early. Useful when you opened plan mode by mistake |
+| `/web <url>` (or `/fetch`) | Fetch a URL, strip HTML to plain text, inject the body as a system entry the model sees on the next turn. 256 KB cap, 30 s timeout, http(s) only |
+| `/mcp` | List every connected MCP server + its advertised tools |
+| `/task <agent> <brief>` | Dispatch a focused subagent. Loads `<workspace>/agents/<agent>.yaml`, registers it with the runtime, runs it through the same supervisor as the main session, surfaces its final output as a `[task <name>] …` system entry |
 | `/exit` (or `/quit`, `/q`) | Same as Ctrl+D |
+
+### Inline file references — `@path`
+
+Every `@<relative-path>` token in a brief expands to a fenced code
+block with the file's contents. Mirrors how Claude Code / Aider /
+Codex inject context — the user types `@apps/web/page.tsx fix the
+layout` and the LLM sees the file body inline without a tool call.
+
+Refusals: absolute paths (skipped, leaves the token); `..` traversal
+(skipped); missing files (`[skipped: not found]`); binary files
+(`[skipped: binary, N bytes]`); files larger than 64 KB (truncated
+with a tail marker). The token boundary stops short of trailing
+punctuation so `see @hello.ts.` parses as the file token plus a
+period — no path-greedy matches.
+
+## Persistent shell session
+
+The `aldo-shell` MCP server tracks **per-process cwd + env** state.
+Five new tools (in addition to `shell.exec`):
+
+| Tool | Effect |
+|---|---|
+| `shell.cd <path>` | Change the session cwd. Subsequent `shell.exec` calls without an explicit `cwd` arg inherit this directory |
+| `shell.pwd` | Read the session cwd. Returns `null` when no `cd` has been called yet |
+| `shell.export {pairs}` | Merge env vars onto the session env. Subsequent `shell.exec` calls inherit them |
+| `shell.unset {keys}` | Remove session env vars by name |
+| `shell.env` | Return the session env (vars set via `shell.export` — NOT the full host process.env) |
+
+Default coding kit: `shell.exec` + `shell.cd` + `shell.pwd`. The
+other three (`export` / `unset` / `env`) are in the allowlist but
+opt-in via `--tools` — too niche for the hot path.
+
+## Lifecycle hooks
+
+Drop a `hooks.json` at one of two paths to fire shell scripts at
+run + tool boundaries:
+
+- `~/.aldo/hooks.json` — user-global
+- `<workspace>/.aldo/hooks.json` — project-local (wins on conflict)
+
+Shape:
+
+```json
+{
+  "preRun":  ["echo starting run $ALDO_RUN_ID"],
+  "postRun": ["pnpm test"],
+  "preTool":  { "fs.write": ["echo will write $ALDO_TOOL_ARGS_JSON"] },
+  "postTool": { "shell.exec": ["echo ran $ALDO_TOOL_ARGS_JSON"] }
+}
+```
+
+Each entry runs via `sh -c <cmd>` with these env vars injected:
+
+- `ALDO_RUN_ID` — engine run id when known
+- `ALDO_TOOL_NAME` — tool name (preTool / postTool only)
+- `ALDO_TOOL_ARGS_JSON` — JSON-encoded tool args
+- `ALDO_TOOL_RESULT_JSON` — JSON-encoded result (postTool only)
+- `ALDO_WORKSPACE` — workspace root
+
+Failures **log but never propagate** — a flaky pre-commit script
+must not tear down an agent. Matches Claude Code's hook semantics.
+
+v0 wires `preRun` + `postRun` into the TUI's runTurn lifecycle.
+`preTool` + `postTool` are loaded from disk but don't fire yet —
+that needs a hook point inside the engine's tool-dispatch loop
+(captured on the [roadmap](/roadmap)).
 
 ## Resume across sessions
 

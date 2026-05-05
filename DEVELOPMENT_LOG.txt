@@ -6241,3 +6241,36 @@ Net of this turn: ALDO CLI now has every feature the original "as powerful as Cl
 | --model + --models on run + code | apps/cli/src/cli.ts (earlier today) |
 
 Remaining gap (low-leverage, queued): tool-level hooks (preTool + postTool fire today via the lib but the engine doesn't yet have a dispatch-time hook point; once that's wired the hooks runtime fires automatically because the loadHooks already populates those maps).
+
+2026-05-05T20:30Z — engineer (claude opus 4.7, 1M ctx) — public surfaces updated for Wave-CLI.
+
+Customer-facing docs + landing copy + roadmap + changelog all reflect the Wave-CLI work (everything that landed after Wave-Agency: live-discovery merge, --model pin, @path / /diff / /plan / /go, status line branch+plan, persistent shell, /web / /mcp / /task, hooks, ACL expansion).
+
+apps/web/app/(marketing)/changelog/page.tsx:
+- Two new entries dated 2026-05-05 prepended at the top: (a) "aldo code — peer parity with Claude Code / Codex / Aider" describes every feature shipped in commits b08a7be + c205e2c + 31e04a1 plus the smoke results against LM Studio + qwen3.6; (b) "aldo run + aldo code — live local-discovery merge + --model pin" describes commits 5fad5d5 + a43fd44 with the exact end-to-end smoke output.
+
+apps/web/app/(marketing)/roadmap/page.tsx:
+- Two new "Now" items at the top: preTool/postTool hook point inside the engine dispatch loop (lib + settings shape are stable; one engine PR away), and local-model tool-use coaching (qwen3.6 / DeepSeek-R1 reason about tool calls in prose instead of emitting tool_call deltas — captured during the Wave-CLI dogfood).
+
+apps/web/components/marketing/stats-strip.tsx:
+- Tests 1,300+ → 1,400+ (counts updated for the +30 Wave-CLI tests).
+
+apps/web/components/marketing/five-things.tsx:
+- "+n more in flight" card now leads with "aldo code at peer-of-Claude-Code parity (@path file refs, /diff · /plan · /web · /mcp · /task, persistent shell session, lifecycle hooks)" before the existing wave-agency callouts.
+
+apps/web/content/docs/guides/aldo-code.md:
+- Slash commands table extended with /diff, /plan, /go, /web, /mcp, /task. New "Inline file references — @path" section. New "Persistent shell session" section listing the five new tools + their effects + the default-kit shape (exec + cd + pwd; the other three opt-in via --tools). New "Lifecycle hooks" section with the JSON shape, env vars injected, fail-soft semantics, and an explicit note that preTool/postTool load but don't fire yet (cross-linked to the roadmap follow-up).
+
+ROADMAP.md:
+- New "Wave-CLI — what shipped 2026-05-05" section at the top of the doc; mirrors the in-app roadmap. Lists every shipped item, the smoke results against LM Studio + qwen/qwen3.6-35b-a3b ($0 cost), and the two real follow-ups recorded during dogfood.
+- Header "Last updated" line bumped to "Wave-CLI on top of Wave-Agency".
+
+STATUS.md:
+- New "Wave-CLI (2026-05-05) — what's wired" section near the top (mirrors the same six bullet groups as the roadmap entry but in STATUS-shape). Header "Last updated" line bumped.
+
+Verification:
+- @aldo-ai/web typecheck clean. 382/382 tests pass.
+- docs-search-index builds: 196 entries, 84.2 KB.
+- All edits restricted to user-facing docs, marketing components, and the public roadmap/changelog/STATUS surfaces. No platform behaviour changed in this commit.
+
+Net: a customer (or prospect) reading /changelog, /roadmap, /docs/guides/aldo-code, or the marketing landing today sees the same Wave-CLI parity surface the dev log + commit history do. The gap between "what we built" and "what the public site says we built" is closed for this wave.

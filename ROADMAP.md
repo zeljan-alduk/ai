@@ -1,10 +1,85 @@
 # ALDO AI — ROADMAP
 
 > Prioritized backlog. Ordered by **what unblocks the first paying customer**, not by code-architectural elegance.
-> **Last updated:** 2026-05-05 (Wave-Agency — engagement budget cap + customer engagement surface + hybrid CLI + Telegram/email channels + live:network dogfood)
+> **Last updated:** 2026-05-05 (Wave-CLI on top of Wave-Agency — `aldo code` peer parity with Claude Code / Codex / Aider)
 > **Sibling:** [`STATUS.md`](./STATUS.md) (what's true today) · [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt) (history)
 >
 > Read [`STATUS.md`](./STATUS.md) first. Effort estimates are mine, in elapsed engineering time. Items needing a non-engineering decision (legal, vendor account, customer signature) are flagged ⚠️.
+
+---
+
+## Wave-CLI — what shipped 2026-05-05 (after Wave-Agency)
+
+`aldo code` reaches feature parity with Claude Code / Codex / Aider on
+the key surfaces every modern AI coding tool ships. Five commits on
+top of Wave-Agency; +30 net-new tests across `apps/cli` + `mcp-shell`.
+Every feature was smoked end-to-end against LM Studio + qwen/qwen3.6-35b-a3b.
+
+- [x] **`@path` inline file references** — every `@<relative-path>` in
+  a brief expands to a fenced block with the file body. Refuses
+  absolute paths and `..` traversal; marks binary + oversize files.
+  Wired into both headless and TUI modes.
+- [x] **`/diff` slash command** — unified diff of session-modified
+  files via `git diff --no-color HEAD -- <paths>` + `git status
+  --short`; flat path · bytes fallback when no git repo.
+- [x] **`/plan` + `/go` mode** — the next turn drafts a numbered plan
+  with no tool calls; the user confirms with `/go`. Plan mode
+  auto-clears after the planning turn lands.
+- [x] **Status line: branch + plan-mode** — `[idle] · [PLAN] · ⎇
+  feature/x · model · tokens · USD`. Branch resolved at TUI start
+  via `git rev-parse --abbrev-ref HEAD`.
+- [x] **Persistent shell session** — `aldo-shell` MCP server tracks
+  per-process cwd + env. Five new tools: `shell.cd` / `shell.pwd` /
+  `shell.export` / `shell.unset` / `shell.env`. `shell.exec`
+  inherits both when not explicitly overridden, the way humans
+  expect a shell to work.
+- [x] **`/web <url>` URL fetch** — fetches a URL, strips HTML to
+  plain text, injects the body as a system entry. 256 KB cap,
+  30 s timeout, http(s) only.
+- [x] **`/mcp` discovery** — lists every tool the session has access
+  to, grouped by server.
+- [x] **`/task <agent> <brief>` subagent dispatch** — loads
+  `<workspace>/agents/<agent>.yaml`, registers it, runs it through
+  the same supervisor as the main session.
+- [x] **Lifecycle hooks** — `~/.aldo/hooks.json` + `<workspace>/.aldo
+  /hooks.json` with `preRun` / `postRun` / `preTool` / `postTool`
+  entries. v0 wires `preRun` + `postRun` into the runTurn lifecycle;
+  `preTool` + `postTool` load from disk but don't fire yet (engine-
+  side dispatch hook point is the next chunk).
+- [x] **Live local-discovery merge in CLI bootstrap** — `aldo run` +
+  `aldo code` go through `bootstrapAsync` so Ollama / LM Studio /
+  vLLM / llama.cpp / MLX models merge into the gateway registry
+  alongside catalog rows. Catalog wins on id collision so explicit
+  YAML stays authoritative.
+- [x] **`--model <id>` pin** — filters the registry to a single
+  model id; clean error when the id doesn't match anything enabled.
+  `--models <path>` overrides the catalog YAML entirely.
+
+#### Smoked end-to-end (LM Studio + qwen/qwen3.6-35b-a3b, $0)
+
+- `/task code-reviewer "review function add(a,b){return a+b}"` →
+  qwen3.6 returned a real review flagging the type-coercion bug
+  (`add("2","3")` returns `"23"`), 27 s.
+- `/plan` against `Add divide(a,b) to @sum.ts` → 3-step numbered
+  plan, finished with `<PLAN_END>`, no tool calls fired.
+- `@sample.js` + `@calc.js` inline → model summarised both files
+  correctly without using fs.read.
+- Persistent shell — `cd` then `exec pwd` returned the right
+  directory; `export FOO=bar` then `exec env` showed `FOO=bar`;
+  `cd ..` correctly went up one.
+
+#### Real findings recorded for follow-up
+
+- **`preTool` + `postTool` hooks fire requires an engine PR.** The
+  library + settings shape are stable; one hook point inside the
+  engine's tool-dispatch loop is the missing piece.
+- **Local thinking models reason about tool calls in prose instead
+  of emitting `tool_call` deltas.** qwen3.6 / DeepSeek-R1 / similar
+  describe the calls they would make; the openai-compat adapter's
+  `tool_choice: "auto"` doesn't reliably force structured output.
+  Two-day fix: stronger system prompt for the iterative loop +
+  adapter knob for `tool_choice: "required"` when the agent spec
+  opts in.
 
 ---
 

@@ -1,9 +1,36 @@
 # ALDO AI — STATUS
 
 > Snapshot of what's live, what's wired, and what's known-broken.
-> **Last updated:** 2026-05-05 (Wave-Agency — engagement budget cap + customer engagement surface + hybrid CLI + Telegram/email + live:network dogfood; on top of Wave-Iter)
+> **Last updated:** 2026-05-05 (Wave-CLI — `aldo code` peer parity with Claude Code / Codex / Aider on top of Wave-Agency)
 > **Source of truth for history:** [`DEVELOPMENT_LOG.txt`](./DEVELOPMENT_LOG.txt)
 > **Source of truth for next steps:** [`ROADMAP.md`](./ROADMAP.md)
+
+## Wave-CLI (2026-05-05) — what's wired
+
+`aldo code` reaches Claude Code / Codex / Aider feature parity:
+
+- **`@path` inline file references** — refuses traversal + absolute
+  paths; marks binary + oversize files; works in headless + TUI.
+- **`/diff` · `/plan` + `/go` · `/web` · `/mcp` · `/task`** — six new
+  slash commands. `/task` dispatches a subagent through the same
+  supervisor as the main run. `/web` fetches + HTML-strips a URL
+  into a system entry the model sees on the next turn.
+- **Persistent shell** — `aldo-shell` MCP server tracks per-process
+  cwd + env via five new tools (`shell.cd` / `shell.pwd` /
+  `shell.export` / `shell.unset` / `shell.env`). `shell.exec`
+  inherits both when not explicitly overridden.
+- **Lifecycle hooks** — `~/.aldo/hooks.json` + `<workspace>/.aldo/
+  hooks.json` with `preRun` / `postRun` / `preTool` / `postTool`
+  entries. v0 fires the run-level hooks; tool-level hooks load
+  from disk but need an engine-side dispatch hook point to fire.
+- **Live local-discovery merge** in CLI bootstrap — `aldo run` +
+  `aldo code` see Ollama / LM Studio / vLLM / llama.cpp / MLX
+  models when `ALDO_LOCAL_DISCOVERY` is set.
+- **`--model` pin + `--models` override** — both filter the gateway
+  registry per-invocation.
+- **Status line** — branch + plan-mode + model + tokens + USD.
+
+Smoked end-to-end against LM Studio + qwen/qwen3.6-35b-a3b ($0).
 
 ## Wave-Agency (2026-05-05) — what's wired
 
