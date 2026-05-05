@@ -59,6 +59,7 @@ import { HeroCodeSnippet } from '@/components/marketing/hero-code-snippet';
 import { HeroDashboardCycle } from '@/components/marketing/hero-dashboard-cycle';
 import { HonestComparisonV2 } from '@/components/marketing/honest-comparison-v2';
 import { IterativeLoop } from '@/components/marketing/iterative-loop';
+import { LocalModelRating } from '@/components/marketing/local-model-rating';
 import { McpIntegrations } from '@/components/marketing/mcp-integrations';
 import { NewsletterSignup } from '@/components/marketing/newsletter-signup';
 import { PlatformDemoLoop } from '@/components/marketing/platform-demo-loop';
@@ -103,6 +104,13 @@ export default function HomePage() {
       {/* HOOK ─── what we are, and the promise. */}
       <Hero />
       <TrustStrip />
+
+      {/* DEMO ─── interactive teaser of the /local-models flow.
+          Sits high on the page so a first-time visitor sees the
+          quality × speed loop running before they read past the
+          fold. The animated table is pure CSS keyframes; the real
+          flow lives at /local-models. */}
+      <LocalModelRating />
 
       {/* WHY-UNIQUE ─── the five lines no one else stacks, then the
           one-glance picture of the architecture. */}

@@ -6643,3 +6643,40 @@ api: 574 passed; @aldo-ai/web: 382 passed). The pre-existing
 `mcp ls` test failure in apps/cli/tests/cli.test.ts is unrelated
 and untouched. The pre-existing apps/web-e2e Playwright typecheck
 failure is also unrelated.
+
+----------------------------------------
+2026-05-06 00:05 UTC — agent (claude opus 4.7) — local-model-rating demo section on the marketing landing
+
+User flagged that the discovery + benchmarking work wasn't visible
+on the public landing page. Added a high-fold demo section:
+
+(1) `apps/web/components/marketing/local-model-rating.tsx` — pure-CSS
+    keyframe animation of the /local-models flow. 16-second loop:
+    discovery cards animate in (4 named-probe + 1 port-scan staggered
+    over 0..4s), the selected card glows with the accent ring (4..5s),
+    rating panel "streaming" pill + progress bar fire (5..6s), eight
+    bench rows fill in over the next ~6s, summary footer pops up
+    (13..15s), holds, loops. `prefers-reduced-motion: reduce` collapses
+    to the static end-state. Two CTAs: primary → /local-models (the
+    real interactive page), secondary → /docs/guides/local-models.
+
+(2) Inserted between TrustStrip and FiveThings on the marketing
+    landing — first content section after the hook so a first-time
+    visitor sees the loop running before scrolling past the fold.
+
+(3) Added a `local-models` entry to the marketing section nav rail
+    so the in-page jump-to navigation includes the demo.
+
+(4) `local-model-rating.test.tsx` pins the headline string, both CTA
+    hrefs, the named-probe + port-scan card list, and the 127.0.0.1
+    URL (defends against a future regression that puts `localhost`
+    back into the marketing copy).
+
+(5) New CSS keyframes in `app/globals.css` (`aldo-lmr-*`): card-enter
+    (with per-stage animation-delay), pill-pulse (for the "common"
+    chip), selected (accent-ring on the chosen card), status pill,
+    progress bar, eight numbered row delays (6s..11.95s), summary
+    fade-up. All on a single 16s timeline so the cadence stays
+    coherent across phases.
+
+Tests: 386 passed (4 new). Typecheck clean. Biome clean.
