@@ -6791,3 +6791,69 @@ Now an unauth'd click on the hero "Scan local models" button:
 
 Tests stay green: web 383, API 580 (the SSRF + public-allow-list
 suite from the previous commit still covers the API side).
+
+----------------------------------------
+2026-05-06 00:35 UTC — agent (claude opus 4.7) — /local-models is now browser-direct end-to-end (verified live with chrome MCP)
+
+User: "design and UX could be much better... and it is also non working".
+Verified live with chrome-devtools MCP at https://ai.aldo.tech/local-models:
+ - Old build still served (sidebar chrome, not marketing).
+ - GET /api/auth-proxy/v1/models/discover → 502.
+ - GET /api/auth-proxy/v1/bench/suites → 502.
+ - Architectural truth confirmed: hosted API can't reach the visitor's
+   loopback. The whole API-routed flow was a dead end for cloud users.
+
+Substantial rewrite — page now runs entirely client-side. Six new
+modules, four old ones deleted, lib/api.ts cleaned of unused helpers:
+
+ + components/local-models/builtin-suite.ts        — eight cases + 3
+   prompt fixtures inlined as a static JSON literal (~28 KB bundle).
+ + components/local-models/discovery-direct.ts     — `discoverDirect()`
+   probes Ollama / LM Studio / vLLM / llama.cpp directly via
+   browser fetch with `mode: 'cors'`. `likelyBlocked` flag when
+   every probe failed with `TypeError: Failed to fetch` (CORS or
+   port-closed — browser can't tell which).
+ + components/local-models/evaluator-direct.ts     — browser port of
+   contains / not_contains / regex / exact / json_schema. No server
+   deps; same dialect the platform `evaluateJsonSchema` accepts.
+ + components/local-models/bench-direct.ts         — streams
+   /chat/completions from the browser, captures content +
+   reasoning_content split + usage, scores via evaluator-direct,
+   yields per-case rows. Cancellable via `AbortSignal`.
+ + components/local-models/local-models-shell.tsx  — rewritten state
+   machine: idle → scanning → ready → running → done | error. Two
+   numbered cards (Discover / Rate). Status strip with phase badge,
+   progress bar, rescan + stop controls.
+ + components/local-models/model-grid.tsx          — selectable model
+   cards, per-source palette (Ollama=violet, LM Studio=emerald,
+   vLLM=sky, llama.cpp=amber).
+ + components/local-models/bench-table.tsx         — live results
+   table with placeholder rows, fade-in animations, per-row tok/s
+   sparkline, summary footer with pass-rate threshold colours.
+ + components/local-models/cors-help-panel.tsx     — when the scan
+   `likelyBlocked`, surface a panel with copy-pasteable per-runtime
+   CORS recipes (OLLAMA_ORIGINS=*, LM Studio toggle, vLLM
+   --allowed-origins, llama.cpp --api-cors).
+
+ - components/local-models/{discovery-panel,rating-panel,rating-state}
+   — deleted, superseded by the rewrite above.
+ - lib/api.ts: stripped the `discoverLocalModels` / `scanLocalPorts` /
+   `listBenchSuites` / `DiscoveredModelRow` / `BenchSuiteListEntry`
+   block — all unused now that the page doesn't go through the
+   auth-proxy.
+
+Page itself (`(marketing)/local-models/page.tsx`):
+ - Centred hero with hero-blob gradient (already in globals.css).
+ - "Public demo · runs in your browser · no signup" eyebrow with
+   pulsing dot.
+ - Big H1: "Scan local models. Rate them in seconds." accent on the
+   second line.
+ - Trust pills below: "100% client-side · No API key · Nothing leaves
+   localhost · 8 eval cases · <2 min".
+ - Footer: CLI command preview + link to the docs guide.
+
+Tests: 383 passed (no regressions). Typecheck clean. Biome clean.
+
+The hosted API endpoints + SSRF guard from the earlier "open to public"
+commit stay in place — they're useful for the CLI's auth'd path and
+don't hurt anything when the public surface ignores them.
