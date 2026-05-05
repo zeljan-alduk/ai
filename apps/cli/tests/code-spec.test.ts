@@ -45,7 +45,11 @@ describe('buildCliCodeSpec — defaults', () => {
     const fsServer = spec.tools.mcp.find((m) => m.server === 'aldo-fs');
     expect(fsServer?.allow).toEqual(expect.arrayContaining(['fs.read', 'fs.write']));
     const shellServer = spec.tools.mcp.find((m) => m.server === 'aldo-shell');
-    expect(shellServer?.allow).toEqual(['shell.exec']);
+    // `shell.exec` plus the two persistent-session tools (cd + pwd)
+    // ship in the default coding kit. `shell.export` / `shell.unset`
+    // / `shell.env` are in the allowlist but not the default — too
+    // niche for the hot path.
+    expect(shellServer?.allow).toEqual(expect.arrayContaining(['shell.exec', 'shell.cd', 'shell.pwd']));
   });
 });
 

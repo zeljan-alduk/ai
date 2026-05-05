@@ -28,6 +28,15 @@ const ALLOWED_TOOL_REFS: ReadonlySet<string> = new Set([
   'aldo-fs.fs.stat',
   'aldo-fs.fs.mkdir',
   'aldo-shell.shell.exec',
+  // Persistent-session shell tools (Wave-CLI follow-up). Same MCP
+  // server as shell.exec — exposing the new ones in the default ACL
+  // means the agent can `cd` into a subdirectory and have subsequent
+  // shell.exec calls inherit it, the way a human shell works.
+  'aldo-shell.shell.cd',
+  'aldo-shell.shell.pwd',
+  'aldo-shell.shell.export',
+  'aldo-shell.shell.unset',
+  'aldo-shell.shell.env',
 ]);
 
 /** Default tool set — full coding kit. */
@@ -37,6 +46,8 @@ const DEFAULT_TOOL_REFS: readonly string[] = [
   'aldo-fs.fs.list',
   'aldo-fs.fs.mkdir',
   'aldo-shell.shell.exec',
+  'aldo-shell.shell.cd',
+  'aldo-shell.shell.pwd',
 ];
 
 export const CLI_CODE_SYSTEM_PROMPT = `You are aldo-code, an autonomous TypeScript engineer running inside the user's terminal.
