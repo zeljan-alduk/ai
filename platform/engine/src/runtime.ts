@@ -19,6 +19,12 @@ import { type InternalAgentRun, LeafAgentRun, type SecretArgResolver } from './a
 import { type Checkpointer, InMemoryCheckpointer } from './checkpointer/index.js';
 import type { ApprovalController } from './approval-controller.js';
 import {
+  type TenantBudgetGuard,
+  TenantBudgetExceededError,
+  allowAllTenantBudget,
+  wrapBudgetGuardSafe,
+} from './tenant-budget-guard.js';
+import {
   type HistoryCompressor,
   IterativeAgentRun,
   passThroughCompressor,
@@ -159,6 +165,16 @@ export interface RuntimeDeps {
    * survive process restarts and span multiple replicas.
    */
   readonly approvalController?: ApprovalController;
+  /**
+   * MISSING_PIECES §12.5 — optional tenant-budget guard. Called
+   * before each `spawn()` and at the top of each iterative-run
+   * cycle. When a hard cap has been crossed, `spawn()` throws
+   * `TenantBudgetExceededError` and the iterative loop terminates
+   * with reason `tenant-budget-exhausted`. Absent guard = no check
+   * (preserves pre-§12.5 behaviour for the engine test surface).
+   * Production wires a closure around apps/api's `evaluateTenantBudget`.
+   */
+  readonly tenantBudgetGuard?: TenantBudgetGuard;
 }
 
 /**
@@ -389,6 +405,7 @@ export class PlatformRuntime implements Runtime {
   private readonly notificationSink: NotificationSink | undefined;
   private readonly historyCompressor: HistoryCompressor;
   private readonly approvalController: ApprovalController | undefined;
+  private readonly tenantBudgetGuard: TenantBudgetGuard;
 
   constructor(deps: RuntimeDeps) {
     this.modelGateway = deps.modelGateway;
@@ -406,6 +423,18 @@ export class PlatformRuntime implements Runtime {
     this.notificationSink = deps.notificationSink;
     this.historyCompressor = deps.historyCompressor ?? passThroughCompressor;
     this.approvalController = deps.approvalController;
+    // §12.5 — wrap the guard so a thrown exception inside it never
+    // tears down the run. Default `allowAllTenantBudget` keeps the
+    // pre-§12.5 engine test surface unchanged.
+    this.tenantBudgetGuard =
+      deps.tenantBudgetGuard !== undefined
+        ? wrapBudgetGuardSafe(deps.tenantBudgetGuard)
+        : allowAllTenantBudget;
+  }
+
+  /** Read-only access for orchestrator + iterative-run wiring. */
+  getTenantBudgetGuard(): TenantBudgetGuard {
+    return this.tenantBudgetGuard;
   }
 
   /** Public accessor for the approval controller (used by API routes). */
@@ -448,6 +477,18 @@ export class PlatformRuntime implements Runtime {
   }
 
   async spawn(ref: AgentRef, inputs: unknown, parent?: RunId, opts?: SpawnOpts): Promise<AgentRun> {
+    // §12.5 — refuse to spawn when the tenant has crossed their hard
+    // engagement budget cap. Composite supervisors call spawn() per
+    // child; this guard halts the fan-out before the next leaf is
+    // constructed. The wrap-safe layer above ensures a guard
+    // exception never escalates into a run failure.
+    {
+      const verdict = await this.tenantBudgetGuard(this.tenant);
+      if (!verdict.allowed) {
+        throw new TenantBudgetExceededError(this.tenant, verdict);
+      }
+    }
+
     if (parent !== undefined) {
       // The composite orchestrator spawns children whose names come
       // from the parent's `composite.subagents[]` list — those are
@@ -645,6 +686,8 @@ export class PlatformRuntime implements Runtime {
           ...(this.approvalController !== undefined
             ? { approvalController: this.approvalController }
             : {}),
+          // §12.5 — pre-step guard. Always wired (defaults to allow-all).
+          tenantBudgetGuard: this.tenantBudgetGuard,
         },
         this.historyCompressor,
       );

@@ -89,6 +89,7 @@ import type {
   ValidationResult,
 } from '@aldo-ai/types';
 import type { Deps, Env } from './deps.js';
+import { evaluateTenantBudget } from './tenant-budget-store.js';
 
 export interface RuntimeBundle {
   readonly runtime: PlatformRuntime;
@@ -387,6 +388,22 @@ function finalizeRuntime(deps: Deps, tenantId: string, state: ProviderState): Ru
     // controller is per-tenant per process; multi-replica deployments
     // would swap in a Postgres-backed implementation in a follow-up.
     approvalController: new InMemoryApprovalController(),
+    // MISSING_PIECES §12.5 — in-flight tenant budget guard. Wraps the
+    // store-backed `evaluateTenantBudget` so the engine can refuse to
+    // spawn / continue an iterative cycle when the tenant has crossed
+    // the hard cap. POST /v1/runs is the dispatch gate; this is the
+    // mid-flight gate. The wrap-safe layer in the engine ensures a
+    // transient DB blip degrades to "allow" (we never break a run
+    // because the guard's own query failed).
+    tenantBudgetGuard: async (tid) => {
+      const verdict = await evaluateTenantBudget(deps.db, tid);
+      return {
+        allowed: verdict.allowed,
+        reason: verdict.reason,
+        capUsd: verdict.capUsd,
+        totalUsd: verdict.totalUsd,
+      };
+    },
   });
 
   // Wave-X — wire the composite orchestrator so agents whose specs

@@ -5936,3 +5936,63 @@ Verification:
 - All edits restricted to user-facing docs, marketing components, and the public roadmap/changelog/STATUS surfaces. No platform behaviour changed.
 
 Net: a customer (or a prospect) reading /changelog, /roadmap, or /docs/guides today sees the same Wave-Agency story the dev log does. The gap between "what we built" and "what the public site says we built" is closed.
+
+2026-05-05T19:15Z — engineer (claude opus 4.7, 1M ctx) — in-flight tenant budget-cap termination + frontmatter hotfix for the docs deploy.
+
+Two follow-ups from the Wave-Agency wave that the user noticed needed attention:
+
+(1) Public docs deploy was failing because apps/web/content/docs/guides/hybrid-cli.md had an unquoted YAML summary value containing both backticks and an apostrophe; js-yaml choked during the prebuild docs-search-index step:
+
+  YAMLException: end of the stream or a document separator is expected at line 3, column 10
+    summary: `aldo run` auto-decides local vs hosted based on the agent's required capabilities. ...
+
+That tanked deploy of e15394e and the public /changelog stayed on the previous build (no Wave-Agency entries visible). Hotfix in 555de7b: wrap the summary in double quotes and drop the backticks (the search-index displays plain text anyway). Note: the path-ignore in .github/workflows/deploy-vps.yml skips '**.md' pushes, so the hotfix-only commit DID NOT trigger a redeploy on its own — the redeploy rolls in via this in-flight termination commit (which has TS source changes outside the ignored paths).
+
+(2) In-flight tenant budget-cap termination (the Wave-Agency follow-up most worth shipping next): the Wave-Agency push landed the engagement-level cap at the POST /v1/runs gate. That stops a runaway from being kicked off, but a stuck loop or composite tree that's already running can still burn through the cap. New shipping today:
+
+platform/engine/src/tenant-budget-guard.ts (new):
+- TenantBudgetGuard contract — a pure (tenantId) → Promise<verdict> shape so the engine doesn't take a hard dep on apps/api's SqlClient-backed evaluateTenantBudget.
+- TenantBudgetExceededError typed error for the spawn() throw path.
+- allowAllTenantBudget default (preserves pre-§12.5 engine test surface).
+- wrapBudgetGuardSafe wrapper that catches a thrown guard exception and degrades to "allow" — a transient DB blip must NEVER break a run; the per-run cap and the API-side dispatch gate are still in play.
+
+platform/engine/src/runtime.ts:
+- New optional dep `tenantBudgetGuard?: TenantBudgetGuard` on RuntimeDeps. Always wrapped via wrapBudgetGuardSafe in the constructor.
+- spawn() consults the guard at the very top, before the parent/spawn.allowed check. When a hard cap has been crossed, throws TenantBudgetExceededError so a composite supervisor can't keep fanning out children.
+- The guard is forwarded to IterativeAgentRun via deps so the loop's pre-step check uses the same wrapper.
+- New getTenantBudgetGuard() accessor for orchestrator + tests.
+
+platform/engine/src/iterative-termination.ts:
+- TerminationDecision.reason union extended with `tenant-budget-exhausted`. Distinct from `budget-exhausted` (per-run cap) so dashboards can tell apart "this run finished what it was sent to do and ran out of money" vs "the tenant has crossed the engagement cap; this run was halted mid-flight".
+
+platform/engine/src/iterative-run.ts:
+- New optional dep `tenantBudgetGuard?: TenantBudgetGuard` on IterativeAgentRunDeps.
+- runLoop's for-cycle reads deps.tenantBudgetGuard ?? allowAllTenantBudget. At the TOP of each cycle (before checkpoint + cycle.start), calls the guard. On allowed=false, emits run.terminated_by + run.completed with reason=tenant-budget-exhausted and resolves the doneDeferred with ok:false. The wrap-safe layer in PlatformRuntime ensures a transient guard exception degrades to "allow".
+
+platform/engine/src/index.ts:
+- New exports: TenantBudgetExceededError, allowAllTenantBudget, wrapBudgetGuardSafe, TenantBudgetGuard, TenantBudgetVerdict.
+
+platform/engine/tests/tenant-budget-guard.test.ts (new, 8 tests):
+- spawn() default allows every spawn (pre-§12.5 behaviour preserved).
+- spawn() refuses with TenantBudgetExceededError when guard denies.
+- TenantBudgetExceededError exposes tenantId / capUsd / totalUsd.
+- A guard that throws degrades to "allow" via wrapBudgetGuardSafe (no run failure).
+- allowAllTenantBudget always returns allowed=true.
+- wrapBudgetGuardSafe forwards a clean verdict when inner doesn't throw.
+- Iterative run terminates with reason=tenant-budget-exhausted when guard denies between cycles (cycle 1 pre-check fires first because runAgent dispatches straight into the iterative branch — no spawn() pre-call).
+- Iterative run does NOT terminate on tenant-budget when guard allows every cycle (control case — loop terminates on its own via maxCycles or end-of-stream).
+
+apps/api/src/runtime-bootstrap.ts:
+- New tenantBudgetGuard wired into the per-tenant PlatformRuntime constructor, closing over deps.db. Calls evaluateTenantBudget (the same store the POST /v1/runs gate uses), reshapes the verdict for the engine contract.
+
+Test discovery during implementation: rt.spawn() always builds a LeafAgentRun, never an IterativeAgentRun — the iterative branch lives inside rt.runAgent() (and inside spawn()'s composite recursion via spawnCompositeWrapper). The existing iterative-run.test.ts uses runAgent throughout; a guard test that called spawn() would always go to the leaf path and miss the cycle pre-check entirely. Rewrote my iterative tests to match.
+
+Verification:
+- @aldo-ai/engine: 104/104 tests (was 96; +8 budget guard tests). Typecheck clean.
+- @aldo-ai/api: 568/568 tests + 1 skipped (no regression). Typecheck clean.
+
+Net: a stuck iterative loop or a still-fanning composite tree mid-run now terminates with a typed reason once the tenant crosses the hard cap. The wrap-safe layer means the guard can't break a run when it's having a bad day. Production wires the same evaluateTenantBudget the POST /v1/runs gate uses, so the two checks always agree.
+
+The leaf-non-iterative single-call agent run path doesn't have a step boundary today, so there's no place for the guard to fire mid-run there. That's the only remaining hole in the in-flight check. A non-iterative leaf is bounded by its per-run usdMax cap (which is engine-enforced inside the LeafAgentRun's gateway loop) so the runaway shape is bounded in dollars even without the tenant guard. Adding a leaf-side step boundary is a separate refactor.
+
+Next: live:network harness instrumentation (task #7) so the next dogfood run produces a real signal instead of going silent.

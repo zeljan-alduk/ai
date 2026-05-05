@@ -73,6 +73,10 @@ import {
   type TerminationDecision,
 } from './iterative-termination.js';
 import type { RunStore } from './stores/postgres-run-store.js';
+import {
+  type TenantBudgetGuard,
+  allowAllTenantBudget,
+} from './tenant-budget-guard.js';
 
 export interface IterativeAgentRunDeps {
   readonly modelGateway: ModelGateway;
@@ -92,6 +96,15 @@ export interface IterativeAgentRunDeps {
    * the gate.
    */
   readonly approvalController?: ApprovalController;
+  /**
+   * MISSING_PIECES §12.5 — tenant budget guard. Called at the top of
+   * each cycle. When a hard cap has been crossed, the loop terminates
+   * with reason `tenant-budget-exhausted` (its own termination row,
+   * separate from the per-run `budget-exhausted`). Always wired by the
+   * runtime; defaults to allow-all so existing tests don't need to
+   * opt in.
+   */
+  readonly tenantBudgetGuard?: TenantBudgetGuard;
 }
 
 export interface IterativeAgentRunOptions {
@@ -292,8 +305,42 @@ export class IterativeAgentRun implements InternalAgentRun {
     if (iteration === undefined) return;
 
     try {
+      const budgetGuard: TenantBudgetGuard =
+        this.deps.tenantBudgetGuard ?? allowAllTenantBudget;
       for (let cycle = 1; cycle <= iteration.maxCycles; cycle += 1) {
         if (this.cancelled) return;
+
+        // §12.5 — pre-step tenant-budget check. A stuck loop that's
+        // already running won't go through POST /v1/runs again, so
+        // this is the gate that actually stops a runaway mid-cycle.
+        // The wrap-safe guard installed by PlatformRuntime ensures a
+        // transient DB blip degrades to "allow"; an explicit hard-cap
+        // crossing terminates with a typed reason.
+        const verdict = await budgetGuard(this.tenant);
+        if (!verdict.allowed) {
+          const decision: TerminationDecision = {
+            reason: 'tenant-budget-exhausted',
+            detail: {
+              capUsd: verdict.capUsd ?? 0,
+              totalUsd: verdict.totalUsd,
+              ...(verdict.reason !== null ? { message: verdict.reason } : {}),
+            },
+          };
+          this.emit({ type: 'run.terminated_by', at: now(), payload: decision });
+          this.emit({
+            type: 'run.completed',
+            at: now(),
+            payload: {
+              output: '',
+              finishReason: 'budget',
+              terminatedBy: decision.reason,
+              cycles: cycle - 1,
+            },
+          });
+          this.closeEvents();
+          this.doneDeferred.resolve({ ok: false, output: '' });
+          return;
+        }
 
         await this.checkpoint();
         this.emit({

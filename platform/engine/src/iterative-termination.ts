@@ -48,7 +48,13 @@ export interface TerminationDecision {
     | 'text-includes'
     | 'tool-result'
     | 'budget-exhausted'
-    | 'maxCycles';
+    | 'maxCycles'
+    // MISSING_PIECES §12.5 — pre-step tenant-budget guard fired. Distinct
+    // from `budget-exhausted` (per-run cap) so dashboards can tell the
+    // two apart: one means "this run finished what it was sent to do
+    // and ran out of money", the other means "the tenant has crossed
+    // the engagement cap; this run was halted mid-flight".
+    | 'tenant-budget-exhausted';
   readonly detail: Readonly<Record<string, unknown>>;
 }
 

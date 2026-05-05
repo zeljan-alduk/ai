@@ -41,6 +41,15 @@ export {
   type ApprovalRequest,
 } from './approval-controller.js';
 
+// MISSING_PIECES §12.5 — engine-side tenant budget guard.
+export {
+  TenantBudgetExceededError,
+  allowAllTenantBudget,
+  wrapBudgetGuardSafe,
+  type TenantBudgetGuard,
+  type TenantBudgetVerdict,
+} from './tenant-budget-guard.js';
+
 export {
   PlatformRuntime,
   SpawnNotAllowedError,
