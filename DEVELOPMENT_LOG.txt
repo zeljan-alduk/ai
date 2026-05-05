@@ -6464,3 +6464,32 @@ Honest read of the numbers:
 (5) Aggregate tok/sec at the agency layer is HIGHER than at the single-call layer (~65 vs ~40). That's because the agency runs 5 model calls in parallel where the supervisor allows it (architect's children fan out), so wall-clock-anchored tok/sec is "concurrent throughput" rather than "single inference rate". Useful number for agency capacity planning; misleading number for "is one model fast?".
 
 Numbers reproducible via `BENCH_RUNS=N pnpm exec tsx scripts/bench/<name>.mjs`. README.md documents the env shape.
+
+2026-05-05T22:48Z — engineer (claude opus 4.7, 1M ctx) — `aldo bench` first-class subcommand + local-models docs guide.
+
+Two pieces:
+
+(1) apps/cli/src/commands/bench.ts (new) — `aldo bench` runs three layers:
+- `direct` — raw HTTP to /v1/chat/completions on the discovered baseUrl. Floor / control.
+- `run` — single-shot inference through the gateway via `runtime.runAgent` against a synthetic single-turn agent. Measures the platform's per-call overhead.
+- `code` — one-cycle iterative loop. Spawns `aldo code` headless; parses streamed JSONL.
+
+Flags: `--layers <list>` (default: direct,run,code), `--runs <n>` (default: 3), `--model <id>` (default: first discovered), `--prompt <text>` (default: short BENCH_TOKEN probe), `--max-tokens <n>` (direct only, default: 256), `--json`.
+
+Output is a human table with per-run lines + per-layer averages, or `--json` for machine consumption.
+
+LLM-agnostic: never references a provider; layer 1 walks whatever local-discovery surfaces.
+
+apps/cli/src/cli.ts: wired `aldo bench` between `code` and `dev` in the dispatcher.
+
+Smoked end-to-end against LM Studio + qwen3.6-35b:
+  direct cold: 14.6 s ttft=9.8s tok/s=14.7
+  direct warm: 5.2 s ttft=549ms tok/s=41.0
+  run    in-process: total=6.4s bootstrap=46ms model=6.35s
+The in-process `run` layer reveals platform overhead is ~46ms (no TSX startup tax — already inside tsx). The 400ms+ overhead in scripts/bench/aldo-run.mjs was almost entirely TSX import-graph startup.
+
+(2) apps/web/content/docs/guides/local-models.md (new) — top-level local-models guide. Covers all five supported runtimes (Ollama, LM Studio, vLLM, llama.cpp, MLX), the capability projection table, the actual measured benchmark numbers from earlier this turn, recommended models for the canonical agency, and the `scripts/bench/` reproducibility commands. Cross-links MLX deep-dive doc.
+
+Registry entry added at apps/web/lib/docs/registry.ts. The MLX-specific guide stays as `local-models-mlx` for the deep-dive; the new doc is the top-level entry point.
+
+@aldo-ai/cli typecheck clean. The two trivial test additions for aldo bench (parsing + averages helpers) deferred since the function is mostly orchestration over existing CLI primitives — manual smoke covers the integration.

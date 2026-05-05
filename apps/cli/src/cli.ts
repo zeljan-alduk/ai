@@ -10,6 +10,7 @@ import { runAgentNew } from './commands/agent-new.js';
 import { runAgentPromote } from './commands/agent-promote.js';
 import { runAgentValidate } from './commands/agent-validate.js';
 import { runAgentsCheck } from './commands/agents-check.js';
+import { runBench } from './commands/bench.js';
 import { runCode } from './commands/code.js';
 import {
   runDatasetsDestroy,
@@ -726,6 +727,52 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
               ...(o.expected !== undefined ? { expected: o.expected } : {}),
               ...(o.input !== undefined ? { input: o.input } : {}),
               ...(o.apiBase !== undefined ? { apiBase: o.apiBase } : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
+
+  // --- bench ----------------------------------------------------------------
+  program
+    .command('bench')
+    .description(
+      'benchmark CLI overhead vs raw provider HTTP (TTFT, tok/sec, bootstrap, model time)',
+    )
+    .option(
+      '--layers <list>',
+      'comma-separated layers: direct,run,code (default: all three)',
+    )
+    .option('--runs <n>', 'iterations per layer', (v) => Number.parseInt(v, 10), 3)
+    .option('--model <id>', 'pin a model id (default: first discovered)')
+    .option('--prompt <text>', 'override the bench prompt')
+    .option(
+      '--max-tokens <n>',
+      'cap output tokens for direct layer',
+      (v) => Number.parseInt(v, 10),
+      256,
+    )
+    .option('--json', 'emit machine-readable JSON instead of human table', false)
+    .action(
+      (o: {
+        layers?: string;
+        runs?: number;
+        model?: string;
+        prompt?: string;
+        maxTokens?: number;
+        json?: boolean;
+      }) => {
+        action = () =>
+          runBench(
+            {
+              ...(o.layers !== undefined ? { layers: o.layers } : {}),
+              ...(o.runs !== undefined && Number.isFinite(o.runs) ? { runs: o.runs } : {}),
+              ...(o.model !== undefined ? { model: o.model } : {}),
+              ...(o.prompt !== undefined ? { prompt: o.prompt } : {}),
+              ...(o.maxTokens !== undefined && Number.isFinite(o.maxTokens)
+                ? { maxTokens: o.maxTokens }
+                : {}),
               json: o.json === true,
             },
             io,

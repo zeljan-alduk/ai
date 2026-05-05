@@ -208,6 +208,13 @@ export const STATIC_DOC_PAGES: ReadonlyArray<DocPage> = [
     summary: 'Run ALDO AI on your own infra. Postgres, Redis, the gateway, the API.',
   },
   {
+    slug: 'guides/local-models',
+    section: 'guides',
+    title: 'Local models — Ollama, LM Studio, vLLM, llama.cpp, MLX',
+    summary:
+      'How ALDO talks to each local runtime, the capability projection table, latency + throughput numbers measured against qwen3.6-35b on Apple Silicon, and reproducible benchmark commands.',
+  },
+  {
     slug: 'guides/local-models-mlx',
     section: 'guides',
     title: 'Local models — MLX (Apple Silicon)',
