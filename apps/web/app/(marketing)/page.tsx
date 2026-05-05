@@ -59,7 +59,6 @@ import { HeroCodeSnippet } from '@/components/marketing/hero-code-snippet';
 import { HeroDashboardCycle } from '@/components/marketing/hero-dashboard-cycle';
 import { HonestComparisonV2 } from '@/components/marketing/honest-comparison-v2';
 import { IterativeLoop } from '@/components/marketing/iterative-loop';
-import { LocalModelRating } from '@/components/marketing/local-model-rating';
 import { McpIntegrations } from '@/components/marketing/mcp-integrations';
 import { NewsletterSignup } from '@/components/marketing/newsletter-signup';
 import { PlatformDemoLoop } from '@/components/marketing/platform-demo-loop';
@@ -104,13 +103,6 @@ export default function HomePage() {
       {/* HOOK ─── what we are, and the promise. */}
       <Hero />
       <TrustStrip />
-
-      {/* DEMO ─── interactive teaser of the /local-models flow.
-          Sits high on the page so a first-time visitor sees the
-          quality × speed loop running before they read past the
-          fold. The animated table is pure CSS keyframes; the real
-          flow lives at /local-models. */}
-      <LocalModelRating />
 
       {/* WHY-UNIQUE ─── the five lines no one else stacks, then the
           one-glance picture of the architecture. */}
@@ -254,9 +246,23 @@ function Hero() {
               replayable. Everything the rest of the agent stack assumed someone else would build.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
+              {/* Primary on-page demo CTA. Lands on /local-models — the
+                  page probes localhost (no signup), discovers Ollama /
+                  LM Studio / vLLM / llama.cpp, and rates them on a
+                  curated eval suite live. */}
+              <Link
+                href="/local-models"
+                className="group inline-flex items-center gap-2 rounded bg-accent px-4 py-2.5 text-sm font-semibold text-accent-fg shadow-sm transition-all hover:bg-accent-hover hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <span className="relative inline-flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-fg opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-fg" />
+                </span>
+                Scan local models
+              </Link>
               <Link
                 href="/signup"
-                className="rounded bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="rounded border border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 Start free trial
               </Link>

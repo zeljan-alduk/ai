@@ -6680,3 +6680,31 @@ on the public landing page. Added a high-fold demo section:
     coherent across phases.
 
 Tests: 386 passed (4 new). Typecheck clean. Biome clean.
+
+----------------------------------------
+2026-05-06 00:10 UTC — agent (claude opus 4.7) — replaced demo section with hero CTA button
+
+User feedback: the marketing demo section sat too far down — wanted
+the local-models entry point IMMEDIATELY visible, "like a button or
+something Scan Local Models or something like that".
+
+Done:
+ - Deleted `local-model-rating.tsx` + its test + the
+   `aldo-lmr-*` CSS block. Section was overkill; the user is right
+   that a button is the right shape for a teaser CTA.
+ - Added a primary "Scan local models" button at the top of the hero
+   CTA row, displacing "Start free trial" to the secondary
+   (outline) style. Links to `/local-models`. Tiny pulsing dot
+   indicator (Tailwind's built-in `animate-ping` over a static
+   inner dot) signals "live, scanning" without animating any
+   content. The dot uses `bg-accent-fg` so it inherits whatever
+   contrast the button text gets.
+ - Removed the `local-models` entry from the section nav rail
+   since there's no longer an in-page section to jump to.
+
+Test contract: e2e flows hit `/signup` directly, never via the
+"Start free trial" button label, so demoting the trial CTA to
+secondary doesn't break any spec.
+
+386 → 382 web tests (4 deleted with the section's pin tests).
+Typecheck clean.

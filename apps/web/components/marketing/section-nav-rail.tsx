@@ -25,7 +25,6 @@ interface NavItem {
 }
 
 const ITEMS: ReadonlyArray<NavItem> = [
-  { id: 'local-models', label: 'Local models' },
   { id: 'five-things', label: 'Five things' },
   { id: 'product-surfaces', label: 'See it in motion' },
   { id: 'use-cases', label: 'Use cases' },
