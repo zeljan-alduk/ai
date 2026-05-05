@@ -6045,3 +6045,41 @@ Verification:
 Net: the live:network smoke is no longer a black box. The earlier wedge captured in DEVELOPMENT_LOG.txt § 18:11Z is now named: it's a missing local-friendly fallback in the backend-engineer spec, not a platform bug. Operator running `pnpm exec tsx tests/agency-dry-run/run-live-network.mjs` against any provider mix gets a per-stage trace plus a clear failure reason within seconds of the actual problem.
 
 Next: §12.4 customer engagement UI (task #8) — /engagements list + /engagements/[slug] detail with milestones + comments + sign-off.
+
+2026-05-05T19:33Z — engineer (claude opus 4.7, 1M ctx) — §12.4 customer engagement UI shipped (frontend layer on the API surface).
+
+Wave-Agency landed the engagement-surface API; this commit adds the customer-facing pages so a real engagement is reachable from a browser, not just curl.
+
+platform/api-contract/src/engagements.ts (new):
+- Zod wire schemas for Engagement, Milestone, Comment + their list/create/sign-off/reject responses. Status enums (EngagementStatus, MilestoneStatus, CommentKind) match the API's allowlists exactly.
+- Indexed in api-contract/src/index.ts so apps/web can import them via `@aldo-ai/api-contract`.
+
+apps/web/lib/api.ts:
+- Eight new client functions: listEngagementsApi (with optional ?status= filter), getEngagementApi, createEngagementApi, updateEngagementApi, listMilestonesApi, createMilestoneApi, signOffMilestoneApi, rejectMilestoneApi, listEngagementCommentsApi (with optional ?kind= filter), createEngagementCommentApi. Each routes through the shared `request()` helper that re-validates with the wire Zod schema — same pattern as the rest of the surface.
+
+apps/web/app/engagements/page.tsx (new — server component):
+- Status filter pills (All / active / paused / complete / archived) driven by `?status=` URL param.
+- "Start a new engagement" card with the create-form client island.
+- List rows: slug + name + status pill + truncated description + relative-time created/archived. Empty state when no rows.
+
+apps/web/app/engagements/[slug]/page.tsx (new — server component):
+- Three parallel fetches: engagement head + milestones + comments.
+- Header card: slug + status pill + created relative-time + (when archived) archived relative-time.
+- Milestones section: composer client island + ordered list of cards. Each card shows title, description, due-relative-time, signed-off-by + at, rejected-reason — and renders the sign-off / reject MilestoneActions island only for non-terminal statuses (pending / in_review).
+- Discussion section: composer client island + comment list. Each comment carries a kind pill (Comment / Change request / Architecture decision), author + relative-time, optional run-link to /runs/<id> when runId is set, and the body in pre-wrap so multi-paragraph rationale renders cleanly.
+
+apps/web/components/engagements/ (new — three client islands):
+- create-form.tsx — slug + name + description; posts to /v1/engagements; navigates to /engagements/<slug> on success; surfaces 409 slug_conflict verbatim.
+- milestone-composer.tsx — title + description; posts to /v1/engagements/<slug>/milestones; refreshes the route on success.
+- milestone-actions.tsx — Sign off (one-click) and Reject (reveals an inline reason field). Reject requires a non-empty reason; sign-off doesn't. Both refresh the route on success.
+- comment-composer.tsx — kind picker (three pills) + textarea. Body placeholder rotates with the kind so the operator gets a useful prompt for "what to type here". Posts to /v1/engagements/<slug>/comments; refreshes the route.
+
+apps/web/components/sidebar.tsx:
+- New "Engagements" nav entry sitting next to "Threads" — they're the same conceptual layer (a multi-run grouping), with engagements adding the SOW-shaped semantics threads lack.
+
+Verification:
+- @aldo-ai/api-contract: typecheck clean.
+- @aldo-ai/web: 382/382 tests pass; typecheck clean.
+- All edits are tenant-scoped through the existing auth-proxy + bearer-auth flow; cross-tenant access is impossible because every server fetch authenticates with the caller's session.
+
+Net of Wave-Agency follow-ups (tasks #6, #7, #8): the customer engagement surface is now reachable via /engagements; the budget-cap protects in-flight runs as well as new dispatches; the live:network smoke produces a per-stage trace that names the actual blocker (backend-engineer requires `code-fim` which local Ollama doesn't claim — a real product finding worth fixing in a follow-up). The agency primitive is ready for a friendly first-customer engagement; what remains is the YAML-side fix to let backend-engineer fall back to a local-friendly capability, and authoring eval suites that catch real regressions.

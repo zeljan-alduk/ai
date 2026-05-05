@@ -29,6 +29,14 @@ const NAV: ReadonlyArray<{ href: string; label: string; match: (p: string) => bo
     label: 'Threads',
     match: (p) => p === '/threads' || p.startsWith('/threads/'),
   },
+  // Wave-Agency — customer engagements (slugged, milestoned, sign-off).
+  // Sits next to Threads because it's the same conceptual layer (a
+  // multi-run grouping) with engagement-shaped semantics threads lack.
+  {
+    href: '/engagements',
+    label: 'Engagements',
+    match: (p) => p === '/engagements' || p.startsWith('/engagements/'),
+  },
   // Wave-14 — between Runs and Agents per the brief.
   {
     href: '/dashboards',

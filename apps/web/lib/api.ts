@@ -373,6 +373,112 @@ export async function getThreadTimelineApi(id: string) {
   return request(`/v1/threads/${encodeURIComponent(id)}/timeline`, GetThreadTimelineResponse);
 }
 
+// ---------------------------------------------------------------------------
+// MISSING_PIECES §12.4 — customer engagement surface.
+// ---------------------------------------------------------------------------
+
+export async function listEngagementsApi(query: { status?: string } = {}) {
+  const { ListEngagementsResponse } = await import('@aldo-ai/api-contract');
+  const q: Record<string, string | undefined> = {};
+  if (query.status !== undefined) q.status = query.status;
+  return request('/v1/engagements', ListEngagementsResponse, { query: q });
+}
+
+export async function getEngagementApi(slug: string) {
+  const { GetEngagementResponse } = await import('@aldo-ai/api-contract');
+  return request(`/v1/engagements/${encodeURIComponent(slug)}`, GetEngagementResponse);
+}
+
+export async function createEngagementApi(body: {
+  slug: string;
+  name: string;
+  description?: string;
+}) {
+  const { GetEngagementResponse } = await import('@aldo-ai/api-contract');
+  return request('/v1/engagements', GetEngagementResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateEngagementApi(
+  slug: string,
+  body: { name?: string; description?: string; status?: string },
+) {
+  const { GetEngagementResponse } = await import('@aldo-ai/api-contract');
+  return request(`/v1/engagements/${encodeURIComponent(slug)}`, GetEngagementResponse, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function listMilestonesApi(slug: string) {
+  const { ListMilestonesResponse } = await import('@aldo-ai/api-contract');
+  return request(
+    `/v1/engagements/${encodeURIComponent(slug)}/milestones`,
+    ListMilestonesResponse,
+  );
+}
+
+export async function createMilestoneApi(
+  slug: string,
+  body: { title: string; description?: string; dueAt?: string | null },
+) {
+  const { MilestoneResponse } = await import('@aldo-ai/api-contract');
+  return request(`/v1/engagements/${encodeURIComponent(slug)}/milestones`, MilestoneResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function signOffMilestoneApi(slug: string, milestoneId: string) {
+  const { MilestoneResponse } = await import('@aldo-ai/api-contract');
+  return request(
+    `/v1/engagements/${encodeURIComponent(slug)}/milestones/${encodeURIComponent(milestoneId)}/sign-off`,
+    MilestoneResponse,
+    { method: 'POST' },
+  );
+}
+
+export async function rejectMilestoneApi(slug: string, milestoneId: string, reason: string) {
+  const { MilestoneResponse } = await import('@aldo-ai/api-contract');
+  return request(
+    `/v1/engagements/${encodeURIComponent(slug)}/milestones/${encodeURIComponent(milestoneId)}/reject`,
+    MilestoneResponse,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    },
+  );
+}
+
+export async function listEngagementCommentsApi(slug: string, query: { kind?: string } = {}) {
+  const { ListCommentsResponse } = await import('@aldo-ai/api-contract');
+  const q: Record<string, string | undefined> = {};
+  if (query.kind !== undefined) q.kind = query.kind;
+  return request(
+    `/v1/engagements/${encodeURIComponent(slug)}/comments`,
+    ListCommentsResponse,
+    { query: q },
+  );
+}
+
+export async function createEngagementCommentApi(
+  slug: string,
+  body: { body: string; kind?: string; runId?: string },
+) {
+  const { CommentResponse } = await import('@aldo-ai/api-contract');
+  return request(`/v1/engagements/${encodeURIComponent(slug)}/comments`, CommentResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * `GET /v1/runs/compare?a=&b=` — wave-13 convenience endpoint.
  *

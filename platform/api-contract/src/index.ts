@@ -39,6 +39,9 @@ export * from './projects.js';
 export * from './prompts.js';
 // Wave-19 — threads (derived grouping over runs.thread_id).
 export * from './threads.js';
+// Wave-Agency / §12.4 — customer engagement surface (slugged
+// engagements + milestones + sign-off + threaded comments).
+export * from './engagements.js';
 // Wave-4 — cost + spend analytics (LangSmith spend / Braintrust experiments cost view parity).
 export * from './spend.js';
 // Wave-iter-3 — newsletter subscribe (marketing capture between FAQ + DualCta).
