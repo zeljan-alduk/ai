@@ -18,6 +18,7 @@
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { type ExecPolicy, ShellError, checkExec } from '../policy.js';
+import type { ShellSessionState } from '../session.js';
 
 export const execInputSchema = z
   .object({
@@ -72,11 +73,19 @@ export const execOutputSchema = z
 
 export type ExecOutput = z.infer<typeof execOutputSchema>;
 
-export async function shellExec(policy: ExecPolicy, input: ExecInput): Promise<ExecOutput> {
+export async function shellExec(
+  policy: ExecPolicy,
+  input: ExecInput,
+  session?: ShellSessionState,
+): Promise<ExecOutput> {
+  // Session inheritance: when the caller doesn't pin a cwd on this
+  // call, fall back to the session's tracked cwd (set by `shell.cd`).
+  // The policy still validates the resolved path against allowedRoots.
+  const inheritedCwd = input.cwd ?? session?.cwd ?? undefined;
   const resolved = checkExec(policy, {
     command: input.command,
     args: input.args,
-    ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+    ...(inheritedCwd !== undefined ? { cwd: inheritedCwd } : {}),
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
   });
 
@@ -86,7 +95,10 @@ export async function shellExec(policy: ExecPolicy, input: ExecInput): Promise<E
     try {
       child = spawn(resolved.command, [...resolved.args], {
         cwd: resolved.cwd,
-        env: { ...process.env, ...(input.env ?? {}) },
+        // Per-call env wins over session-tracked exports, both win
+        // over the host's process.env. `shell.export` writes session
+        // env; `shell.exec --env` is a one-shot override.
+        env: { ...process.env, ...(session?.env ?? {}), ...(input.env ?? {}) },
         stdio: ['pipe', 'pipe', 'pipe'],
         // shell: false guarantees no /bin/sh interpretation — args go
         // straight to execvp. Combined with the allowlist + denylist

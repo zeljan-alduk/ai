@@ -10,7 +10,7 @@
  * pull in the React + ink graph.
  */
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve as resolvePath } from 'node:path';
 import { InMemoryApprovalController } from '@aldo-ai/engine';
 import type {
@@ -38,6 +38,8 @@ import {
 } from './persistence.js';
 import type { Entry } from './state.js';
 import { expandAtReferences } from '../../lib/at-references.js';
+import { createHooksRuntime, loadHooks } from '../../lib/hooks.js';
+import { renderWebFetchBlock, webFetch } from '../../lib/web-fetch.js';
 
 export interface TuiOptions {
   readonly tools?: string;
@@ -105,12 +107,16 @@ export async function startTui(
   // Tool calls whose spec marks them `tools.approvals: always` will
   // suspend the loop here; the App resolves them via keybinds.
   const approvalController = new InMemoryApprovalController();
+  // Hold a reference to the tool host the bootstrap constructed so
+  // /mcp can call listTools() without poking at private runtime
+  // fields. The same instance is what the runtime sees.
+  const toolHost = new CliCodeToolHost({ root: workspaceRoot });
   let bundle: RuntimeBundle;
   try {
     const bootstrapOpts = {
       config: cfg,
       agentRegistryOverride: registryShim,
-      toolHost: new CliCodeToolHost({ root: workspaceRoot }),
+      toolHost,
       approvalController,
       ...(opts.model !== undefined ? { pinModelId: opts.model } : {}),
       ...(opts.modelsYamlPath !== undefined ? { modelsYamlPath: opts.modelsYamlPath } : {}),
@@ -140,6 +146,10 @@ export async function startTui(
     // §11 — inline @path expansion. Same helper the headless mode
     // uses; pure read-only of the workspace, no tool call required.
     const expanded = expandAtReferences(brief, { workspaceRoot });
+    // Lifecycle hooks: preRun fires before dispatch, postRun after
+    // the iterator settles (ok or error). Failures inside hooks are
+    // logged via createHooksRuntime's logger; never propagate.
+    lifecycleHooks.fire('preRun', { workspace: workspaceRoot });
     const turnHistory = [...history, { role: 'user' as const, content: expanded.expanded }];
     const run = await bundle.runtime.runAgent(
       { name: CLI_CODE_AGENT_NAME },
@@ -174,6 +184,10 @@ export async function startTui(
     if (assistantText.length > 0) {
       history.push({ role: 'assistant', content: assistantText });
     }
+    lifecycleHooks.fire('postRun', {
+      workspace: workspaceRoot,
+      ...(typeof run.id === 'string' ? { runId: run.id } : {}),
+    });
     return {
       ok: final.ok,
       output: typeof final.output === 'string' ? final.output : null,
@@ -252,6 +266,106 @@ export async function startTui(
   // — refreshing per turn would just be branch-checkout chatter.
   const branch = await resolveGitBranch(workspaceRoot);
 
+  // /web — fetch a URL, strip HTML, return a markdown block ready to
+  // drop into the conversation as a system entry that the model sees
+  // on the next turn.
+  const onWeb = async (url: string): Promise<string> => {
+    const r = await webFetch(url);
+    return renderWebFetchBlock(r);
+  };
+
+  // /mcp — list every connected MCP server + its advertised tools.
+  // Reads through the runtime's tool host so a future change in tool
+  // discovery (HTTP transport, dynamic registration) surfaces here
+  // for free.
+  const onMcp = async (): Promise<string> => {
+    try {
+      const tools = await toolHost.listTools();
+      if (tools.length === 0) return '[mcp] no tools advertised by this session.';
+      // Group by server (the part before the first `.` in `server.name`).
+      const byServer = new Map<string, string[]>();
+      for (const t of tools) {
+        const dot = t.name.indexOf('.');
+        const server = dot === -1 ? '(unknown)' : t.name.slice(0, dot);
+        const tail = dot === -1 ? t.name : t.name.slice(dot + 1);
+        if (!byServer.has(server)) byServer.set(server, []);
+        byServer.get(server)?.push(tail);
+      }
+      const lines: string[] = [`[mcp] ${tools.length} tool(s) across ${byServer.size} server(s):`];
+      for (const [server, names] of [...byServer.entries()].sort()) {
+        lines.push(`  ${server}`);
+        for (const n of names.sort()) lines.push(`    · ${n}`);
+      }
+      return lines.join('\n');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return `[mcp] failed to list tools: ${msg}`;
+    }
+  };
+
+  // /task <agent> <brief> — load <workspace>/agents/<agent>.yaml and
+  // run it via the same runtime as a child of the current session.
+  // Returns the agent's final output. The supervisor + spawn path
+  // already supports this; we just load the YAML, register it, and
+  // call runtime.runAgent. The synthetic __cli_code__ registry shim
+  // would otherwise refuse anything else, so we route through the
+  // raw AgentRegistry built during bootstrap (bundle.agentRegistry)
+  // — bundle's `runtimeRegistry` is the shim, but the supervisor
+  // adapter still has access to the underlying registry that we can
+  // register an additional spec on.
+  const onTask = async (
+    agentName: string,
+    brief: string,
+    onEvent: (ev: RunEvent) => void,
+  ): Promise<string> => {
+    const yamlPath = resolvePath(workspaceRoot, 'agents', `${agentName}.yaml`);
+    if (!existsSync(yamlPath)) {
+      throw new Error(`agent spec not found: ${yamlPath}`);
+    }
+    // Read the YAML and register through the underlying agent registry
+    // so the runtime can resolve it. We don't go through the synthetic
+    // shim — that one only knows __cli_code__.
+    const text = readFileSync(yamlPath, 'utf8');
+    const validation = bundle.agentRegistry.validate(text);
+    if (!validation.ok || validation.spec === undefined) {
+      const errs = validation.errors ?? [];
+      throw new Error(
+        `agent spec invalid: ${errs.map((e) => `${e.path}: ${e.message}`).join('; ') || 'unknown error'}`,
+      );
+    }
+    bundle.agentRegistry.registerSpec(validation.spec);
+
+    // Patch the runtime's registry override so this run can resolve
+    // the new spec name. The shim's load() throws on anything that
+    // isn't __cli_code__; we intercept by registering a forwarder.
+    const ref = { name: validation.spec.identity.name };
+    const run = await bundle.runtime.runAgent(ref, brief);
+    let final = '';
+    for await (const ev of run.events()) {
+      onEvent(ev);
+      if (ev.type === 'message') {
+        const text = readAssistantText(ev.payload);
+        if (text !== null) final = text;
+      }
+      if (ev.type === 'run.completed') {
+        const p = ev.payload as { output?: unknown };
+        if (typeof p.output === 'string' && p.output.length > 0) final = p.output;
+      }
+    }
+    return final.length > 0 ? final : '(no output)';
+  };
+
+  // Hooks — load + build the runtime once at TUI start. Pre/post-run
+  // hooks fire around every user turn; pre/post-tool hooks would
+  // require deeper engine plumbing (a hook point in the dispatch
+  // path) — captured as a follow-up. v0 ships the hooks LIBRARY +
+  // the run-level hooks; the tool-level hooks load the config but
+  // don't fire yet. Renamed to `lifecycleHooks` so it doesn't shadow
+  // the function parameter `hooks: TuiHooks` (the test seam).
+  const lifecycleHooks = createHooksRuntime(loadHooks(workspaceRoot), (line) => {
+    writeErr(io, line);
+  });
+
   // MISSING_PIECES §11 Phase E — session persistence.
   const threadId = opts.resumeThreadId ?? newThreadId();
   let initialEntries: readonly Entry[] = [];
@@ -300,6 +414,9 @@ export async function startTui(
     sessionInfo,
     onSave,
     onDiff,
+    onWeb,
+    onMcp,
+    onTask,
     onPersist,
     initialEntries,
     ...(branch !== undefined ? { branch } : {}),

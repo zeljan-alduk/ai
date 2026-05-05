@@ -27,10 +27,17 @@ beforeAll(async () => {
 });
 
 describe('aldo-shell MCP server', () => {
-  it('lists shell.exec via tools/list', async () => {
+  it('lists every shell tool via tools/list (exec + persistent-session quintet)', async () => {
     const r = await client.listTools();
     const names = r.tools.map((t) => t.name).sort();
-    expect(names).toEqual(['shell.exec']);
+    expect(names).toEqual([
+      'shell.cd',
+      'shell.env',
+      'shell.exec',
+      'shell.export',
+      'shell.pwd',
+      'shell.unset',
+    ]);
   });
 
   it('shell.exec round trip via the MCP transport', async () => {

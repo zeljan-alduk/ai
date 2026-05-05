@@ -80,6 +80,37 @@ describe('parseSlashCommand', () => {
     expect(parseSlashCommand('/execute')).toEqual({ kind: 'go' });
   });
 
+  it('parses /web with a URL arg', () => {
+    expect(parseSlashCommand('/web https://example.com/foo?q=1')).toEqual({
+      kind: 'web',
+      url: 'https://example.com/foo?q=1',
+    });
+  });
+
+  it('/web without a URL returns unknown', () => {
+    expect(parseSlashCommand('/web')).toEqual({ kind: 'unknown', raw: '/web' });
+  });
+
+  it('parses /mcp', () => {
+    expect(parseSlashCommand('/mcp')).toEqual({ kind: 'mcp' });
+  });
+
+  it('parses /task with agent + brief', () => {
+    expect(parseSlashCommand('/task code-reviewer  inspect the diff')).toEqual({
+      kind: 'task',
+      agent: 'code-reviewer',
+      brief: 'inspect the diff',
+    });
+  });
+
+  it('/task without agent or brief returns unknown', () => {
+    expect(parseSlashCommand('/task')).toEqual({ kind: 'unknown', raw: '/task' });
+    expect(parseSlashCommand('/task agent-only')).toEqual({
+      kind: 'unknown',
+      raw: '/task agent-only',
+    });
+  });
+
   it('is case-insensitive on the command name', () => {
     expect(parseSlashCommand('/HELP')).toEqual({ kind: 'help' });
     expect(parseSlashCommand('/Save foo.md')).toEqual({ kind: 'save', path: 'foo.md' });
@@ -103,6 +134,9 @@ describe('HELP_TEXT', () => {
       '/diff',
       '/plan',
       '/go',
+      '/web',
+      '/mcp',
+      '/task',
     ]) {
       expect(HELP_TEXT).toContain(name);
     }

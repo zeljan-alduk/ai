@@ -13,7 +13,25 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { type ExecPolicy, ShellError } from './policy.js';
+import { createShellSessionState } from './session.js';
 import { execInputSchema, execOutputSchema, shellExec } from './tools/exec.js';
+import {
+  cdInputSchema,
+  cdOutputSchema,
+  envInputSchema,
+  envOutputSchema,
+  exportInputSchema,
+  exportOutputSchema,
+  pwdInputSchema,
+  pwdOutputSchema,
+  shellCd,
+  shellEnv,
+  shellExport,
+  shellPwd,
+  shellUnset,
+  unsetInputSchema,
+  unsetOutputSchema,
+} from './tools/session-tools.js';
 
 export const SERVER_NAME = '@aldo-ai/mcp-shell';
 export const SERVER_VERSION = '0.0.0';
@@ -28,13 +46,62 @@ export function createAldoShellServer(opts: CreateServerOpts): McpServer {
   const { policy, name = SERVER_NAME, version = SERVER_VERSION } = opts;
   const server = new McpServer({ name, version }, { capabilities: { tools: {} } });
 
+  // Per-process session state. The MCP server's process lifetime is
+  // the session, so a single shared map suffices (no keying, no
+  // cleanup, no parallel-session race).
+  const session = createShellSessionState();
+
   registerTool(server, {
     name: 'shell.exec',
     description:
-      'Run an allowlisted command with a hard timeout. cwd must be inside an allowedRoots entry. Returns exit code, stdout/stderr tails, and full byte counts.',
+      'Run an allowlisted command with a hard timeout. cwd defaults to the session cwd (set via shell.cd) when unset; otherwise must be inside an allowedRoots entry. Session env vars (set via shell.export) merge onto the host env.',
     inputSchema: execInputSchema,
     outputSchema: execOutputSchema,
-    handler: (input) => shellExec(policy, input),
+    handler: (input) => shellExec(policy, input, session),
+  });
+
+  registerTool(server, {
+    name: 'shell.cd',
+    description:
+      'Change the session cwd. Subsequent shell.exec calls without an explicit `cwd` arg inherit this directory. Relative paths resolve against the current cwd; absolute paths are used as-is. The exec-time allowedRoots check still fires — `cd` to a path outside roots is allowed but exec there will refuse.',
+    inputSchema: cdInputSchema,
+    outputSchema: cdOutputSchema,
+    handler: (input) => shellCd(session, input),
+  });
+
+  registerTool(server, {
+    name: 'shell.pwd',
+    description:
+      'Read the session cwd. Returns null when no `shell.cd` has been called yet (caller is expected to pin `cwd` on each `shell.exec` in that case).',
+    inputSchema: pwdInputSchema,
+    outputSchema: pwdOutputSchema,
+    handler: (input) => shellPwd(session, input),
+  });
+
+  registerTool(server, {
+    name: 'shell.export',
+    description:
+      'Merge a map of env vars onto the session env. Subsequent shell.exec calls inherit them (unless the call provides its own `env` override, which wins). Returns the post-merge key list.',
+    inputSchema: exportInputSchema,
+    outputSchema: exportOutputSchema,
+    handler: (input) => shellExport(session, input),
+  });
+
+  registerTool(server, {
+    name: 'shell.unset',
+    description: 'Remove session env vars by name. Returns the remaining key list.',
+    inputSchema: unsetInputSchema,
+    outputSchema: unsetOutputSchema,
+    handler: (input) => shellUnset(session, input),
+  });
+
+  registerTool(server, {
+    name: 'shell.env',
+    description:
+      'Return the session env (the vars set via shell.export — NOT the full host process.env).',
+    inputSchema: envInputSchema,
+    outputSchema: envOutputSchema,
+    handler: (input) => shellEnv(session, input),
   });
 
   return server;

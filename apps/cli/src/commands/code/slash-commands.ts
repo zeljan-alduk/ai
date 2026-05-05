@@ -44,6 +44,12 @@ export type SlashCommand =
   | { readonly kind: 'diff' }
   | { readonly kind: 'plan' }
   | { readonly kind: 'go' }
+  // §11 follow-up — /web, /mcp, /task. Three more commands every
+  // peer tool ships: fetch a URL into context, list available MCP
+  // tools, dispatch a focused subagent for an isolated task.
+  | { readonly kind: 'web'; readonly url: string }
+  | { readonly kind: 'mcp' }
+  | { readonly kind: 'task'; readonly agent: string; readonly brief: string }
   | { readonly kind: 'unknown'; readonly raw: string };
 
 /**
@@ -85,6 +91,26 @@ export function parseSlashCommand(text: string): SlashCommand | null {
     case 'go':
     case 'execute':
       return { kind: 'go' };
+    case 'web':
+    case 'fetch': {
+      if (rest.length === 0) return { kind: 'unknown', raw: trimmed };
+      // Accept anything URL-shaped; the runner re-validates with new URL().
+      return { kind: 'web', url: rest };
+    }
+    case 'mcp':
+      return { kind: 'mcp' };
+    case 'task': {
+      // /task <agent> <brief>
+      if (rest.length === 0) return { kind: 'unknown', raw: trimmed };
+      const space = rest.indexOf(' ');
+      if (space === -1) return { kind: 'unknown', raw: trimmed };
+      const agent = rest.slice(0, space).trim();
+      const brief = rest.slice(space + 1).trim();
+      if (agent.length === 0 || brief.length === 0) {
+        return { kind: 'unknown', raw: trimmed };
+      }
+      return { kind: 'task', agent, brief };
+    }
     default:
       return { kind: 'unknown', raw: trimmed };
   }
@@ -101,6 +127,9 @@ export const HELP_TEXT = [
   '  /diff               show a unified diff of files changed this session',
   '  /plan               next turn drafts a plan; no tools fire',
   '  /go                 leave plan mode + execute',
+  '  /web <url>          fetch a URL + inject as context for the next turn',
+  '  /mcp                list connected MCP servers + their tools',
+  '  /task <agent> <brief>  dispatch a focused subagent (loads agents/<agent>.yaml)',
   '  /exit               exit (same as Ctrl+D)',
   '',
   'Inline references:',

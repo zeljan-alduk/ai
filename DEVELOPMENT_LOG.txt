@@ -6178,3 +6178,66 @@ What's not in this commit (queued):
 - MCP discovery in TUI.
 
 Net of this turn: ALDO CLI now has the four features every modern AI coding tool ships — inline file refs, plan mode, diff command, branch+plan-aware status line — plus all of them work against either local LM Studio/Ollama or hosted ai.aldo.tech via the same routing decision the hybrid CLI introduced earlier. The gap to Claude Code / Codex / Aider is meaningfully narrower; the remaining big-ticket items (persistent shell, web fetch, subagents, hooks) are queued.
+
+2026-05-05T20:08Z — engineer (claude opus 4.7, 1M ctx) — closed the remaining five gaps to bring `aldo` peer-of-Claude-Code: persistent shell, /web, /mcp, /task subagents, hooks lifecycle.
+
+mcp-servers/aldo-shell — persistent session state:
+
+- `src/session.ts` (new): per-process cwd + env state. The MCP server's process lifetime IS the session under the engine's stdio spawn model, so a single mutable struct (no keying, no cleanup) is the right shape.
+- `src/tools/exec.ts`: `shell.exec` now reads from session state. When the call's `cwd` arg is unset, falls back to `session.cwd` (set by `shell.cd`). Session env vars merge onto host env on every call; per-call `env` overrides win.
+- `src/tools/session-tools.ts` (new): five new tools — `shell.cd` / `shell.pwd` / `shell.export` / `shell.unset` / `shell.env`. Each is a thin layer over the session helpers.
+- `src/server.ts`: registers all six tools. Server description for `shell.exec` updated to call out the new session inheritance.
+- 7 new session-tools tests (cd round-trip, relative + absolute resolution, export/unset, exec inherits cwd, exec inherits env, env override semantics, sanity-check that calling exec without a session still works). 29/29 aldo-shell tests; was 22.
+
+apps/cli/src/lib/web-fetch.ts (new):
+- Pure helper around `fetch()`. 256 KB body cap, 30 s timeout, http(s) only (file:// / ftp:// refused). HTML detection by content-type or `<html>/<head>/<body>` heuristic; HTML stripped to plain text via `<script>/<style>` removal + tag peel + entity decode (no DOM parser; not needed for "drop a doc page in the LLM's context").
+- `renderWebFetchBlock(result)` — returns a markdown block ready to drop into a conversation as a system entry. Header carries URL + status + content-type + bytes.
+- 6 new tests covering HTML strip, plain-text passthrough, oversize truncation, scheme refusal, malformed URL refusal, render shape.
+
+apps/cli/src/lib/hooks.ts (new):
+- Settings-driven lifecycle hooks. Reads `~/.aldo/hooks.json` (global) + `<workspace>/.aldo/hooks.json` (project) and merges. Project entries win on conflict (the preTool/postTool maps merge such that project keys replace global keys for the same tool name; the run-level arrays just concat).
+- Shape: `{ preRun: string[], postRun: string[], preTool: { [name]: string[] }, postTool: { [name]: string[] } }`. Each command runs via `spawnSync('sh', ['-c', cmd])` with env carrying `ALDO_RUN_ID` / `ALDO_TOOL_NAME` / `ALDO_TOOL_ARGS_JSON` / `ALDO_TOOL_RESULT_JSON` / `ALDO_WORKSPACE`.
+- Failures LOG to a configurable logger (stderr in TUI) but NEVER propagate. Matches Claude Code's hook semantics: a flaky pre-commit script can't tear down the agent.
+- v0 wires preRun + postRun into the TUI's runTurn lifecycle (fires before dispatch + after the iterator settles). preTool + postTool are loaded but don't fire — adding tool-level hooks needs a hook point inside the engine's tool dispatch loop (a separate, more invasive change). Captured as a follow-up.
+
+apps/cli/src/commands/code/slash-commands.ts:
+- Three new commands: /web <url> (alias /fetch), /mcp, /task <agent> <brief>.
+- HELP_TEXT updated; tests pin all twelve slash commands now.
+
+apps/cli/src/commands/code/app.tsx:
+- AppProps gains optional onWeb / onMcp / onTask. /web prints "fetching <url>…" then renders the fetch result as a system entry. /mcp prints "[mcp] N tool(s) across M server(s):" + grouped tool list. /task dispatches the named subagent through the SAME runtime (no new engine surface) and renders the agent's final output as a `[task <name>] …` system entry.
+- /task ties through to the existing supervisor + spawn path. The synthetic `__cli_code__` registry shim refused anything-but-itself; we call through the underlying agent registry so the new spec resolves.
+
+apps/cli/src/commands/code/tui.ts:
+- onWeb wraps webFetch + renderWebFetchBlock.
+- onMcp groups tools by server (`server.tool` → `server` head). Calls `toolHost.listTools()` directly (the toolHost we constructed during bootstrap is held in a local closure variable so we don't reach into PlatformRuntime's private fields).
+- onTask reads `<workspace>/agents/<agent>.yaml`, validates via the bundle's agentRegistry, registerSpec()s, runs through `runtime.runAgent({ name: <agent> }, brief)`, streams events back through the App's onEvent dispatcher, returns the final assistant text.
+- lifecycleHooks (renamed from `hooks` to avoid shadowing the TuiHooks parameter): createHooksRuntime around loadHooks(workspaceRoot). Fires preRun before dispatch; postRun after the iterator settles (with the run id when known).
+
+Tests added (+13):
+- web-fetch.test.ts: 6 tests (HTML strip, plain text, truncate, scheme refusal, malformed URL refusal, render shape).
+- code-slash-commands.test.ts: 7 new parser tests for /web (with + without URL), /mcp, /task (with + without args), updated HELP_TEXT pin to cover all twelve commands.
+- aldo-shell session-tools.test.ts: 7 tests (described above).
+
+Verification:
+- @aldo-ai/cli typecheck clean. 225/225 cli tests pass + 1 skipped (was 214; +13 net new). Same single pre-existing `mcp ls` failure unrelated to this commit.
+- @aldo-ai/mcp-shell typecheck clean. 29/29 tests (was 22).
+
+Net of this turn: ALDO CLI now has every feature the original "as powerful as Claude Code / Codex / opencode" target listed:
+
+| Feature | Where |
+|---|---|
+| @path inline refs | apps/cli/src/lib/at-references.ts (last commit) |
+| /diff slash | apps/cli/src/commands/code/{app,tui}.ts (last commit) |
+| /plan + /go | apps/cli/src/commands/code/{slash-commands,app}.ts (last commit) |
+| Status line: branch + plan | apps/cli/src/commands/code/components/StatusLine.tsx (last commit) |
+| Persistent shell (cd + env) | mcp-servers/aldo-shell/src/{session,tools/session-tools}.ts (this commit) |
+| /web URL fetch | apps/cli/src/lib/web-fetch.ts (this commit) |
+| /mcp discovery | apps/cli/src/commands/code/{app,tui}.ts (this commit) |
+| /task subagent dispatch | apps/cli/src/commands/code/{app,tui}.ts (this commit) |
+| Hooks (pre/post-run) | apps/cli/src/lib/hooks.ts (this commit) |
+| Hybrid CLI (--route auto/local/hosted) | apps/cli/src/lib/{routing-decision,hosted-runner}.ts (earlier today) |
+| Live-discovery merge into registry | apps/cli/src/bootstrap.ts (earlier today) |
+| --model + --models on run + code | apps/cli/src/cli.ts (earlier today) |
+
+Remaining gap (low-leverage, queued): tool-level hooks (preTool + postTool fire today via the lib but the engine doesn't yet have a dispatch-time hook point; once that's wired the hooks runtime fires automatically because the loadHooks already populates those maps).

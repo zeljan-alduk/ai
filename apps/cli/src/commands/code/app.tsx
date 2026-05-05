@@ -104,6 +104,28 @@ export interface AppProps {
    */
   readonly onDiff?: (modifiedPaths: readonly string[]) => Promise<string>;
   /**
+   * /web <url> handler: fetch + summarize. The parent (tui.ts) wires
+   * a webFetch-backed runner; the App renders the result as a system
+   * entry that the model sees on the next turn.
+   */
+  readonly onWeb?: (url: string) => Promise<string>;
+  /**
+   * /mcp handler: list connected MCP servers + their advertised
+   * tools. The parent calls toolHost.listTools() and renders the
+   * result as a structured string.
+   */
+  readonly onMcp?: () => Promise<string>;
+  /**
+   * /task handler: load + run a named agent spec from
+   * <workspace>/agents/<name>.yaml. Returns the agent's final output
+   * (rendered as a system entry).
+   */
+  readonly onTask?: (
+    agentName: string,
+    brief: string,
+    onEvent: (ev: import('@aldo-ai/types').RunEvent) => void,
+  ) => Promise<string>;
+  /**
    * Current git branch resolved at TUI start, surfaced in the status
    * line. Undefined when the workspace isn't a git repo (the line
    * just omits the ⎇ segment in that case).
@@ -147,6 +169,9 @@ export function App({
   sessionInfo,
   onSave,
   onDiff,
+  onWeb,
+  onMcp,
+  onTask,
   branch,
   initialEntries,
   onPersist,
@@ -307,6 +332,81 @@ export function App({
               content: 'plan mode: OFF. Next message executes with the full tool ACL.',
             });
             return;
+          case 'web': {
+            if (onWeb === undefined) {
+              dispatch({
+                kind: 'system-info',
+                content: '/web is not wired in this session.',
+              });
+              return;
+            }
+            dispatch({
+              kind: 'system-info',
+              content: `fetching ${slash.url}…`,
+            });
+            void (async () => {
+              try {
+                const out = await onWeb(slash.url);
+                dispatch({ kind: 'system-info', content: out });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                dispatch({ kind: 'system-info', content: `web fetch failed: ${msg}` });
+              }
+            })();
+            return;
+          }
+          case 'mcp': {
+            if (onMcp === undefined) {
+              dispatch({
+                kind: 'system-info',
+                content: '/mcp is not wired in this session.',
+              });
+              return;
+            }
+            void (async () => {
+              try {
+                const out = await onMcp();
+                dispatch({ kind: 'system-info', content: out });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                dispatch({ kind: 'system-info', content: `mcp list failed: ${msg}` });
+              }
+            })();
+            return;
+          }
+          case 'task': {
+            if (onTask === undefined) {
+              dispatch({
+                kind: 'system-info',
+                content: '/task is not wired in this session.',
+              });
+              return;
+            }
+            dispatch({
+              kind: 'system-info',
+              content: `dispatching subagent '${slash.agent}'…`,
+            });
+            void (async () => {
+              try {
+                const out = await onTask(
+                  slash.agent,
+                  slash.brief,
+                  (ev) => dispatch({ kind: 'engine-event', event: ev }),
+                );
+                dispatch({
+                  kind: 'system-info',
+                  content: `[task ${slash.agent}] ${out}`,
+                });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                dispatch({
+                  kind: 'system-info',
+                  content: `task '${slash.agent}' failed: ${msg}`,
+                });
+              }
+            })();
+            return;
+          }
           case 'unknown':
             dispatch({
               kind: 'system-info',
@@ -356,7 +456,7 @@ export function App({
         }
       })();
     },
-    [runTurn, exit, onSave, onDiff, sessionInfo, planMode],
+    [runTurn, exit, onSave, onDiff, onWeb, onMcp, onTask, sessionInfo, planMode],
   );
 
   useEffect(() => {
