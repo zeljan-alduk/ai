@@ -21,7 +21,7 @@
     "@aldo-ai/registry": "workspace:*",
     "@aldo-ai/types": "workspace:*",
     "yaml": "^2.6.0",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
