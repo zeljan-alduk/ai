@@ -6274,3 +6274,25 @@ Verification:
 - All edits restricted to user-facing docs, marketing components, and the public roadmap/changelog/STATUS surfaces. No platform behaviour changed in this commit.
 
 Net: a customer (or prospect) reading /changelog, /roadmap, /docs/guides/aldo-code, or the marketing landing today sees the same Wave-CLI parity surface the dev log + commit history do. The gap between "what we built" and "what the public site says we built" is closed for this wave.
+
+2026-05-05T20:55Z — engineer (claude opus 4.7, 1M ctx) — both agency dry-run modes against LM Studio + qwen/qwen3.6-35b-a3b. Two real findings.
+
+Finding 1 — Live mode (no network, stub gateway): clean. ✅ composite completed, 6 runs in store, 5 children spawn (architect, tech-lead, code-reviewer, security-auditor, backend-engineer), 3 rollups (one per supervisor level). Synthetic cost $0.0150 / 4500 in / 750 out. Proves the multi-level composite cascade end-to-end with the real PlatformRuntime + Supervisor.
+
+Finding 2 — Live:network mode against LM Studio: bootstrap clean in <60ms total, composite-running fails deterministically in 946ms with an actionable reason. The router refuses to dispatch `code-reviewer` because no enabled model satisfies required caps [tool-use, 128k-context, structured-output, reasoning]. qwen3.6 (and every local-discovered model) gets capabilityClass: local-reasoning but the discovered-models projection in apps/cli/src/bootstrap.ts (mergeLocalDiscoveryIntoOpts) drops the granular `provides: [...]` array — so even though qwen3.6 actually CAN do tool-use + structured-output + reasoning, the gateway's enabled-models filter has no way to know.
+
+Two paths forward — both worth shipping:
+
+(A) Widen `provides` for discovered local models. The local-discovery probe could inspect the model's id against a curated table (qwen3.x → tool-use + structured-output, deepseek-r1 → reasoning + tool-use, codellama → tool-use, etc.) and emit those capability tags. Honest because the model actually has the capability; cheap to maintain because the table grows when a customer asks for a model.
+
+(B) Author local-friendly variants of code-reviewer.yaml / backend-engineer.yaml under agency/dev/ with the granular requirements stripped. Lets the dogfood smoke run at $0 against any local model without modifying the canonical agency YAMLs.
+
+Path (A) is the better long-term answer; path (B) unlocks faster dogfood cycles today. Captured both as roadmap items.
+
+Finding 3 — Real harness gap: process doesn't exit after composite-running fails. The failure happened at 946ms but the harness process kept running 12+ minutes. Cause: withStage's Promise.race throws on the failed fn(), but the underlying MCP server children (aldo-fs / aldo-shell / aldo-git / aldo-memory, all spawned via stdio) stay alive and keep the Node event loop alive. The function returns the failure record, but main never resolves to process exit. Operator running the smoke on CI sees a 10-minute false hang.
+
+Fix: add an explicit `process.exit(failureExitCode)` at the failureWithStages boundary OR ensure toolHost.dispose() + runStore.close() are called in the failure path AND the runtime's MCP server children are torn down. apps/api/tests/agency-dry-run/run-live-network.mjs is the right place for the explicit exit since it's the operator-facing script. Captured for follow-up.
+
+Verification at runtime:
+- Live mode: 6 runs in store, ok=true, post-mortem renders 5 spawns + 3 rollups + cost line.
+- Live:network: 7 stages reported, stages: 6 OK + 1 FAILED. failureReason carries the full nested-child error so an operator sees exactly which leaf refused to dispatch.

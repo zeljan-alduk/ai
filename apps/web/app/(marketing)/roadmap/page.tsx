@@ -50,6 +50,33 @@ const TAG_BADGE: Record<NonNullable<Item['tag']>, string> = {
 
 const NOW: ReadonlyArray<Item> = [
   {
+    tag: 'eval',
+    title: 'Local-discovery projection — widen `provides` so qwen3.x / deepseek-r1 / codellama tag tool-use + structured-output',
+    body:
+      'Smoking the agency dry-run against LM Studio + qwen3.6-35b-a3b surfaced ' +
+      'this gap: the live local-discovery probe gives every discovered model the ' +
+      'right `capabilityClass` (local-reasoning) but emits an empty granular ' +
+      "`provides: [...]` array. The router refuses to dispatch agents that need " +
+      "[tool-use, structured-output, reasoning] even though qwen3.6 actually has " +
+      'all three. Fix: a curated id → provides table inside @aldo-ai/local-discovery ' +
+      "(qwen3.x → tool-use + structured-output, deepseek-r1 → reasoning + tool-use, " +
+      'codellama → tool-use, etc.). Half-day fix, unblocks the agency dogfood at $0.',
+    horizon: 'this week',
+  },
+  {
+    tag: 'eval',
+    title: 'Live:network harness must hard-exit after a stage failure',
+    body:
+      "The Wave-CLI dogfood surfaced a real harness bug: when composite-running " +
+      'fails, the harness function returns the failure record but the underlying ' +
+      'MCP server children (aldo-fs / aldo-shell / aldo-git / aldo-memory) stay ' +
+      'spawned and keep the Node event loop alive. Operator sees a 10-minute false ' +
+      'hang instead of the actual failure (which fired in <1s). Fix: explicit ' +
+      'process.exit at the failureWithStages boundary in run-live-network.mjs, OR ' +
+      'tear down toolHost subprocesses in the failure path. One-hour fix.',
+    horizon: 'this week',
+  },
+  {
     tag: 'platform',
     title: 'preTool / postTool hooks fire from inside the engine dispatch loop',
     body:
