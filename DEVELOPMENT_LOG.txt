@@ -5720,3 +5720,53 @@ Total spread: ~10-12 weeks for §14-A through §14-F sequentially by one enginee
 §14 explicitly does NOT block any of the §13 dogfood smoke work — the agency primitive ships in three forms today (stub / live no-network / live:network), and §14 is what turns "works for us internally" into "works for a user in São Paulo on her phone."
 
 Out-of-scope listed: federated multi-tenant bridge mesh, custom enterprise on-prem appliance (separate track from the existing self-hosted container path).
+
+2026-05-05T18:15Z — engineer (claude opus 4.7, 1M ctx) — §13 dogfood smoke + harness fixes; §12.5 engagement-level budget cap shipped.
+
+Item #1 — Live:network smoke against local Ollama (no frontier creds, $0 cost):
+- Disposable worktree at /tmp/aldo-dryrun-1777996555 (git init + README seed).
+- Env: ALDO_DRY_RUN_LIVE=1, ALDO_LOCAL_DISCOVERY=ollama, OLLAMA_BASE_URL=http://localhost:11434, ALDO_FS_RW_ROOT, ALDO_SHELL_ENABLED+_ROOT, ALDO_GIT_ENABLED+_ROOT, ALDO_MEMORY_ENABLED+_ROOT+_TENANTS.
+- Local Ollama has deepseek-r1:32b, qwen3:14b, codellama:34b, gemma3n:latest — capability classes match agency YAML (`local-reasoning` fallback for principal/architect).
+
+Three real smoke-harness gaps surfaced AND fixed:
+1. **providerState cache poisoning between sibling tests.** The CI-default test pins `ALDO_LOCAL_DISCOVERY=none` to exercise the no-providers path; that empty `enabledModels` list was cached for the test process and any subsequent live:network smoke saw "no providers configured" even with Ollama running.
+   FIX: `apps/api/src/runtime-bootstrap.ts` exports `resetProviderStateCacheForLiveDryRun()`. `runLiveNetworkMode` calls it before resolving so the operator's env always wins.
+2. **`runStoreCount` was undefined in failure paths.** The `failure(...)` helper didn't populate `runStoreCount`; downstream `expect(runStoreCount).toBeGreaterThanOrEqual(1)` crashed with "actual value must be number or bigint, received undefined" instead of surfacing the real failure.
+   FIX: `failure(...)` now sets `runStoreCount: 0` and a new `failureReason: string` field on `DryRunResult`. Test asserts via `result.failureReason !== undefined → throw`, surfacing the operator-facing reason.
+3. **No programmatic failure surface.** Reasons were embedded only in the post-mortem markdown, forcing callers to grep prose for "no providers configured".
+   FIX: `failureReason?: string` on `DryRunResult`; `tests/agency-dry-run/run-live-network.mjs` operator script prints it explicitly.
+
+Real finding from item #1 (NOT yet fixed; recorded as next punch list): the live:network smoke wedges between bootstrap and runtime.runAgent — process at 0% CPU, 544 KB RSS, no Ollama model loaded, no `.aldo-memory` directory created. 16 minutes elapsed, no progress. MCP servers (aldo-fs, aldo-shell, aldo-git, aldo-memory) all spawned and connected to the worktree successfully, so MCP plumbing is fine. Likely culprits: local-discovery probe blocked on a non-Ollama source AbortController (the `parseDiscoverySources` defaults pass through every supported source even with `ALDO_LOCAL_DISCOVERY=ollama`?), or capability-class resolution selecting an unreachable model. Did NOT spend cycles tracking down — captured as a §13 follow-up: **the live:network harness needs an instrumentation/timeout layer + a fast-fail on per-stage progress.** Once that's in place a single smoke run will say "stuck in stage X for 60s" instead of going silent. The harness fixes above are the foundation that lets the next dogfood attempt actually produce a signal.
+
+apps/api/src/runtime-bootstrap.ts:
+- New exported `resetProviderStateCacheForLiveDryRun()` that nulls the module-level cache + in-flight promise. Production code never calls it.
+
+apps/api/tests/agency-dry-run/healthz-db.ts:
+- `DryRunResult.failureReason?: string` field added.
+- `failure(...)` always sets `runStoreCount: 0` and a programmatic `failureReason`.
+- `runLiveNetworkMode` calls `resetProviderStateCacheForLiveDryRun()` before resolving providerState.
+- Imports updated.
+
+apps/api/tests/agency-dry-run/healthz-db.test.ts:
+- Env-gated smoke test now throws with `failureReason` + post-mortem prefix when the run fails before runtime, instead of crashing on undefined.
+
+apps/api/tests/agency-dry-run/run-live-network.mjs (new):
+- Operator-facing script that prints the live:network post-mortem + a tail line with `ok / runStoreCount / failureReason / spawn count`. Mirrors the existing `run-live.mjs` shape.
+
+Verification:
+- @aldo-ai/api: 542/542 tests pass + 1 properly skipped (was 542, structure unchanged for non-§12.5 cases).
+- Typecheck clean.
+
+Item #2 — §12.5 engagement-level budget cap, shipped:
+- platform/storage/migrations/028_tenant_budget_caps.sql: new table `tenant_budget_caps (tenant_id, scope, usd_max, usd_window_start, hard_stop, created_at, updated_at)` with PK on (tenant_id, scope) and FK to tenants(id) ON DELETE CASCADE. v0 ships scope='engagement' only; column is in the schema so a future per-engagement-id row never needs a second migration.
+- apps/api/src/tenant-budget-store.ts: `getTenantBudgetCap`, `upsertTenantBudgetCap`, `sumTenantSpendUsd`, `evaluateTenantBudget`, `assertWithinTenantBudget`, `TenantBudgetExceededError`. NULL cap = no check; soft cap (`hard_stop=false`) returns `allowed: true, softCap: true` so the existing `budget_threshold` notification pipe can fire without terminating the run. Window aggregation joins `usage_records.run_id → runs.tenant_id` (matches /v1/spend semantics).
+- apps/api/src/routes/runs.ts: POST /v1/runs gate ahead of agent lookup. Returns HTTP 402 `tenant_budget_exceeded` with `capUsd` + `totalUsd` in details when over cap.
+- apps/api/src/routes/tenants.ts: GET /v1/tenants/me/budget-cap (returns `{cap, currentUsd, softCap, allowed}`); PUT /v1/tenants/me/budget-cap (upsert with `usdMax | null`, `usdWindowStart`, `hardStop`).
+- apps/api/tests/tenant-budget-cap.test.ts: 12 new tests covering store round-trip, idempotent upsert, clearing cap, soft cap (hardStop=false), window exclusion of pre-window spend, cross-tenant isolation, GET returns null by default, PUT upserts, POST /v1/runs returns 402 when cap reached.
+
+Verification:
+- @aldo-ai/api: 554/554 tests (was 542; +12 budget-cap tests; +0 in agency-dry-run by structural count). Typecheck clean.
+
+Net of this turn: harness can now find what's wrong rather than crash on its own gaps; budget cap protects unsupervised runs from overnight runaway spend. Supervisor + iterative-run pre-step hooks deferred to a follow-up — the API-boundary check stops *new* runs but doesn't terminate in-flight ones. POST /v1/runs is the highest-leverage gate (every run starts there); follow-up adds the same check inside the iterative loop's pre-step termination predicate so a stuck run also stops.
+
+Next: §14-A Hybrid CLI (apps/cli) — local-only agents run locally, cloud agents delegate to hosted ai.aldo.tech.

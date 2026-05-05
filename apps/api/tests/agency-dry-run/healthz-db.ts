@@ -34,7 +34,10 @@ import { fileURLToPath } from 'node:url';
 import { InMemoryRunStore, PlatformRuntime } from '@aldo-ai/engine';
 import { createGateway, createRouter } from '@aldo-ai/gateway';
 import { createMcpToolHost } from '../../src/mcp/tool-host.js';
-import { loadProviderStateForLiveDryRun } from '../../src/runtime-bootstrap.js';
+import {
+  loadProviderStateForLiveDryRun,
+  resetProviderStateCacheForLiveDryRun,
+} from '../../src/runtime-bootstrap.js';
 import type {
   AgentRef,
   AgentRegistry,
@@ -117,6 +120,14 @@ export interface DryRunResult {
   readonly postMortem: string;
   /** Live-mode only: count of runs landed in the run store (composite tree size). */
   readonly runStoreCount?: number;
+  /**
+   * Programmatic failure reason. Set when the dry-run took the
+   * `failure(...)` path (missing principal spec, runtime threw, no
+   * providers configured, etc.). The post-mortem already embeds this
+   * string; this field surfaces it for assertion and CLI rendering
+   * without forcing callers to grep the markdown.
+   */
+  readonly failureReason?: string;
 }
 
 export interface RunEventCapture {
@@ -401,7 +412,13 @@ async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
   }
 
   // Operator-pre-flight checks. Throw with an actionable message
-  // rather than degrading to a stub silently.
+  // rather than degrading to a stub silently. Reset the module-level
+  // provider-state cache first — a sibling test that exercised the
+  // no-providers path (with `ALDO_LOCAL_DISCOVERY=none`) leaves an
+  // empty enabledModels list cached for the duration of the test
+  // process; without this reset, the env-gated smoke would always
+  // see "no providers" even with a live Ollama running.
+  resetProviderStateCacheForLiveDryRun();
   const providerState = await loadProviderStateForLiveDryRun(
     process.env as unknown as Parameters<typeof loadProviderStateForLiveDryRun>[0],
   );
@@ -841,6 +858,8 @@ function failure(
     loadedSpecs,
     missingSpecs: missing,
     postMortem,
+    runStoreCount: 0,
+    failureReason: reason,
   };
 }
 

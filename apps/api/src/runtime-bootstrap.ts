@@ -178,6 +178,18 @@ export async function loadProviderStateForLiveDryRun(env: Env): Promise<{
   return loadProviderStateAsync(env);
 }
 
+/**
+ * Reset the module-level provider-state cache. Used by the live:network
+ * dry-run harness so a sibling test that pinned `ALDO_LOCAL_DISCOVERY=none`
+ * (to exercise the no-providers path) can't poison a subsequent operator-
+ * invoked smoke run with the same suite. Production code paths never call
+ * this — they intentionally cache the catalog + adapter registry.
+ */
+export function resetProviderStateCacheForLiveDryRun(): void {
+  providerStateCache = null;
+  providerStateLoading = null;
+}
+
 async function loadProviderStateAsync(env: Env): Promise<ProviderState> {
   if (providerStateCache !== null) return providerStateCache;
   if (providerStateLoading !== null) return providerStateLoading;

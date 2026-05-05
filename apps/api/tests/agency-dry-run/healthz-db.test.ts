@@ -156,11 +156,20 @@ describe.skipIf(!liveNetworkEnabled)('agency dry-run — live:network (env-gated
   it('drives the principal composite through real providers + real MCP', async () => {
     const result = await runDryRun({ mode: 'live:network' });
     expect(result.mode).toBe('live:network');
+    // If the run failed during pre-flight (no providers configured,
+    // runtime threw, etc.), surface the reason directly in the
+    // assertion message instead of letting a downstream check choke
+    // on undefined.
+    if (result.failureReason !== undefined) {
+      throw new Error(
+        `live:network smoke FAILED before reaching runtime: ${result.failureReason}\n\n${result.postMortem}`,
+      );
+    }
     // We don't assert ok=true: the run might legitimately fail if the
     // operator's tool host is misconfigured for this brief. We DO
     // assert the run dispatched + at least the principal supervisor
     // landed in the run store.
-    expect(result.runStoreCount).toBeGreaterThanOrEqual(1);
+    expect(result.runStoreCount ?? 0).toBeGreaterThanOrEqual(1);
     expect(result.events.length).toBeGreaterThan(0);
     expect(result.postMortem).toContain('mode: live:network');
   }, 600_000); // up to 10 minutes for a real composite run
