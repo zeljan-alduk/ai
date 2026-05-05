@@ -1,6 +1,6 @@
 ---
 title: Hybrid CLI
-summary: `aldo run` auto-decides local vs hosted based on the agent's required capabilities. `--route auto|local|hosted` overrides.
+summary: "aldo run auto-decides local vs hosted based on the agent's required capabilities. --route auto|local|hosted overrides."
 ---
 
 `aldo run <agent>` decides where to execute the agent based on
