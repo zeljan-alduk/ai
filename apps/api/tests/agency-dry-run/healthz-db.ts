@@ -128,6 +128,26 @@ export interface DryRunResult {
    * without forcing callers to grep the markdown.
    */
   readonly failureReason?: string;
+  /**
+   * Live-mode-only: per-stage timing + status records. Live:network
+   * dispatches go through eight named stages (specs-loaded,
+   * providers-resolved, gateway-built, tool-host-up,
+   * runtime-constructed, principal-dispatched, composite-running,
+   * run-store-collected). Each stage has its own timeout — a hang
+   * surfaces as a stage-named error rather than the whole run going
+   * silent. Empty for stub mode.
+   */
+  readonly stages?: ReadonlyArray<DryRunStage>;
+}
+
+export interface DryRunStage {
+  readonly name: string;
+  readonly ok: boolean;
+  readonly durationMs: number;
+  /** Reason on failure; null on success. */
+  readonly reason: string | null;
+  /** True when the stage hit its own timeout. */
+  readonly timedOut: boolean;
 }
 
 export interface RunEventCapture {
@@ -393,14 +413,126 @@ export class LiveNetworkUnavailable extends Error {
   }
 }
 
+export class LiveNetworkStageTimeoutError extends Error {
+  readonly stage: string;
+  readonly timeoutMs: number;
+  constructor(stage: string, timeoutMs: number) {
+    super(`live:network stage '${stage}' did not complete within ${timeoutMs}ms`);
+    this.name = 'LiveNetworkStageTimeoutError';
+    this.stage = stage;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+/**
+ * Per-stage timeouts (ms). Operator can override any stage via
+ *   ALDO_DRY_RUN_STAGE_TIMEOUT_<UPPER_SNAKE>=<ms>
+ * — e.g. ALDO_DRY_RUN_STAGE_TIMEOUT_PROVIDERS_RESOLVED=60000 to give
+ * a slow local-discovery probe a full minute. Defaults are tuned for
+ * fast-fail: a hang past these thresholds means something's wrong
+ * worth reporting, not "still working on it".
+ */
+const DEFAULT_STAGE_TIMEOUTS_MS: Readonly<Record<string, number>> = {
+  'specs-loaded': 5_000,
+  'providers-resolved': 30_000,
+  'gateway-built': 5_000,
+  'tool-host-up': 30_000,
+  'runtime-constructed': 5_000,
+  'principal-dispatched': 10_000,
+  // The actual run: 10 min global ceiling — if a real engagement
+  // needs longer, the operator overrides via the env. The whole
+  // POINT of staging is that this stage is allowed to be slow as
+  // long as we know we're in IT and not stuck before it.
+  'composite-running': 600_000,
+  'run-store-collected': 5_000,
+};
+
+function stageTimeoutMs(stage: string): number {
+  const envKey = `ALDO_DRY_RUN_STAGE_TIMEOUT_${stage.replace(/-/g, '_').toUpperCase()}`;
+  const raw = process.env[envKey];
+  if (raw !== undefined) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return DEFAULT_STAGE_TIMEOUTS_MS[stage] ?? 30_000;
+}
+
+/**
+ * Run an async stage with per-stage progress logging + timeout.
+ * Records into the supplied `stages` list and prints a one-line
+ * "[stage] starting / ok ms / TIMEOUT" to stderr so operators
+ * watching `pnpm exec tsx run-live-network.mjs` see exactly where
+ * the smoke is.
+ */
+async function withStage<T>(
+  stages: DryRunStage[],
+  name: string,
+  fn: () => Promise<T>,
+  log: (s: string) => void = (s) => process.stderr.write(`${s}\n`),
+): Promise<T> {
+  const timeoutMs = stageTimeoutMs(name);
+  const start = Date.now();
+  log(`[stage] ${name} starting (timeout ${timeoutMs}ms)`);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new LiveNetworkStageTimeoutError(name, timeoutMs)),
+          timeoutMs,
+        );
+      }),
+    ]);
+    const ms = Date.now() - start;
+    stages.push({ name, ok: true, durationMs: ms, reason: null, timedOut: false });
+    log(`[stage] ${name} ok in ${ms}ms`);
+    return result;
+  } catch (err) {
+    const ms = Date.now() - start;
+    const isTimeout = err instanceof LiveNetworkStageTimeoutError;
+    const reason = err instanceof Error ? err.message : String(err);
+    stages.push({
+      name,
+      ok: false,
+      durationMs: ms,
+      reason,
+      timedOut: isTimeout,
+    });
+    log(`[stage] ${name} ${isTimeout ? 'TIMEOUT' : 'FAILED'} after ${ms}ms — ${reason}`);
+    throw err;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
   const events: RunEventCapture[] = [];
   const spawns: SpawnRecord[] = [];
+  const stages: DryRunStage[] = [];
 
-  const { specs, missing } = await loadAgencySpecs(BRIEF_AGENT_PATHS);
+  // Stage 1 — load all six brief-touching agency specs.
+  let specsResult: Awaited<ReturnType<typeof loadAgencySpecs>>;
+  try {
+    specsResult = await withStage(stages, 'specs-loaded', async () =>
+      loadAgencySpecs(BRIEF_AGENT_PATHS),
+    );
+  } catch (err) {
+    return failureWithStages(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      [],
+      [],
+      `specs-loaded failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
+    );
+  }
+  const { specs, missing } = specsResult;
   const principalSpec = specs.get('principal');
   if (!principalSpec) {
-    return failure(
+    return failureWithStages(
       'live:network',
       brief,
       events,
@@ -408,20 +540,36 @@ async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
       missing,
       [...specs.keys()],
       `principal spec missing — cannot drive the composite. Errors: ${JSON.stringify(missing)}`,
+      stages,
     );
   }
 
-  // Operator-pre-flight checks. Throw with an actionable message
-  // rather than degrading to a stub silently. Reset the module-level
-  // provider-state cache first — a sibling test that exercised the
-  // no-providers path (with `ALDO_LOCAL_DISCOVERY=none`) leaves an
-  // empty enabledModels list cached for the duration of the test
-  // process; without this reset, the env-gated smoke would always
-  // see "no providers" even with a live Ollama running.
+  // Stage 2 — provider resolution. Reset the module-level cache
+  // first — a sibling test that exercised the no-providers path
+  // (with `ALDO_LOCAL_DISCOVERY=none`) leaves an empty
+  // enabledModels list cached for the duration of the test process;
+  // without this reset, the env-gated smoke would always see "no
+  // providers" even with a live Ollama running.
   resetProviderStateCacheForLiveDryRun();
-  const providerState = await loadProviderStateForLiveDryRun(
-    process.env as unknown as Parameters<typeof loadProviderStateForLiveDryRun>[0],
-  );
+  let providerState: Awaited<ReturnType<typeof loadProviderStateForLiveDryRun>>;
+  try {
+    providerState = await withStage(stages, 'providers-resolved', async () =>
+      loadProviderStateForLiveDryRun(
+        process.env as unknown as Parameters<typeof loadProviderStateForLiveDryRun>[0],
+      ),
+    );
+  } catch (err) {
+    return failureWithStages(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `providers-resolved failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
+    );
+  }
   if (providerState.enabledModels.length === 0) {
     throw new LiveNetworkUnavailable(
       'live:network mode requires at least one provider — set ANTHROPIC_API_KEY (or another provider env) or run a local model server (e.g. Ollama at http://localhost:11434). No providers resolved.',
@@ -431,55 +579,152 @@ async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
   const tenant = 'tenant-dry-run-live-network' as TenantId;
   const registry = new MapBackedRegistry(specs);
   const runStore = new InMemoryRunStore();
-  const router = createRouter(providerState.modelRegistry);
-  const gateway = createGateway({
-    models: providerState.modelRegistry,
-    adapters: providerState.adapters,
-    router,
-  });
-  const toolHost = createMcpToolHost();
 
-  const runtime = new PlatformRuntime({
-    modelGateway: gateway,
-    toolHost,
-    registry,
-    tracer: new StubTracer(),
-    tenant,
-    runStore,
-  });
-
-  const supervisor = new Supervisor({
-    runtime: runtime.asSupervisorAdapter(),
-    emit: (e) => events.push({ type: e.type, payload: e.payload }),
-  });
-  runtime.setOrchestrator(supervisor);
-
-  let topRunId: RunId | undefined;
-  let topOk = false;
-  let topOutput: unknown;
+  // Stage 3 — gateway build. Cheap, but pin a stage so a wedged
+  // adapter registry is its own line in the post-mortem.
+  let gateway: ReturnType<typeof createGateway>;
   try {
-    const compositeRun = await runtime.runAgent({ name: 'principal' }, brief);
-    topRunId = compositeRun.id as RunId;
-    const waited = await (
-      compositeRun as unknown as {
-        wait: () => Promise<{ ok: boolean; output: unknown }>;
-      }
-    ).wait();
-    topOk = waited.ok;
-    topOutput = waited.output;
+    gateway = await withStage(stages, 'gateway-built', async () => {
+      const router = createRouter(providerState.modelRegistry);
+      return createGateway({
+        models: providerState.modelRegistry,
+        adapters: providerState.adapters,
+        router,
+      });
+    });
   } catch (err) {
-    return failure(
+    return failureWithStages(
       'live:network',
       brief,
       events,
       spawns,
       missing,
       [...specs.keys()],
-      `runtime.runAgent threw: ${err instanceof Error ? err.message : String(err)}`,
+      `gateway-built failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
     );
   }
 
-  const runs = topRunId !== undefined ? runStore.listByRoot(topRunId) : [];
+  // Stage 4 — tool-host spinup. createMcpToolHost is lazy (each
+  // declared MCP server is spawned on first use), so this stage
+  // mostly measures construction; the real subprocess spawn happens
+  // inside the composite run. Still worth its own stage so a typo
+  // in tool-host wiring surfaces here.
+  let toolHost: ReturnType<typeof createMcpToolHost>;
+  try {
+    toolHost = await withStage(stages, 'tool-host-up', async () => createMcpToolHost());
+  } catch (err) {
+    return failureWithStages(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `tool-host-up failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
+    );
+  }
+
+  // Stage 5 — PlatformRuntime construction + supervisor wiring.
+  let runtime: PlatformRuntime;
+  try {
+    runtime = await withStage(stages, 'runtime-constructed', async () => {
+      const rt = new PlatformRuntime({
+        modelGateway: gateway,
+        toolHost,
+        registry,
+        tracer: new StubTracer(),
+        tenant,
+        runStore,
+      });
+      const supervisor = new Supervisor({
+        runtime: rt.asSupervisorAdapter(),
+        emit: (e) => events.push({ type: e.type, payload: e.payload }),
+      });
+      rt.setOrchestrator(supervisor);
+      return rt;
+    });
+  } catch (err) {
+    return failureWithStages(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `runtime-constructed failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
+    );
+  }
+
+  // Stage 6 — principal-dispatched. Just the runAgent() call (the
+  // composite supervisor returns immediately with a CompositeAgentRun
+  // handle; the actual work happens during the wait()).
+  let compositeRun: Awaited<ReturnType<typeof runtime.runAgent>>;
+  try {
+    compositeRun = await withStage(stages, 'principal-dispatched', async () =>
+      runtime.runAgent({ name: 'principal' }, brief),
+    );
+  } catch (err) {
+    return failureWithStages(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `principal-dispatched failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
+    );
+  }
+  const topRunId: RunId = compositeRun.id as RunId;
+
+  // Stage 7 — composite-running. The big one; everything else is
+  // bootstrap. Default 10-minute ceiling; operator can extend via
+  // ALDO_DRY_RUN_STAGE_TIMEOUT_COMPOSITE_RUNNING for a real
+  // engagement.
+  let topOk = false;
+  let topOutput: unknown;
+  try {
+    const waited = await withStage(stages, 'composite-running', async () =>
+      (compositeRun as unknown as {
+        wait: () => Promise<{ ok: boolean; output: unknown }>;
+      }).wait(),
+    );
+    topOk = waited.ok;
+    topOutput = waited.output;
+  } catch (err) {
+    return failureWithStages(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `composite-running failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
+    );
+  }
+
+  // Stage 8 — collect spawns from the run store.
+  let runs: ReturnType<typeof runStore.listByRoot>;
+  try {
+    runs = await withStage(stages, 'run-store-collected', async () =>
+      runStore.listByRoot(topRunId),
+    );
+  } catch (err) {
+    return failureWithStages(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `run-store-collected failed: ${err instanceof Error ? err.message : String(err)}`,
+      stages,
+    );
+  }
   for (const r of runs) {
     if (r.runId === topRunId) continue;
     spawns.push({
@@ -507,7 +752,7 @@ async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
     totalUsage,
   };
 
-  const postMortem = renderPostMortem({
+  const postMortem = renderPostMortemWithStages({
     mode: 'live:network',
     brief,
     events,
@@ -515,6 +760,7 @@ async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
     orchestration,
     loadedSpecs: [...specs.keys()],
     missingSpecs: missing,
+    stages,
   });
 
   return {
@@ -528,7 +774,19 @@ async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
     missingSpecs: missing,
     postMortem,
     runStoreCount: runs.length,
+    stages,
   };
+}
+
+function renderPostMortemWithStages(
+  args: Parameters<typeof renderPostMortem>[0] & { stages: DryRunStage[] },
+): string {
+  const base = renderPostMortem(args);
+  if (args.stages.length === 0) return base;
+  const lines = args.stages.map(
+    (s) => `- ${s.name}: ${s.ok ? '✅ ok' : s.timedOut ? '⏰ TIMEOUT' : '❌ failed'} (${s.durationMs}ms)`,
+  );
+  return `${base}\n## Stages\n${lines.join('\n')}\n`;
 }
 
 interface SpecBundle {
@@ -861,6 +1119,29 @@ function failure(
     runStoreCount: 0,
     failureReason: reason,
   };
+}
+
+/**
+ * Same shape as `failure`, plus the per-stage trace so the
+ * post-mortem can surface "stuck at stage X for Yms" when a
+ * live:network smoke trips a stage timeout.
+ */
+function failureWithStages(
+  mode: 'stub' | 'live' | 'live:network',
+  brief: string,
+  events: RunEventCapture[],
+  spawns: SpawnRecord[],
+  missing: { agent: string; error: string }[],
+  loadedSpecs: string[],
+  reason: string,
+  stages: DryRunStage[],
+): DryRunResult {
+  const base = failure(mode, brief, events, spawns, missing, loadedSpecs, reason);
+  const stageLines = stages
+    .map((s) => `- ${s.name}: ${s.ok ? 'ok' : s.timedOut ? 'TIMEOUT' : 'FAILED'} (${s.durationMs}ms)`)
+    .join('\n');
+  const postMortem = `${base.postMortem}\n## Stages\n${stageLines || '_(none)_'}\n`;
+  return { ...base, postMortem, stages };
 }
 
 function renderPostMortem(args: {

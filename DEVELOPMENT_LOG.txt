@@ -5996,3 +5996,52 @@ Net: a stuck iterative loop or a still-fanning composite tree mid-run now termin
 The leaf-non-iterative single-call agent run path doesn't have a step boundary today, so there's no place for the guard to fire mid-run there. That's the only remaining hole in the in-flight check. A non-iterative leaf is bounded by its per-run usdMax cap (which is engine-enforced inside the LeafAgentRun's gateway loop) so the runaway shape is bounded in dollars even without the tenant guard. Adding a leaf-side step boundary is a separate refactor.
 
 Next: live:network harness instrumentation (task #7) so the next dogfood run produces a real signal instead of going silent.
+
+2026-05-05T19:25Z — engineer (claude opus 4.7, 1M ctx) — §13 live:network harness instrumentation; dogfood produces real punch list.
+
+What the staging surfaces today, on a fresh disposable worktree against local Ollama only ($0):
+
+  [stage] specs-loaded            ok   16 ms
+  [stage] providers-resolved      ok   35 ms
+  [stage] gateway-built           ok    0 ms
+  [stage] tool-host-up            ok    1 ms
+  [stage] runtime-constructed     ok    0 ms
+  [stage] principal-dispatched    ok    0 ms
+  [stage] composite-running       FAILED 104s
+    composite child 'architect' (run ca1f720b…) failed:
+      composite child 'backend-engineer' (run c82521e2…) failed:
+        no eligible model: class="local-reasoning":
+          no model provides required caps
+          [tool-use, 128k-context, reasoning, structured-output, code-fim]
+
+The earlier wedge ("0% CPU, no Ollama traffic, no .aldo-memory directory") was misleading: bootstrap actually completes in milliseconds. The composite cascade gets through principal → architect → tech-lead, then backend-engineer's `modelPolicy.capabilityRequirements` includes `code-fim` (a frontier-only capability). Local-discovery's `local-reasoning`-class models don't advertise `code-fim`, so the gateway router fail-closes — which it should — and the composite tree halts. The previous "wedge" was the orchestrator waiting on a child whose dispatch was blocked.
+
+Real product finding (NOT a harness bug): the agency primitive's reference YAMLs ask for capabilities only frontier models satisfy. There are two clean fixes, neither in scope for this commit:
+
+1. Author local-friendly fallback variants in the agency YAMLs (or a new `agency/dev/` tree) so the dogfood smoke runs against $0 local providers without rewriting specs. backend-engineer would gain a fallback class lower than `code-fim` (e.g. `local-reasoning` with `code-fim` removed from `capabilityRequirements`).
+2. Document that the canonical agency expects frontier creds, and rename the ALDO_DRY_RUN_LIVE smoke "live:network full" so the operator knows to set ANTHROPIC_API_KEY before running.
+
+Either is a half-day's work; the recommendation is (1) because it lets every contributor dogfood the agency primitive at $0.
+
+What landed in this commit:
+
+apps/api/tests/agency-dry-run/healthz-db.ts:
+- New `DryRunStage` shape on `DryRunResult.stages`. Eight named stages: specs-loaded, providers-resolved, gateway-built, tool-host-up, runtime-constructed, principal-dispatched, composite-running, run-store-collected.
+- New `LiveNetworkStageTimeoutError` typed error. Timeouts default to 5/30/5/30/5/10/600/5 seconds (operator-overridable per stage via `ALDO_DRY_RUN_STAGE_TIMEOUT_<NAME>` env vars).
+- New `withStage(name, fn)` helper: prints `[stage] X starting / ok ms / TIMEOUT / FAILED` to stderr, races `fn()` against a per-stage AbortController-equivalent, records into the stages array.
+- New `failureWithStages(...)` mirrors `failure(...)` but appends a per-stage Markdown table to the post-mortem.
+- `renderPostMortemWithStages(...)` adds the same `## Stages` block to the success-path post-mortem.
+- `runLiveNetworkMode` now wraps each step in `withStage`; an exception in any one of them returns a `failureWithStages` keeping every prior stage's timing, naming the failed stage in the reason.
+
+apps/api/tests/agency-dry-run/run-live-network.mjs:
+- Rewritten to a documented operator-facing script with per-stage tail output and an env-var override section in the header comment.
+
+apps/api/tests/agency-dry-run/healthz-db.test.ts:
+- New "live:network records per-stage progress" test — pins `ALDO_LOCAL_DISCOVERY=none` so the harness throws `LiveNetworkUnavailable` cleanly at providers-resolved time, proving the stage trace is being written even on the failure path.
+
+Verification:
+- @aldo-ai/api: 569/569 tests pass + 1 properly skipped (was 568; +1 staging test). Typecheck clean.
+
+Net: the live:network smoke is no longer a black box. The earlier wedge captured in DEVELOPMENT_LOG.txt § 18:11Z is now named: it's a missing local-friendly fallback in the backend-engineer spec, not a platform bug. Operator running `pnpm exec tsx tests/agency-dry-run/run-live-network.mjs` against any provider mix gets a per-stage trace plus a clear failure reason within seconds of the actual problem.
+
+Next: §12.4 customer engagement UI (task #8) — /engagements list + /engagements/[slug] detail with milestones + comments + sign-off.

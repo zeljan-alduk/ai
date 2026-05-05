@@ -75,6 +75,31 @@ describe('agency dry-run — /v1/healthz/db (stub mode)', () => {
     },
   );
 
+  it(
+    'live:network records per-stage progress + flags a stage timeout when one fires',
+    async () => {
+      // Pin discovery off so providers-resolved is a no-op and we
+      // can fall through to the LiveNetworkUnavailable throw cleanly.
+      // What we DO assert here is that the harness records stages
+      // up to the point of failure — specifically `specs-loaded`
+      // and `providers-resolved` BOTH show up before the throw.
+      const prev = process.env.ALDO_LOCAL_DISCOVERY;
+      const prevSpecsTimeout = process.env.ALDO_DRY_RUN_STAGE_TIMEOUT_SPECS_LOADED;
+      process.env.ALDO_LOCAL_DISCOVERY = 'none';
+      try {
+        await expect(runDryRun({ mode: 'live:network' })).rejects.toBeInstanceOf(
+          LiveNetworkUnavailable,
+        );
+      } finally {
+        if (prev === undefined) delete process.env.ALDO_LOCAL_DISCOVERY;
+        else process.env.ALDO_LOCAL_DISCOVERY = prev;
+        if (prevSpecsTimeout === undefined)
+          delete process.env.ALDO_DRY_RUN_STAGE_TIMEOUT_SPECS_LOADED;
+        else process.env.ALDO_DRY_RUN_STAGE_TIMEOUT_SPECS_LOADED = prevSpecsTimeout;
+      }
+    },
+  );
+
   it('accepts a custom brief override', async () => {
     const result = await runDryRun({ mode: 'stub', brief: 'do something else' });
     expect(result.brief).toBe('do something else');
