@@ -2,8 +2,16 @@
 
 /**
  * Selectable card grid of discovered local LLMs.
+ *
+ * Each card carries the model id, source/port badge, and a row of
+ * capability chips (Vision / Tool Use / Reasoning / Embedding)
+ * inferred from the model id — see `capabilities.ts` for the
+ * heuristics. False negatives are fine; we never claim a capability
+ * we can't infer with confidence.
  */
 
+import { inferCapabilities } from './capabilities';
+import { CapabilityChip } from './capability-chip';
 import type { DiscoveredLocalModel } from './discovery-direct';
 
 interface Props {
@@ -42,10 +50,20 @@ export function ModelGrid({ models, selectedId, onSelect }: Props) {
                 <SourceBadge source={m.source} />
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-fg-muted">
-                <Chip>{m.capability}</Chip>
                 {typeof m.contextTokens === 'number' && m.contextTokens > 0 ? (
                   <Chip>{formatContext(m.contextTokens)} ctx</Chip>
                 ) : null}
+                {(() => {
+                  const caps = inferCapabilities(m.id);
+                  return (
+                    <>
+                      {caps.embedding ? <CapabilityChip kind="embedding" /> : null}
+                      {caps.vision ? <CapabilityChip kind="vision" /> : null}
+                      {caps.toolUse ? <CapabilityChip kind="tool_use" /> : null}
+                      {caps.reasoning ? <CapabilityChip kind="reasoning" /> : null}
+                    </>
+                  );
+                })()}
                 {selected ? (
                   <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
                     Selected

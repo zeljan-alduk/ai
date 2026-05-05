@@ -16,6 +16,7 @@
  */
 
 import type { InlineSuite } from './builtin-suite';
+import type { InlineCase } from './builtin-suite';
 import { type EvalOutcome, evaluateOutput } from './evaluator-direct';
 
 export interface BenchCaseRow {
@@ -28,6 +29,14 @@ export interface BenchCaseRow {
   readonly tokensOut: number | null;
   readonly tokPerSec: number | null;
   readonly reasoningRatio: number | null;
+  /** The prompt as fed to the model (the case's `input`). */
+  readonly input: string;
+  /** The evaluator clause this case was scored against. */
+  readonly expect: InlineCase['expect'];
+  /** What the model actually produced — content stream only, reasoning excluded. */
+  readonly output: string;
+  /** Combined reasoning_content streams when the provider emitted them. */
+  readonly reasoningOutput: string;
   readonly error?: string;
   readonly detail?: unknown;
 }
@@ -63,11 +72,10 @@ export async function runBenchDirect(opts: RunBenchOptions): Promise<{
     if (opts.signal?.aborted) break;
     const c = opts.suite.cases[i];
     if (c === undefined) continue;
-    const row = await runOne(c.input, c.expect, {
+    const row = await runOne(c, {
       chatBaseUrl: opts.chatBaseUrl,
       modelId: opts.modelId,
       maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-      caseId: c.id,
       ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
     });
     rows.push(row);
@@ -80,22 +88,17 @@ interface RunCtx {
   readonly chatBaseUrl: string;
   readonly modelId: string;
   readonly maxTokens: number;
-  readonly caseId: string;
   readonly signal?: AbortSignal;
 }
 
-async function runOne(
-  input: string,
-  expect: InlineSuite['cases'][number]['expect'],
-  ctx: RunCtx,
-): Promise<BenchCaseRow> {
+async function runOne(c: InlineCase, ctx: RunCtx): Promise<BenchCaseRow> {
   const start = performance.now();
   let captured: SseCapture;
   try {
-    captured = await streamCompletion(input, ctx);
+    captured = await streamCompletion(c.input, ctx);
   } catch (e) {
     return {
-      id: ctx.caseId,
+      id: c.id,
       passed: false,
       score: 0,
       totalMs: performance.now() - start,
@@ -104,21 +107,25 @@ async function runOne(
       tokensOut: null,
       tokPerSec: null,
       reasoningRatio: null,
+      input: c.input,
+      expect: c.expect,
+      output: '',
+      reasoningOutput: '',
       error: e instanceof Error ? e.message : String(e),
     };
   }
   const totalMs = performance.now() - start;
-  const evalResult: EvalOutcome = evaluateOutput(captured.content, expect);
+  const evalResult: EvalOutcome = evaluateOutput(captured.content, c.expect);
   const reasoningRatio =
     captured.tokensReasoning !== null && captured.tokensOut !== null && captured.tokensOut > 0
       ? captured.tokensReasoning / captured.tokensOut
-      : captured.reasoningChars + captured.contentChars > 0
-        ? captured.reasoningChars / (captured.reasoningChars + captured.contentChars)
+      : captured.reasoning.length + captured.content.length > 0
+        ? captured.reasoning.length / (captured.reasoning.length + captured.content.length)
         : null;
   const tokPerSec =
     captured.tokensOut !== null && totalMs > 0 ? (captured.tokensOut / totalMs) * 1000 : null;
   return {
-    id: ctx.caseId,
+    id: c.id,
     passed: evalResult.passed,
     score: evalResult.score,
     totalMs,
@@ -127,14 +134,17 @@ async function runOne(
     tokensOut: captured.tokensOut,
     tokPerSec,
     reasoningRatio,
+    input: c.input,
+    expect: c.expect,
+    output: captured.content,
+    reasoningOutput: captured.reasoning,
     ...(evalResult.detail !== undefined ? { detail: evalResult.detail } : {}),
   };
 }
 
 interface SseCapture {
   readonly content: string;
-  readonly contentChars: number;
-  readonly reasoningChars: number;
+  readonly reasoning: string;
   readonly tokensIn: number | null;
   readonly tokensOut: number | null;
   readonly tokensReasoning: number | null;
@@ -165,8 +175,7 @@ async function streamCompletion(input: string, ctx: RunCtx): Promise<SseCapture>
   if (res.body === null) throw new Error('no response body');
 
   let content = '';
-  let contentChars = 0;
-  let reasoningChars = 0;
+  let reasoning = '';
   let tokensIn: number | null = null;
   let tokensOut: number | null = null;
   let tokensReasoning: number | null = null;
@@ -197,11 +206,10 @@ async function streamCompletion(input: string, ctx: RunCtx): Promise<SseCapture>
         if (typeof delta.content === 'string' && delta.content.length > 0) {
           if (ttftMs === null) ttftMs = performance.now() - start;
           content += delta.content;
-          contentChars += delta.content.length;
         }
         if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) {
           if (ttftMs === null) ttftMs = performance.now() - start;
-          reasoningChars += delta.reasoning_content.length;
+          reasoning += delta.reasoning_content;
         }
       }
       if (frame.usage) {
@@ -213,7 +221,7 @@ async function streamCompletion(input: string, ctx: RunCtx): Promise<SseCapture>
       }
     }
   }
-  return { content, contentChars, reasoningChars, tokensIn, tokensOut, tokensReasoning, ttftMs };
+  return { content, reasoning, tokensIn, tokensOut, tokensReasoning, ttftMs };
 }
 
 interface SseFrame {

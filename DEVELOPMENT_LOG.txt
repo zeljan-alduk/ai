@@ -6951,3 +6951,59 @@ Click "Fix CORS for Ollama" → `OLLAMA_ORIGINS="*" ollama serve`
 copy button + restart hint.
 
 Tests: 383 passed. Typecheck clean.
+
+----------------------------------------
+2026-05-06 01:15 UTC — agent (claude opus 4.7) — bench-table expand/collapse + capability chips
+
+Two requested extensions to /local-models:
+
+(1) Per-row expand/collapse (user: "expand/collapse pattern would be ok").
+    Each row in the bench table is now click-to-expand. Below the row
+    a panel slides open with:
+     - Prompt        (full case input, truncate >600 chars w/ "show all")
+     - Expected      (evaluator clause: "contains: BENCH_TOKEN" /
+                      "regex: ^[0-9]+\\\\..." / json schema, etc.)
+     - Output        (the model's content stream, with the matched
+                      needle highlighted green for `contains` passes
+                      and red for `not_contains` failures)
+     - Reasoning trace (when `delta.reasoning_content` was emitted —
+                        models with thinking)
+     - Evaluator detail  (json_schema validation errors, regex misses)
+
+    Implementation: extended BenchCaseRow with `input`, `expect`,
+    `output`, `reasoningOutput` fields. The runner now keeps the full
+    text instead of just char counts (memory is fine — long-context
+    is 18 KB tops). Click handler on the <tr> + a chevron button for
+    keyboard access (rotates 90° on open). bg-bg-subtle/30 panel
+    fills the entire row width with a 2-column grid; long sections
+    use a `max-h-96 overflow-y-auto` block.
+
+    Bonus: highlightForExpect() wraps the matched needle in a
+    coloured <mark> so a reader can see at-a-glance why a contains/
+    not_contains/exact passed or failed.
+
+(2) Capability chips (user: image of three chips — Vision / Tool Use /
+    Reasoning).
+     - capabilities.ts — `inferCapabilities(modelId)` returns
+       { vision, toolUse, reasoning, embedding }. Heuristics:
+         vision:    /vl|vision|llava|qwen[23]-vl|minicpm-v|cogvlm|.../
+         reasoning: /qwq|deepseek-r1|qwen3|o1-|magistral|.../
+         tool-use:  conservative whitelist of families known to handle
+                    structured tool calls (qwen, llama-3, mistral,
+                    mixtral, gemma, phi-4, hermes, deepseek, …)
+         embedding: short-circuits everything else to false
+     - capability-chip.tsx — coloured outline pill (amber/sky/emerald/
+       violet) with inline SVG icon (eye / wrench / parens with dot /
+       three-dot vector). Matches the user's reference screenshot.
+     - model-grid.tsx — replaces the old generic "local-reasoning"
+       chip with the inferred set, ordered embedding → vision →
+       tool_use → reasoning so the more interesting capability is
+       last (reads naturally in context).
+
+False negatives are fine ("we don't know" is honest); false positives
+are not — when uncertain the chip is omitted.
+
+Tests: 383 passed. Typecheck clean. Biome clean (one
+useKeyWithClickEvents ignore on the <tr> click handler — the chevron
+button inside provides the keyboard path, biome rule is overzealous
+on this composite-affordance pattern).
