@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@aldo-ai/api-contract": "workspace:*",
+    "@aldo-ai/bench-suite": "workspace:*",
     "@aldo-ai/engine": "workspace:*",
     "@aldo-ai/eval": "workspace:*",
     "@aldo-ai/gateway": "workspace:*",

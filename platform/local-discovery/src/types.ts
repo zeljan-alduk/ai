@@ -10,8 +10,17 @@
 
 import type { RegisteredModel } from '@aldo-ai/gateway';
 
-/** Runtime label for the local server that returned this model. */
-export type DiscoverySource = 'ollama' | 'vllm' | 'llamacpp' | 'lmstudio';
+/** Runtime label for the local server that returned this model.
+ *
+ *  - `ollama` / `vllm` / `llamacpp` / `lmstudio` — well-known probes that
+ *    parse the runtime's specific list-models response.
+ *  - `openai-compat` — opportunistic port scan: any localhost port that
+ *    responds 200 to `GET /v1/models` with an OpenAI-shaped body, where
+ *    the host wasn't matched by a named probe. Captures e.g. text-
+ *    generation-webui's openai extension, mlx-lm's `--server`, anything
+ *    else that speaks the OpenAI-compat surface on a non-default port.
+ */
+export type DiscoverySource = 'ollama' | 'vllm' | 'llamacpp' | 'lmstudio' | 'openai-compat';
 
 export interface DiscoveryMetadata {
   /** ISO-8601 timestamp at which the probe returned this row. */

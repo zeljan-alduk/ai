@@ -1,7 +1,7 @@
 /**
  * vLLM probe — GET ${baseUrl}/v1/models.
  *
- * Default base URL: http://localhost:8000.
+ * Default base URL: http://127.0.0.1:8000.
  *
  * vLLM exposes the OpenAI-compatible `/v1/models` listing:
  *   { data: [{ id, object: 'model', created, owned_by, max_model_len, ... }] }
@@ -19,7 +19,7 @@ import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
 
-const DEFAULT_BASE_URL = 'http://localhost:8000';
+const DEFAULT_BASE_URL = 'http://127.0.0.1:8000';
 
 interface OpenAIModelList {
   readonly data?: ReadonlyArray<{

@@ -17,9 +17,9 @@ interface Case {
 }
 
 const CASES: readonly Case[] = [
-  { source: 'vllm', fn: probeVllm, defaultBase: 'http://localhost:8000' },
-  { source: 'llamacpp', fn: probeLlamacpp, defaultBase: 'http://localhost:8080' },
-  { source: 'lmstudio', fn: probeLmstudio, defaultBase: 'http://localhost:1234' },
+  { source: 'vllm', fn: probeVllm, defaultBase: 'http://127.0.0.1:8000' },
+  { source: 'llamacpp', fn: probeLlamacpp, defaultBase: 'http://127.0.0.1:8080' },
+  { source: 'lmstudio', fn: probeLmstudio, defaultBase: 'http://127.0.0.1:1234' },
 ];
 
 function jsonResponse(body: unknown, status = 200): Response {

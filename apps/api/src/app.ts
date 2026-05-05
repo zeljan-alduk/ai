@@ -49,6 +49,7 @@ import { integrationsGitRoutes } from './routes/integrations-git.js';
 import { integrationsRoutes } from './routes/integrations.js';
 import { invitationsRoutes } from './routes/invitations.js';
 import { membersRoutes } from './routes/members.js';
+import { benchSuiteRoutes } from './routes/bench-suite.js';
 import { modelsRoutes } from './routes/models.js';
 import { newsletterRoutes } from './routes/newsletter.js';
 import { notificationsRoutes } from './routes/notifications.js';
@@ -237,6 +238,9 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', assistantRoutes(deps));
   app.route('/', agentsRoutes(deps));
   app.route('/', modelsRoutes(deps));
+  // Quality × speed model rating: GET /v1/bench/suites lists server-
+  // side suites; POST /v1/bench/suite streams per-case results via SSE.
+  app.route('/', benchSuiteRoutes(deps));
   app.route('/', observabilityRoutes(deps));
   // Wave-4 — cost + spend analytics: totals + cards + timeseries +
   // breakdowns by capability/agent/project. Backs `/observability/spend`.

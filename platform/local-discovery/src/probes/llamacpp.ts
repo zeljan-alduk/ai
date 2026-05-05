@@ -1,7 +1,7 @@
 /**
  * llama.cpp server probe — GET ${baseUrl}/v1/models.
  *
- * Default base URL: http://localhost:8080.
+ * Default base URL: http://127.0.0.1:8080.
  *
  * The llama.cpp server (`./server --api`) exposes the same
  * OpenAI-compatible `/v1/models` listing as vLLM and LM Studio.
@@ -18,7 +18,7 @@ import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
 
-const DEFAULT_BASE_URL = 'http://localhost:8080';
+const DEFAULT_BASE_URL = 'http://127.0.0.1:8080';
 
 interface OpenAIModelList {
   readonly data?: ReadonlyArray<{

@@ -16,6 +16,7 @@
  * driven.
  */
 
+import { type PortScanPreset, scanLocalhostPorts } from './port-scan.js';
 import { probe as llamacppProbe } from './probes/llamacpp.js';
 import { probe as lmstudioProbe } from './probes/lmstudio.js';
 import { probe as ollamaProbe } from './probes/ollama.js';
@@ -31,7 +32,12 @@ const ALL_SOURCES = [
 
 type ProbeFn = (opts?: ProbeOptions) => Promise<readonly DiscoveredModel[]>;
 
-const PROBES: Readonly<Record<DiscoverySource, ProbeFn>> = Object.freeze({
+/**
+ * Named-probe registry. `'openai-compat'` is intentionally absent —
+ * it's a port-scan output tag, not a runtime with a known default port.
+ * `parseDiscoverySources` filters it out at parse time.
+ */
+const PROBES: Readonly<Record<Exclude<DiscoverySource, 'openai-compat'>, ProbeFn>> = Object.freeze({
   ollama: ollamaProbe,
   vllm: vllmProbe,
   llamacpp: llamacppProbe,
@@ -51,6 +57,25 @@ export interface DiscoverOptions {
   readonly onDebug?: (msg: string, meta?: Record<string, unknown>) => void;
   /** Test seam: env source. Defaults to `process.env`. */
   readonly env?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Localhost port scan, run AFTER the named probes return. `'common'`
+   * walks a curated ~60-port list (every default any OpenAI-compatible
+   * local engine documents); `'exhaustive'` walks `1024..65535` and
+   * takes 10-30 s on a typical laptop. Custom port lists are also
+   * accepted. Off by default — port-scanning the loopback interface
+   * is cheap but not free.
+   *
+   * Discovered hosts are tagged `source: 'openai-compat'`. Models
+   * already returned by a named probe (matched by base URL) are not
+   * re-probed.
+   */
+  readonly scan?: PortScanPreset | readonly number[];
+  /** Per-port timeout for the scan. Default 250 ms. */
+  readonly scanTimeoutMs?: number;
+  /** Concurrency for the scan. Default 128. */
+  readonly scanConcurrency?: number;
+  /** Override the scan host. Default `127.0.0.1`. */
+  readonly scanHost?: string;
 }
 
 /**
@@ -72,10 +97,10 @@ export function parseDiscoverySources(raw: string | undefined): readonly Discove
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter((s) => s.length > 0);
-  const known = new Set<DiscoverySource>(ALL_SOURCES);
+  const known = new Set<string>(ALL_SOURCES);
   const out: DiscoverySource[] = [];
   for (const n of names) {
-    if (known.has(n as DiscoverySource) && !out.includes(n as DiscoverySource)) {
+    if (known.has(n) && !out.includes(n as DiscoverySource)) {
       out.push(n as DiscoverySource);
     }
   }
@@ -101,7 +126,10 @@ export async function discover(opts: DiscoverOptions = {}): Promise<readonly Dis
     ...(opts.onDebug !== undefined ? { onDebug: opts.onDebug } : {}),
   };
 
-  const runs = sources.map((source) => {
+  const namedSources = sources.filter(
+    (s): s is Exclude<DiscoverySource, 'openai-compat'> => s !== 'openai-compat',
+  );
+  const runs = namedSources.map((source) => {
     const baseUrl = opts.baseUrls?.[source];
     const probeOpts: ProbeOptions = {
       ...probeOptsBase,
@@ -120,5 +148,38 @@ export async function discover(opts: DiscoverOptions = {}): Promise<readonly Dis
   });
 
   const results = await Promise.all(runs);
-  return results.flat();
+  const named = results.flat();
+
+  // Optional port scan AFTER the named probes return. Skip ports the
+  // named probes have already covered (deduped by stripped baseUrl).
+  if (opts.scan !== undefined) {
+    const skip = new Set(named.map((m) => normaliseBaseUrl(m.providerConfig?.baseUrl)));
+    const scanned = await scanLocalhostPorts(opts.scan, {
+      ...(opts.scanTimeoutMs !== undefined ? { timeoutMs: opts.scanTimeoutMs } : {}),
+      ...(opts.scanConcurrency !== undefined ? { concurrency: opts.scanConcurrency } : {}),
+      ...(opts.scanHost !== undefined ? { host: opts.scanHost } : {}),
+      ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
+      ...(opts.onDebug !== undefined ? { onDebug: opts.onDebug } : {}),
+      skipBaseUrls: skip,
+    });
+    return [...named, ...scanned];
+  }
+  return named;
+}
+
+/**
+ * Strip the optional `/v1` suffix and any trailing slash so a named
+ * probe's `http://localhost:1234/v1` and a port-scan's
+ * `http://127.0.0.1:1234` collide on the same key during dedup.
+ *
+ * `127.0.0.1` and `localhost` are treated as the same host because the
+ * named probes use one and the scan uses the other.
+ */
+function normaliseBaseUrl(raw: string | undefined): string {
+  if (raw === undefined) return '';
+  let v = raw.trim();
+  if (v.endsWith('/')) v = v.slice(0, -1);
+  if (v.endsWith('/v1')) v = v.slice(0, -3);
+  v = v.replace('://localhost', '://127.0.0.1');
+  return v;
 }

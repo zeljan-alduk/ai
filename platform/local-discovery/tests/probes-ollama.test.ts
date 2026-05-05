@@ -30,7 +30,7 @@ describe('probe(ollama)', () => {
     expect(m.privacyAllowed).toEqual(['public', 'internal', 'sensitive']);
     expect(m.cost.usdPerMtokIn).toBe(0);
     expect(m.cost.usdPerMtokOut).toBe(0);
-    expect(m.providerConfig?.baseUrl).toBe('http://localhost:11434/v1');
+    expect(m.providerConfig?.baseUrl).toBe('http://127.0.0.1:11434/v1');
     expect(m.source).toBe('ollama');
     expect(typeof m.discoveredAt).toBe('string');
   });

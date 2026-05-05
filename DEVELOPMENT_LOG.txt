@@ -6553,3 +6553,93 @@ Next surfaces (deferred, raised by user mid-turn):
  - tool-chain-read-write case once the platform grows an event-stream
    evaluator kind (or once we accept piping bench --suite through
    runtime.spawn for that one case).
+
+----------------------------------------
+2026-05-05 23:55 UTC — agent (claude opus 4.7) — local-models surface: discovery + bench rating end-to-end (CLI, API, web)
+
+User asked to wire the bench-suite + discovery into the landing page
+and add aggressive port-scanning. Did all of it in one branch:
+
+(1) `@aldo-ai/local-discovery` — tiered port scan.
+    - New `port-scan.ts` with `scanLocalhostPorts(preset, opts)` and
+      `probeOpenAICompatPort(baseUrl, opts)` exports.
+    - Two presets: `'common'` (curated ~60-port list, hand-maintained
+      for every OpenAI-compat local engine I could find docs for) and
+      `'exhaustive'` (every port 1024..65535, opt-in flag, ~10-30 s).
+    - `discover(opts)` accepts `scan: 'common' | 'exhaustive' | number[]`;
+      port-scan results are tagged `source: 'openai-compat'` and skip
+      ports the named probes already covered (deduped via baseUrl
+      normaliser that treats `localhost` ≡ `127.0.0.1` and `/v1` suffix
+      as optional).
+    - Defaults switched to `127.0.0.1` from `localhost` per user request
+      — sidesteps IPv6 hairpinning on machines where `localhost` → `::1`
+      but the LLM binds `0.0.0.0`. Probe tests updated to match.
+    - 12 new unit tests in `tests/port-scan.test.ts`.
+
+(2) `aldo models discover --scan / --exhaustive` — flags that drive
+    the new port-scan path. `--scan-timeout` for tuning the per-port
+    timeout.
+
+(3) `@aldo-ai/bench-suite` (new platform package) — bench engine
+    extracted from `apps/cli/src/commands/bench-suite.ts` into a
+    shared workspace package so the CLI, API, and web UI can all
+    consume the same primitive.
+    - `runBenchSuite()` (collect-all) + `streamBenchSuite()` (async
+      generator yielding `{ start, case, summary }` events).
+    - `resolveSuiteByIdOrPath()` + `resolveCaseInputs()` — suite
+      loading + `input: { file: 'path' }` expansion.
+    - `formatHeader / formatCaseRow / formatSummary / widthsFor` —
+      ASCII table renderer (CLI uses these; web UI ignores them and
+      renders its own).
+    - 7 new unit tests; CLI's existing tests slimmed down to wrapper-
+      only behaviour (5 tests, 4 active + 1 live-gated).
+
+(4) API endpoints (apps/api/src/routes/bench-suite.ts).
+    - `GET /v1/bench/suites` — lists every server-side suite under
+      `<repoRoot>/agency/eval/<id>/suite.yaml`.
+    - `POST /v1/bench/suite` (SSE) — streams `BenchSuiteEvent` frames
+      as each case completes. Accepts `suiteId` (server-side) OR
+      `yaml` (inline); refines that exactly one is set.
+    - `GET /v1/models/discover[?scan=common|exhaustive]` — fresh
+      discovery bypassing the 30s `/v1/models` cache.
+    - `GET /v1/models/scan?preset=...|ports=1234,5000-5010` — pure
+      port scan. Accepts mixed comma+range port specs.
+    - 5 new tests in `apps/api/tests/bench-suite.test.ts`.
+
+(5) Web UI — `/local-models` page (apps/web).
+    - Server component (apps/web/app/local-models/page.tsx) renders
+      the page header; everything interactive lives in a client
+      island (`LocalModelsShell`).
+    - Three components in `components/local-models/`:
+      - `local-models-shell.tsx` — top-level state machine. Drives
+        discovery-refresh + suite list fetch + SSE stream consumer.
+      - `discovery-panel.tsx` — left card: tri-mode scan picker
+        (default / common / exhaustive), model cards with provider
+        + source + capability + context + provides badges. Selected
+        card pops with `ring-2 ring-accent`.
+      - `rating-panel.tsx` — right card: suite picker, prominent
+        Run CTA, progress bar during streaming, results table that
+        fills in via the platform's existing `animate-fade-in`,
+        per-row tok/s sparkline bar, summary footer with pass-rate
+        colour-coded against 60% / 90% thresholds. A11y: pass/fail
+        is glyph + colour, not colour alone. Tabular numerals
+        everywhere.
+    - Sidebar entry added between Models and Observability so the
+      page is reachable from every authenticated route.
+
+(6) Docs (`apps/web/content/docs/guides/local-models.md`).
+    - "Web UI: /local-models" section explaining the three scan
+      modes and the SSE flow.
+    - CORS posture: server-to-server fetches don't need CORS, so the
+      self-hosted flow works out of the box. If/when we ship a
+      browser-direct mode, here's the per-runtime CORS config (table
+      for Ollama, LM Studio, vLLM, llama.cpp, TGW).
+    - 127.0.0.1 default explained (IPv6 hairpinning).
+
+Tests across the monorepo: 100% green for everything I touched
+(@aldo-ai/local-discovery: 101 passed; @aldo-ai/bench-suite: 7
+passed; @aldo-ai/cli: bench-suite + models-discover green; @aldo-ai/
+api: 574 passed; @aldo-ai/web: 382 passed). The pre-existing
+`mcp ls` test failure in apps/cli/tests/cli.test.ts is unrelated
+and untouched. The pre-existing apps/web-e2e Playwright typecheck
+failure is also unrelated.

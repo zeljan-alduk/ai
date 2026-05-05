@@ -34,7 +34,11 @@ import {
   SavingsQuery,
   SavingsResponse,
 } from '@aldo-ai/api-contract';
-import { type DiscoveredModel, discover as runLocalDiscovery } from '@aldo-ai/local-discovery';
+import {
+  type DiscoveredModel,
+  discover as runLocalDiscovery,
+  scanLocalhostPorts,
+} from '@aldo-ai/local-discovery';
 import { Hono } from 'hono';
 import YAML from 'yaml';
 import { getAuth } from '../auth/middleware.js';
@@ -353,6 +357,86 @@ export function modelsRoutes(deps: Deps): Hono {
   });
 
   /**
+   * `GET /v1/models/discover` — explicit, on-demand discovery + optional
+   * port scan. Unlike `/v1/models` (which serves a 30-second-cached
+   * union of catalog + named-probe rows), this endpoint always fires
+   * fresh probes and accepts a `scan` query param to widen the sweep:
+   *
+   *   ?scan=common      — named probes + curated ~60-port list
+   *   ?scan=exhaustive  — named probes + full localhost sweep (1024..65535,
+   *                       10-30 s on a typical laptop)
+   *   (omitted)         — named probes only
+   *
+   * Used by the local-models web UI to populate a "what's running on
+   * my machine?" picker without waiting for the cache to expire.
+   */
+  app.get('/v1/models/discover', async (c) => {
+    const scanParam = c.req.query('scan');
+    const scan: 'common' | 'exhaustive' | undefined =
+      scanParam === 'common' ? 'common' : scanParam === 'exhaustive' ? 'exhaustive' : undefined;
+
+    const probedAt = new Date().toISOString();
+    const discovered = await runLocalDiscovery({
+      env: deps.env,
+      ...(scan !== undefined ? { scan } : {}),
+    });
+    return c.json({
+      discoveredAt: probedAt,
+      scan: scan ?? null,
+      models: discovered.map((m) => ({
+        id: m.id,
+        provider: m.provider,
+        providerKind: m.providerKind,
+        source: m.source,
+        locality: m.locality,
+        capabilityClass: m.capabilityClass,
+        provides: m.provides,
+        privacyAllowed: m.privacyAllowed,
+        effectiveContextTokens: m.effectiveContextTokens,
+        baseUrl: m.providerConfig?.baseUrl ?? null,
+        discoveredAt: m.discoveredAt,
+      })),
+    });
+  });
+
+  /**
+   * `GET /v1/models/scan` — pure port scan, bypassing the named probes.
+   * Useful when the user knows the named-probe defaults are misleading
+   * for their setup (e.g. running multiple LM Studio instances on
+   * different ports). `?preset=common|exhaustive` selects the list;
+   * `?ports=1234,5000-5010` accepts a custom list as a comma+range
+   * spec.
+   */
+  app.get('/v1/models/scan', async (c) => {
+    const preset = c.req.query('preset');
+    const portsParam = c.req.query('ports');
+    let portList: 'common' | 'exhaustive' | readonly number[];
+    if (portsParam !== undefined && portsParam.length > 0) {
+      portList = parsePortSpec(portsParam);
+    } else if (preset === 'exhaustive') {
+      portList = 'exhaustive';
+    } else {
+      portList = 'common';
+    }
+    const probedAt = new Date().toISOString();
+    const found = await scanLocalhostPorts(portList, {});
+    return c.json({
+      discoveredAt: probedAt,
+      scan: typeof portList === 'string' ? portList : 'custom',
+      models: found.map((m) => ({
+        id: m.id,
+        provider: m.provider,
+        providerKind: m.providerKind,
+        source: m.source,
+        locality: m.locality,
+        capabilityClass: m.capabilityClass,
+        baseUrl: m.providerConfig?.baseUrl ?? null,
+        discoveredAt: m.discoveredAt,
+      })),
+    });
+  });
+
+  /**
    * `GET /v1/models/savings?period=7d|30d|90d` — wave-12 "cloud spend
    * you saved by going local" aggregation. Reads the caller's tenant's
    * `usage_records` joined to `runs.tenant_id` so cross-tenant rows
@@ -484,6 +568,45 @@ function computeCheapestCloudByClass(
     const existing = out.get(m.capabilityClass);
     if (existing === undefined || existing.usdPerMtokIn + existing.usdPerMtokOut > total) {
       out.set(m.capabilityClass, { id: m.id, usdPerMtokIn: usdIn, usdPerMtokOut: usdOut });
+    }
+  }
+  return out;
+}
+
+/**
+ * Parse a `?ports=` query value into a port list. Supports
+ *   - comma-separated single ports: `1234,5000,8080`
+ *   - inclusive ranges: `5000-5010`
+ *   - mixed: `1234,5000-5010,8080`
+ *
+ * Out-of-range values (>65535, <1) are silently dropped. An empty or
+ * unparseable spec falls back to an empty list (the route then defaults
+ * to the curated `common` preset).
+ */
+function parsePortSpec(spec: string): readonly number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const part of spec.split(',')) {
+    const tok = part.trim();
+    if (tok.length === 0) continue;
+    if (tok.includes('-')) {
+      const [a, b] = tok.split('-', 2).map((s) => Number.parseInt(s, 10));
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      const lo = Math.max(1, Math.min(a as number, b as number));
+      const hi = Math.min(65535, Math.max(a as number, b as number));
+      for (let p = lo; p <= hi; p++) {
+        if (!seen.has(p)) {
+          seen.add(p);
+          out.push(p);
+        }
+      }
+    } else {
+      const p = Number.parseInt(tok, 10);
+      if (!Number.isFinite(p) || p < 1 || p > 65535) continue;
+      if (!seen.has(p)) {
+        seen.add(p);
+        out.push(p);
+      }
     }
   }
   return out;

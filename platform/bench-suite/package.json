@@ -1,0 +1,26 @@
+{
+  "name": "@aldo-ai/bench-suite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Quality × speed model rating engine. Loads an EvalSuite, fires every case at an OpenAI-compatible endpoint, captures per-case timing + reasoning split + tool-call count, and scores via @aldo-ai/eval. Used by the CLI (aldo bench --suite) and the API (POST /v1/bench/suite, SSE).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@aldo-ai/api-contract": "workspace:*",
+    "@aldo-ai/eval": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

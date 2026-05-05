@@ -1,7 +1,7 @@
 /**
  * Ollama probe — GET ${baseUrl}/api/tags.
  *
- * Default base URL: http://localhost:11434.
+ * Default base URL: http://127.0.0.1:11434.
  *
  * Ollama's tags endpoint returns:
  *   { models: [{ name, model, modified_at, size, digest, details: {…} }] }
@@ -24,7 +24,7 @@ import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
 
-const DEFAULT_BASE_URL = 'http://localhost:11434';
+const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 
 interface OllamaTagsResponse {
   readonly models?: ReadonlyArray<{

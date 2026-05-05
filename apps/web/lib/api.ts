@@ -416,10 +416,7 @@ export async function updateEngagementApi(
 
 export async function listMilestonesApi(slug: string) {
   const { ListMilestonesResponse } = await import('@aldo-ai/api-contract');
-  return request(
-    `/v1/engagements/${encodeURIComponent(slug)}/milestones`,
-    ListMilestonesResponse,
-  );
+  return request(`/v1/engagements/${encodeURIComponent(slug)}/milestones`, ListMilestonesResponse);
 }
 
 export async function createMilestoneApi(
@@ -460,11 +457,9 @@ export async function listEngagementCommentsApi(slug: string, query: { kind?: st
   const { ListCommentsResponse } = await import('@aldo-ai/api-contract');
   const q: Record<string, string | undefined> = {};
   if (query.kind !== undefined) q.kind = query.kind;
-  return request(
-    `/v1/engagements/${encodeURIComponent(slug)}/comments`,
-    ListCommentsResponse,
-    { query: q },
-  );
+  return request(`/v1/engagements/${encodeURIComponent(slug)}/comments`, ListCommentsResponse, {
+    query: q,
+  });
 }
 
 export async function createEngagementCommentApi(
@@ -575,42 +570,25 @@ export function removeRunTag(runId: string, tag: string) {
 
 export async function listRunApprovals(runId: string) {
   const { ListPendingApprovalsResponse } = await import('@aldo-ai/api-contract');
-  return request(
-    `/v1/runs/${encodeURIComponent(runId)}/approvals`,
-    ListPendingApprovalsResponse,
-  );
+  return request(`/v1/runs/${encodeURIComponent(runId)}/approvals`, ListPendingApprovalsResponse);
 }
 
-export async function approveRunCall(
-  runId: string,
-  body: { callId: string; reason?: string },
-) {
+export async function approveRunCall(runId: string, body: { callId: string; reason?: string }) {
   const { ApprovalDecisionResponse } = await import('@aldo-ai/api-contract');
-  return request(
-    `/v1/runs/${encodeURIComponent(runId)}/approve`,
-    ApprovalDecisionResponse,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-  );
+  return request(`/v1/runs/${encodeURIComponent(runId)}/approve`, ApprovalDecisionResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
-export async function rejectRunCall(
-  runId: string,
-  body: { callId: string; reason: string },
-) {
+export async function rejectRunCall(runId: string, body: { callId: string; reason: string }) {
   const { ApprovalDecisionResponse } = await import('@aldo-ai/api-contract');
-  return request(
-    `/v1/runs/${encodeURIComponent(runId)}/reject`,
-    ApprovalDecisionResponse,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-  );
+  return request(`/v1/runs/${encodeURIComponent(runId)}/reject`, ApprovalDecisionResponse, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 /* ------------------------------- Saved views --------------------------- */
@@ -696,6 +674,110 @@ export function listModels() {
  */
 export function getModelSavings(query: { period?: SavingsPeriod } = {}) {
   return request('/v1/models/savings', SavingsResponse, { query });
+}
+
+// ── Discovery + bench-suite client helpers ─────────────────────────
+//
+// The bench-suite engine and discovery scanner don't have @aldo-ai/api-
+// contract Zod schemas yet — the wire shapes live in @aldo-ai/bench-suite
+// and @aldo-ai/local-discovery. We declare the minimum surface here so
+// the local-models UI stays type-safe without forcing a contract package
+// dependency on every page.
+
+export interface DiscoveredModelRow {
+  readonly id: string;
+  readonly provider: string;
+  readonly providerKind: string;
+  readonly source: string;
+  readonly locality: string;
+  readonly capabilityClass: string;
+  readonly provides?: readonly string[];
+  readonly privacyAllowed?: readonly string[];
+  readonly effectiveContextTokens?: number;
+  readonly baseUrl: string | null;
+  readonly discoveredAt: string;
+}
+
+export interface DiscoverResponse {
+  readonly discoveredAt: string;
+  readonly scan: 'common' | 'exhaustive' | null;
+  readonly models: readonly DiscoveredModelRow[];
+}
+
+export interface ScanResponse {
+  readonly discoveredAt: string;
+  readonly scan: 'common' | 'exhaustive' | 'custom';
+  readonly models: readonly DiscoveredModelRow[];
+}
+
+export interface BenchSuiteListEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly caseCount: number;
+}
+
+export interface ListBenchSuitesResponse {
+  readonly suites: readonly BenchSuiteListEntry[];
+}
+
+/**
+ * `GET /v1/models/discover[?scan=common|exhaustive]` — fresh discovery
+ * (named probes + optional port scan), bypasses the 30-second cache that
+ * `/v1/models` uses.
+ */
+export async function discoverLocalModels(
+  query: { scan?: 'common' | 'exhaustive' } = {},
+): Promise<DiscoverResponse> {
+  const url = new URL(`${AUTH_PROXY_PREFIX}/v1/models/discover`, getOriginForBrowser());
+  if (query.scan !== undefined) url.searchParams.set('scan', query.scan);
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok)
+    throw new ApiClientError(
+      res.status >= 500 ? 'http_5xx' : 'http_4xx',
+      'discoverLocalModels failed',
+      { status: res.status },
+    );
+  return (await res.json()) as DiscoverResponse;
+}
+
+/**
+ * `GET /v1/models/scan?preset=...|ports=...` — pure port scan
+ * bypassing the named probes.
+ */
+export async function scanLocalPorts(
+  query: { preset?: 'common' | 'exhaustive'; ports?: string } = {},
+): Promise<ScanResponse> {
+  const url = new URL(`${AUTH_PROXY_PREFIX}/v1/models/scan`, getOriginForBrowser());
+  if (query.preset !== undefined) url.searchParams.set('preset', query.preset);
+  if (query.ports !== undefined) url.searchParams.set('ports', query.ports);
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok)
+    throw new ApiClientError(res.status >= 500 ? 'http_5xx' : 'http_4xx', 'scanLocalPorts failed', {
+      status: res.status,
+    });
+  return (await res.json()) as ScanResponse;
+}
+
+/** `GET /v1/bench/suites` — list every server-side bench suite. */
+export async function listBenchSuites(): Promise<ListBenchSuitesResponse> {
+  const url = new URL(`${AUTH_PROXY_PREFIX}/v1/bench/suites`, getOriginForBrowser());
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok)
+    throw new ApiClientError(
+      res.status >= 500 ? 'http_5xx' : 'http_4xx',
+      'listBenchSuites failed',
+      { status: res.status },
+    );
+  return (await res.json()) as ListBenchSuitesResponse;
+}
+
+function getOriginForBrowser(): string {
+  if (typeof window !== 'undefined') return window.location.origin;
+  // SSR fallback — the helpers above are client-only by design, but
+  // keep this defensive so a stray SSR import doesn't crash.
+  return API_BASE;
 }
 
 /* ----------------------------- Observability ---------------------------- */

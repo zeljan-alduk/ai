@@ -31,7 +31,7 @@
  * through the gateway router.
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -123,7 +123,10 @@ export async function runBench(opts: BenchOptions, io: CliIO): Promise<number> {
   const cfg = loadConfig();
   const modelId = opts.model ?? (await firstDiscoveredModelId());
   if (modelId === null) {
-    writeErr(io, 'error: no model id available. Set --model <id> or ALDO_LOCAL_DISCOVERY=<source>.');
+    writeErr(
+      io,
+      'error: no model id available. Set --model <id> or ALDO_LOCAL_DISCOVERY=<source>.',
+    );
     return 1;
   }
 
@@ -237,9 +240,7 @@ async function runDirectLayer(
     tokensIn: usage?.prompt_tokens ?? null,
     tokensOut: usage?.completion_tokens ?? null,
     tokPerSec:
-      usage?.completion_tokens !== undefined
-        ? (usage.completion_tokens / totalMs) * 1000
-        : null,
+      usage?.completion_tokens !== undefined ? (usage.completion_tokens / totalMs) * 1000 : null,
     ok: true,
   };
 }
@@ -286,8 +287,7 @@ async function runRunLayer(
     ttftMs: firstEventAt,
     tokensIn: usage?.tokensIn ?? null,
     tokensOut: usage?.tokensOut ?? null,
-    tokPerSec:
-      usage?.tokensOut !== undefined ? (usage.tokensOut / modelMs) * 1000 : null,
+    tokPerSec: usage?.tokensOut !== undefined ? (usage.tokensOut / modelMs) * 1000 : null,
     ok: true,
   };
 }
@@ -352,7 +352,10 @@ async function runCodeLayer(
         try {
           const j = JSON.parse(line) as {
             kind?: string;
-            event?: { type?: string; payload?: { usage?: { tokensIn?: number; tokensOut?: number } } };
+            event?: {
+              type?: string;
+              payload?: { usage?: { tokensIn?: number; tokensOut?: number } };
+            };
           };
           const now = performance.now() - start;
           const evType = j.event?.type;
@@ -406,7 +409,7 @@ export async function firstDiscoveredModelId(): Promise<string | null> {
     if (process.env.LLAMACPP_BASE_URL) baseUrls.llamacpp = process.env.LLAMACPP_BASE_URL;
     const probed = await discover({
       sources,
-      baseUrls: baseUrls as Partial<Readonly<Record<typeof sources[number], string>>>,
+      baseUrls: baseUrls as Partial<Readonly<Record<(typeof sources)[number], string>>>,
     });
     return probed[0]?.id ?? null;
   } catch {

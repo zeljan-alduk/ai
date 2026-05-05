@@ -258,6 +258,58 @@ A second suite for your own agents looks identical: drop a
 prompt fixtures under `prompts/`, and reference the suite by id
 or path on the command line.
 
+## Web UI: `/local-models`
+
+The same engine drives the in-app **Local models** page. It does
+three things in one flow:
+
+1. Fires `GET /v1/models/discover` to enumerate every reachable
+   local LLM server. Three scan modes:
+   - **Default ports** — Ollama (11434), LM Studio (1234), vLLM
+     (8000), llama.cpp (8080). Sub-second.
+   - **Common dev ports** — adds a curated ~60-port list documented
+     by every local-LLM tool we know about (text-generation-webui,
+     mlx-lm, KoboldCpp, GPT4All, Jan, ramalama, OpenLLM, …). Adds
+     1–2 s.
+   - **Every localhost port** — full sweep of `127.0.0.1:1024..65535`.
+     10–30 s on a typical laptop. Useful when a custom port is in
+     play and you don't know which.
+2. Lets you pick any discovered model + any server-side suite.
+3. Streams per-case results via SSE — you watch the table fill in
+   as each case completes, with TTFT, tokens, reasoning split, and
+   tok/s for each row.
+
+Discovery defaults to **127.0.0.1** rather than `localhost` to
+sidestep IPv6 hairpinning on machines where `localhost` resolves
+to `::1` while the local LLM only binds `0.0.0.0`. Override via
+`LM_STUDIO_BASE_URL` / `OLLAMA_BASE_URL` / `VLLM_BASE_URL` /
+`LLAMA_CPP_BASE_URL` if your setup is non-standard.
+
+### Port-scan + CORS
+
+The browser never talks to the LLM directly — discovery and bench
+calls go through the ALDO API server, which then talks to
+`http://127.0.0.1:<port>`. Server-to-server fetches don't trigger
+CORS, so you don't need to configure anything on the LLM side for
+the web UI to work, **provided the API and the LLM are on the same
+machine**.
+
+If you're running a hosted API (e.g. `app.aldo.tech`) and want to
+hit local LLMs on your laptop, the API can't reach your loopback —
+you'd need a bridge (run `aldo` locally + tunnel, or use the CLI).
+A browser-direct mode is on the roadmap; when it ships, you'll need
+to allow the web origin in your LLM's CORS config:
+
+| Server | How to allow CORS |
+|---|---|
+| Ollama | `OLLAMA_ORIGINS="https://app.aldo.tech,http://localhost:3000" ollama serve` |
+| LM Studio | Toggle CORS in the local server panel; choose origins. |
+| vLLM | `vllm serve ... --allowed-origins '["https://app.aldo.tech"]'` |
+| llama.cpp | `--api-cors '*'` (or specific origins). |
+| text-generation-webui | `--api-cors-origin "https://app.aldo.tech"`. |
+
+For the current self-hosted flow, no CORS configuration is needed.
+
 ## Privacy tiers
 
 ALDO's privacy router is fail-closed at the gateway layer. An agent

@@ -1,7 +1,7 @@
 /**
  * LM Studio probe — GET ${baseUrl}/v1/models.
  *
- * Default base URL: http://localhost:1234.
+ * Default base URL: http://127.0.0.1:1234.
  *
  * LM Studio's local server exposes the OpenAI-compatible
  * `/v1/models` listing. Same parsing path as vLLM and llama.cpp.
@@ -18,7 +18,7 @@ import { resolveContextTokens } from '../model-context.js';
 import type { DiscoveredModel, ProbeOptions } from '../types.js';
 import { fetchJsonSafe, trimSlash } from './util.js';
 
-const DEFAULT_BASE_URL = 'http://localhost:1234';
+const DEFAULT_BASE_URL = 'http://127.0.0.1:1234';
 
 interface OpenAIModelList {
   readonly data?: ReadonlyArray<{

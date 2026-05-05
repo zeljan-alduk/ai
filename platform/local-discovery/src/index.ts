@@ -23,6 +23,14 @@
 export { discover, parseDiscoverySources } from './discover.js';
 export type { DiscoverOptions } from './discover.js';
 
+export {
+  COMMON_DEV_PORTS,
+  probeOpenAICompatPort,
+  resolvePortList,
+  scanLocalhostPorts,
+} from './port-scan.js';
+export type { PortScanOptions, PortScanPreset } from './port-scan.js';
+
 export { mergeIntoRegistry, mergeIntoList } from './registry-merge.js';
 export type { MergeOptions, MergeResult } from './registry-merge.js';
 

@@ -29,6 +29,15 @@ export interface ModelsDiscoverOptions {
   readonly json?: boolean;
   /** Per-probe timeout in ms. Defaults to the package default (1 s). */
   readonly timeoutMs?: number;
+  /**
+   * After the named probes run, additionally scan localhost ports for
+   * any OpenAI-compatible server. `'common'` walks a curated ~60-port
+   * list documented by every local-LLM tool we know about; `'exhaustive'`
+   * walks 1024..65535 (10-30 s on a typical laptop). Off by default.
+   */
+  readonly scan?: 'common' | 'exhaustive';
+  /** Per-port timeout for the scan. Default 250 ms. */
+  readonly scanTimeoutMs?: number;
 }
 
 export interface ModelsDiscoverHooks {
@@ -79,6 +88,8 @@ export async function runModelsDiscover(
   const discoverOpts: DiscoverOptions = {
     env,
     ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+    ...(opts.scan !== undefined ? { scan: opts.scan } : {}),
+    ...(opts.scanTimeoutMs !== undefined ? { scanTimeoutMs: opts.scanTimeoutMs } : {}),
   };
   const found = await discoverFn(discoverOpts);
 

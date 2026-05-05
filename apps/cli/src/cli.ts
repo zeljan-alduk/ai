@@ -396,19 +396,50 @@ export async function main(argv: readonly string[], opts: MainOptions = {}): Pro
       'probe well-known local-LLM ports (Ollama, vLLM, llama.cpp, LM Studio) and list responders',
     )
     .option('--timeout <ms>', 'per-probe timeout in ms', (v) => Number.parseInt(v, 10))
+    .option(
+      '--scan',
+      'after named probes, scan a curated ~60-port list for any OpenAI-compatible server',
+      false,
+    )
+    .option(
+      '--exhaustive',
+      'after named probes, scan every localhost port 1024..65535 (10-30 s on a typical laptop)',
+      false,
+    )
+    .option(
+      '--scan-timeout <ms>',
+      'per-port timeout for --scan/--exhaustive (default 250)',
+      (v) => Number.parseInt(v, 10),
+    )
     .option('--json', 'emit JSON output', false)
-    .action((o: { timeout?: number; json?: boolean }) => {
-      action = () =>
-        runModelsDiscover(
-          {
-            ...(o.timeout !== undefined && Number.isFinite(o.timeout)
-              ? { timeoutMs: o.timeout }
-              : {}),
-            json: o.json === true,
-          },
-          io,
-        );
-    });
+    .action(
+      (o: {
+        timeout?: number;
+        scan?: boolean;
+        exhaustive?: boolean;
+        scanTimeout?: number;
+        json?: boolean;
+      }) => {
+        action = () =>
+          runModelsDiscover(
+            {
+              ...(o.timeout !== undefined && Number.isFinite(o.timeout)
+                ? { timeoutMs: o.timeout }
+                : {}),
+              ...(o.exhaustive === true
+                ? { scan: 'exhaustive' as const }
+                : o.scan === true
+                  ? { scan: 'common' as const }
+                  : {}),
+              ...(o.scanTimeout !== undefined && Number.isFinite(o.scanTimeout)
+                ? { scanTimeoutMs: o.scanTimeout }
+                : {}),
+              json: o.json === true,
+            },
+            io,
+          );
+      },
+    );
 
   // --- mcp ------------------------------------------------------------------
   const mcp = program.command('mcp').description('inspect MCP servers (stub)');
