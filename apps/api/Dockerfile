@@ -21,6 +21,7 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY platform/api-contract/package.json platform/api-contract/
+COPY platform/bench-suite/package.json platform/bench-suite/
 COPY platform/billing/package.json platform/billing/
 COPY platform/cache/package.json platform/cache/
 COPY platform/engine/package.json platform/engine/
@@ -74,6 +75,10 @@ COPY platform/secrets ./platform/secrets
 # @aldo-ai/integrations; the package source must ride along with the
 # image (same lesson family as wave-6.5 / wave-7 / wave-10).
 COPY platform/integrations ./platform/integrations
+# Quality × speed bench engine: apps/api's /v1/bench/suite SSE route
+# imports @aldo-ai/bench-suite. The package source must ship in the
+# image (same lesson family as wave-6.5 / wave-7 / wave-10).
+COPY platform/bench-suite ./platform/bench-suite
 # Wave 11: /v1/billing/* routes call into @aldo-ai/billing for the
 # subscription store, checkout/portal/webhook helpers, and the
 # trial-gate middleware. The package boots in placeholder mode when

@@ -6857,3 +6857,50 @@ Tests: 383 passed (no regressions). Typecheck clean. Biome clean.
 The hosted API endpoints + SSRF guard from the earlier "open to public"
 commit stay in place — they're useful for the CLI's auth'd path and
 don't hurt anything when the public surface ignores them.
+
+----------------------------------------
+2026-05-06 00:42 UTC — agent (claude opus 4.7) — Dockerfile fix: bench-suite missing from API image
+
+User: "still not working". Hit ai.aldo.tech via chrome MCP and saw:
+ - marketing chrome correctly applied (top nav, no sidebar)
+ - BUT page content was the OLD UI (scan-mode pickers, "discoverLocalModels failed")
+ - meta description still the older variant
+
+Checked GitHub Actions — `gh run list --workflow=deploy-vps.yml`
+shows the LAST FOUR DEPLOYS ALL FAILED:
+   ba0d9b6 (added @aldo-ai/bench-suite to apps/api) → fail
+   b52ae69 → fail
+   0f4218a → fail
+   3fbcbe4 → fail
+   5cfbf3b → in_progress (would also fail without this fix)
+
+Failure log shows:
+   aldo-api  | Error [ERR_MODULE_NOT_FOUND]: Cannot find package
+   '@aldo-ai/bench-suite' imported from
+   /repo/apps/api/src/routes/bench-suite.ts
+
+Root cause: `apps/api/Dockerfile` enumerates every workspace package
+by name across two stages (deps: copy package.json; sources: copy
+the source tree). When I added `@aldo-ai/bench-suite` to apps/api's
+deps in commit ba0d9b6, I never added the matching `COPY` lines.
+Every push since has been crashing on the missing package.
+
+Two-line fix:
+ - `COPY platform/bench-suite/package.json platform/bench-suite/`
+   in the deps stage (between api-contract and billing, alphabetic).
+ - `COPY platform/bench-suite ./platform/bench-suite` in the sources
+   stage with a comment explaining the wave (mirrors the wave-6.5 /
+   wave-7 / wave-10 pattern the file already documents).
+
+Live page survives anyway: the user-visible flow is now browser-direct
+(the rewrite in 5cfbf3b stops importing the API endpoints), so the
+page doesn't actually need /v1/bench/suite to work. But the API still
+imports `@aldo-ai/bench-suite` from `apps/api/src/routes/bench-suite.ts`
+so the whole API process refused to boot — which is why even the
+unrelated /api/auth-proxy/v1/models/discover request was returning 502
+("auth-proxy: failed to reach API").
+
+After this commit deploys, both:
+ - the page itself loads its new browser-direct UI, and
+ - the API process boots and the auth-proxy can reach it for any other
+   route (login, signup, dashboard, etc.).
