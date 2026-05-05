@@ -5703,3 +5703,20 @@ Verification:
 Net: the agency primitive ships in three forms — stub / live (no network) / live:network. The third form is operator-invokable. Platform side is done. The next decision is NOT engineering: it's go/no-go on dogfood ($5-15 frontier or $0 local) vs. friendly-first-customer. Both need §12.5 budget cap (3d) + §12.4 engagement surface (1-2w) before exposing to a paying customer; neither is needed for an internal dogfood run.
 
 The original §13 Phase F target — "the agency primitive ships, or we have a named, testable list of what's still wrong with it" — is met both ways: it ships stub-and-live-no-network unconditionally, and live:network ships pending an actual run-through that turns up either nothing or a new punch list.
+
+2026-05-05T14:30Z — engineer (claude opus 4.7, 1M ctx) — §14 distribution & topology section drafted in MISSING_PIECES.md.
+
+§14 captures the three orthogonal distribution / topology tracks that came up in conversation today: (A) local-model bridge — how hosted ai.aldo.tech reaches a user's local Ollama; (B) mobile + cross-device access — phone reaching a hosted run, laptop reaching a home `aldo` rig; (C) messaging channel fan-out — Telegram, email, Slack, etc. for approval gates and run notifications.
+
+Key framing decisions captured in §14:
+- The three tracks share three pieces of shared infra: outbound tunnel daemon (Bun-compiled, cross-platform), device-pairing flow (QR-code → token), event fan-out primitive. Building one earns most of the others cheaply; skipping one trades savings now for retro cost later.
+- Recommended sequencing ranks Hybrid CLI (cheapest local-model story) + NotificationFanOut + Telegram/email first — they unlock unsupervised-agency-from-anywhere with ~5-6 days of total effort. PWA + Web Push + responsive UI follow as ~2 weeks. `aldo bridge` daemon + `aldo serve` cross-device tunnel are the larger product investments (~3-4 weeks combined, macOS+Linux first; Windows in v0.5 due to EV cert cost).
+- Native iOS/Android apps deferred — web push is good enough for v0.
+- WhatsApp / Viber / MS Teams / SMS deferred to per-customer-ask. Architecture is identical to Telegram; each is just another adapter behind NotificationFanOut.
+- Two-way agency-as-chatbot (Telegram bot becomes the frontend, not just a notification channel) is called out as a separate initiative for after §14 lands.
+
+Total spread: ~10-12 weeks for §14-A through §14-F sequentially by one engineer; most parallelisable.
+
+§14 explicitly does NOT block any of the §13 dogfood smoke work — the agency primitive ships in three forms today (stub / live no-network / live:network), and §14 is what turns "works for us internally" into "works for a user in São Paulo on her phone."
+
+Out-of-scope listed: federated multi-tenant bridge mesh, custom enterprise on-prem appliance (separate track from the existing self-hosted container path).

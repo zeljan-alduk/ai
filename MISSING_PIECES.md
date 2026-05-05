@@ -1881,4 +1881,253 @@ to fix."*
 
 ---
 
+## 14. Distribution & topology — bridges, mobile, messaging (drafted 2026-05-05)
+
+§9–§13 settled the **engine** and the **agency primitive** — runs work,
+composites recurse, MCP tooling is wired, dry-run smoke is operator-
+invokable. What §14 covers is orthogonal: **how the platform reaches
+users and how users reach the platform** when they're not sitting at
+the same machine the API runs on.
+
+The three tracks below are distinct product surfaces but share
+infrastructure (an outbound-tunnel daemon, a device-pairing flow, an
+event fan-out primitive). Decisions made on one constrain the others;
+this section pulls them together so the trade-offs are explicit before
+code starts.
+
+**Status**: drafted, not started. Each sub-track is independently
+shippable. None is required to fire the §13 dogfood smoke.
+
+### 14.1 The shape of the problem
+
+Today's wiring assumes the platform and the user are on the same box
+or at most the same private network:
+
+- `apps/cli` (`aldo`) — works locally. `local-discovery` probes
+  `localhost:11434` for Ollama, etc.
+- `apps/api` self-hosted — same constraint. Ships with `aldo run …`,
+  works for on-prem.
+- `ai.aldo.tech` hosted — can talk to cloud models (Anthropic / OpenAI
+  / Google), can run cloud agents, **cannot reach a user's local Ollama
+  behind their firewall**.
+- Approval gates (#9) live in the API process. The user has to be at
+  the API's web UI when an approval fires — no notification surface
+  off-machine.
+- Phone? Other laptop? Telegram? None of those interact with `aldo`
+  today.
+
+§14 is about closing those gaps. The unifying primitive is a small,
+authenticated outbound channel — the platform pulls events out to the
+user, the user pushes decisions back in.
+
+### 14.2 Track A — Local-model bridge (hosted API reaches user's local models)
+
+The hosted API at `ai.aldo.tech` has no path to a user's `localhost:11434`.
+For agents marked `privacy_tier: local-only` (or operators who want
+local Qwen-Coder for cost reasons), this is a hard block.
+
+#### 14.2.1 Hybrid CLI — defer-to-local for local-only agents (~1 day)
+
+The `aldo` CLI **is** the bridge: when a tenant has the CLI installed,
+local-only agents resolve in-process via the existing local-discovery,
+while cloud agents delegate to `ai.aldo.tech`. No new infrastructure;
+the existing privacy router already enforces the partition. This is
+how Claude Code / Cursor / Aider already work.
+
+**Out**: hosted UI + local model coexistence, no new components.
+**Effort**: ~1 day of glue code in `apps/cli` to know when to delegate
+upstream vs. stay local.
+
+#### 14.2.2 `aldo bridge` daemon (~3–4 weeks v0)
+
+A small Bun-compiled binary the user installs on the box that has
+their local model. Opens a stable authenticated outbound HTTP/2 or
+WebSocket connection to `ai.aldo.tech`; registers as a per-tenant
+local provider. Hosted router treats it as just another model row;
+local-only completions get tunneled through.
+
+Auth: short-lived JWTs minted from the tenant key + a per-device
+record stored in the API. Pairing flow is the QR-code-in-terminal /
+scan-on-phone shape Tailscale + 1Password use.
+
+Cross-platform packaging (effort multiplier on top of the daemon
+itself):
+
+| OS | Distribution channel | Cost |
+|---|---|---|
+| macOS | Homebrew tap + DMG; `launchd` plist | $99/yr Apple Developer ID + notarization |
+| Linux | `curl \| sh` + apt/yum/snap; `systemd` unit | GPG signing key (free) |
+| Windows | winget + scoop + signed MSI; Windows Service via `sc.exe` | **EV code-signing cert ~$300–500/yr** for SmartScreen reputation |
+
+**Effort**: daemon ~1–2 weeks, packaging + signing + auto-update
+~1–2 weeks, CI release pipeline ~3–5 days. Procure Windows EV cert
+early (1–2 weeks vendor back-and-forth).
+
+#### 14.2.3 Recommended sequencing for Track A
+
+Ship 14.2.1 (Hybrid CLI) first — days of work, no new products. Build
+14.2.2 (`aldo bridge`) once a paying customer specifically asks for
+hosted-UI + local-model. Skip Windows in v0.5 if scope pressure forces
+it; macOS + Linux is ~50% of users at much lower cost.
+
+### 14.3 Track B — Remote access from mobile + other computers
+
+§13 ships approval gates (#9). The killer mobile interaction isn't
+"compose a brief on a phone" — it's **agent paged me at 3am, I tap
+approve from bed.** Without that, unsupervised multi-day agency runs
+can't fire because no human is at the API web UI to clear the gate.
+
+#### 14.3.1 Mobile-friendly hosted UI (~1 week)
+
+Make `ai.aldo.tech` responsive: viewport meta, touch targets, the
+`/runs/<id>` cycle tree readable on a phone. Foundational for 14.3.2;
+useful on its own for tablet review.
+
+#### 14.3.2 PWA + Web Push for approval events (~1 week)
+
+Service worker + Web Push subscriptions wired to the
+`tool.pending_approval` event stream. Phone shows
+`[ALDO] approve "git push --force"?` with two tap targets; tapping
+calls back into `/v1/runs/:id/approve`. iOS web push works since 16.4
+(2023); Android since forever.
+
+**Out**: approval-from-anywhere without a native app.
+**Effort**: ~1 week, reuses existing approval banner from `apps/web`.
+
+#### 14.3.3 `aldo serve` — cross-device tunnel for local rigs (~1–2 weeks)
+
+If your `aldo` is on your home desktop and you're on your laptop in a
+coffee shop, you can't reach it. Same primitive as 14.2.2 (outbound
+tunnel) with different forward semantics: instead of forwarding model
+traffic *into* the local box, this forwards UI/event traffic *out* of
+it. CLI gains an `aldo serve` subcommand; user gets a stable URL like
+`aldo.tech/r/<tenant>/<device>`. From any browser/phone the rig is
+reachable. Pairs with 14.2.2's daemon — same outbound tunnel,
+bidirectional.
+
+**Effort**: ~1–2 weeks once 14.2.2 lands; standalone is closer to 2.
+
+#### 14.3.4 Native iOS + Android apps — deferred
+
+iOS web push is good enough for v0. Native apps add app-store presence
+and lock-screen polish but cost 2 codebases × 3–4 months × signing
+cert overhead. Defer until web-push reliability data forces a rebuild
+or app-store presence becomes a marketing requirement.
+
+### 14.4 Track C — Messaging channel fan-out
+
+The platform already has `NotificationSink` as a real interface in
+`@aldo-ai/engine`, threaded through `RuntimeDeps`. What's missing is
+the **transport adapters** that fan-out events to external channels
+(Telegram, email, Slack, etc.). Each adapter is ~50–150 LoC behind a
+shared interface.
+
+#### 14.4.1 NotificationFanOut primitive (~2 days)
+
+New service that sits next to `PostgresNotificationSink`. Subscribes
+to `tool.pending_approval` / `run.completed` events; looks up the
+tenant's connected channels; dispatches in parallel via per-channel
+adapters. Inbound (button taps from messaging apps) hits per-channel
+webhook routes (`/v1/notifications/<channel>/webhook`) that resolve
+external-id → tenant → run and call the existing approve/reject API.
+
+Plus a per-tenant `connected_channels` table + the **identity binding
+flow** (one-time linking code shape): user pairs their messaging app
+to their tenant once, then every channel reuses the binding.
+
+#### 14.4.2 Telegram + Email transports (~3 days combined)
+
+| Channel | Setup | Per-msg cost | Why first |
+|---|---|---|---|
+| **Telegram** | Free, BotFather token | Free | Best ratio. Inline keyboard buttons for approve/reject. Every dev/SRE has it. No app install. |
+| **Email** | Existing SES/SMTP | ~$0 | Universal fallback. Action links replace in-message buttons (token-bearing URL). Resilient when push services break. |
+
+These two cover ≥ 90% of the unsupervised-agency unlock.
+
+#### 14.4.3 Slack + Discord (~5 days combined)
+
+B2B (Slack) + dev/community (Discord). Same identity-binding pattern,
+similar interactive-button surface. The team agency story (humans +
+agents in shared channels) is Slack-native UX.
+
+#### 14.4.4 On-demand: WhatsApp / Viber / MS Teams / SMS
+
+| Channel | Why deferred |
+|---|---|
+| **WhatsApp Business** | Meta Business approval cycle (days–weeks); template pre-approval for outbound; **~$0.005–0.05/msg** market-dependent. ~1–2 weeks setup. Massive consumer reach (LatAm / India / Europe). Defer until a market demands it. |
+| **Viber Business** | Niche by geography (CIS, Greece, Philippines). On customer ask only. |
+| **MS Teams** | Bot Framework + Azure AD app + permission consent — real setup tax. Required for some enterprise customers; not for v0. |
+| **SMS (Twilio)** | One-way only (no interactive buttons). Last-resort fallback. ~$0.01–0.10/msg international. |
+
+Build per customer ask. The architecture is the same — each is just a
+new adapter behind `NotificationFanOut`.
+
+#### 14.4.5 Two-way chat — separate, larger initiative
+
+"Telegram-as-the-frontend-for-aldo" (you message the bot a brief, the
+agency runs, it replies with progress) is **not** a notification
+channel — it's an alternate UI to the assistant pane. Out of scope
+for §14; would ride on top once 14.4.1 lands and demand surfaces.
+
+### 14.5 Shared infrastructure (planned together)
+
+The three tracks are not independent; they share three pieces of infra:
+
+| Shared piece | Used by |
+|---|---|
+| Outbound tunnel daemon (Bun-compiled, cross-platform) | 14.2.2 (model bridge) + 14.3.3 (`aldo serve`) |
+| Device-pairing flow (QR-code → token → tenant↔device record) | 14.2.2 + 14.3.3 + 14.4.1 (channel binding) |
+| Event fan-out primitive | 14.3.2 (Web Push) + 14.4 (every messaging adapter) |
+
+If you commit to one of the tracks, build the shared pieces once and
+the others land in days. If you skip a track, you save the shared-
+infra cost too — but every later track will have to retro it in.
+
+### 14.6 Sequencing — recommended order if all three ship
+
+| Phase | Items | Effort | Capability unlocked |
+|---|---|---|---|
+| §14-A | 14.2.1 Hybrid CLI | ~1 d | Local-only agents work for users with `aldo` installed locally |
+| §14-B | 14.4.1 NotificationFanOut + 14.4.2 Telegram + Email | ~5 d | Approval-from-anywhere via the most reachable channels |
+| §14-C | 14.3.1 Mobile-friendly UI + 14.3.2 PWA + Web Push | ~2 wk | Hosted UI works on phones; in-browser approvals |
+| §14-D | 14.2.2 `aldo bridge` v0 (macOS + Linux) + 14.3.3 `aldo serve` | ~3–4 wk | Hosted-UI + local-model coexistence; cross-device access to local rigs |
+| §14-E | 14.4.3 Slack + Discord | ~5 d | B2B + community channel |
+| §14-F | Windows packaging for §14-D + EV cert procurement | ~2 wk + cert lead time | Windows users equal-tier |
+| §14-G | On-demand: WhatsApp / Viber / Teams / SMS | scoped per ask | Specific markets / customers |
+
+**Total spread**: ~10–12 weeks for §14-A through §14-F if shipped
+sequentially by one engineer. Most of it is parallelisable.
+
+### 14.7 Out of scope for §14
+
+- Native iOS / Android apps — see 14.3.4. Defer until web-push proves
+  insufficient or app-store presence is a marketing requirement.
+- Two-way chat / agency-as-chatbot — see 14.4.5. Separate initiative.
+- Federated multi-tenant `aldo bridge` mesh (your bridge serving
+  another user's tenant) — out of scope; if it's needed, it's a
+  research project, not a follow-on.
+- Custom enterprise on-prem hosted appliance — separate distribution
+  story; the existing self-hosted API container path covers it for
+  customers who want it today.
+
+### 14.8 What §14 unlocks
+
+After §14-A through §14-C ship: **a user can sign up at
+`ai.aldo.tech` from their phone, kick off an unsupervised agency run
+on a real repo, and approve destructive ops from Telegram while
+they're on the bus.** That's the agency-runs-without-a-human-at-the-
+keyboard story §12 was reaching toward.
+
+After §14-D ships: **a user can run their own Ollama at home, sign in
+to `ai.aldo.tech` from their work laptop, and have the hosted UI use
+their home Ollama for local-only agents.** That's the hybrid topology
+that makes the LLM-agnostic + privacy-tier guarantees real for
+non-self-hosting users.
+
+Together, §14 is what turns the agency primitive from
+*"works for us internally"* into *"works for a user in São Paulo on
+her phone."*
+
+---
+
 (end of MISSING_PIECES.md)
