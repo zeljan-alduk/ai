@@ -5643,3 +5643,35 @@ Tests: 12/12 dry-run cases (was 8; +4 live mode), 541/541 apps/api total (was 53
 Honest call: the agency primitive ships in stub form + 1-level live form. Item 5.6 (engine spawn recursion) blocks the multi-level live dry-run; item 5.5b (live with real provider creds) blocks the real PR. After 5.6, 5.5b is straightforward. After 5.5b, the agency primitive ships against a real customer-shaped repo.
 
 Found a real engine gap without spending a single dollar of inference. Exactly what §13 Phase F was designed to do.
+
+2026-05-05T14:05Z — engineer (claude opus 4.7, 1M ctx) — §13 / item 5.6 engine spawn recursion landed; closes the gap 5.5a found.
+
+platform/engine/src/runtime.ts:
+- New private `spawnCompositeWrapper(ref, spec, inputs, opts)` helper that builds the supervisor wrapper run, records it on the run store, and dispatches to orchestrator.runComposite. Used by both runAgent (top-level composite roots, depth=0) and spawn's new composite branch (nested composites, depth=parent+1) so the recursion logic lives in exactly one place.
+- spawn() now detects spec.composite !== undefined after loading the spec and routes through spawnCompositeWrapper before falling through to LeafAgentRun construction. This is the actual fix — pre-fix, spawn always built a leaf regardless of composite shape.
+- Depth tracking added to runMeta. Every spawn (composite or leaf) computes its child's depth from the parent's runMeta entry. Decouples depth from SpawnOpts plumbing.
+- CompositeAgentRun.collectUsage() shim added — returns [totalUsage] once the composite resolves, so the supervisor adapter treats composite child returns uniformly with leaf returns.
+- asSupervisorAdapter() branches on this.composites.get(id) vs this.runs.get(id) and returns the right wait/collectUsage closure. Composite handles forward to the cached totalUsage; leaf handles do the existing per-run walk through runs.
+
+platform/orchestrator/tests/engine-integration.test.ts:
+- New test "recurses through nested composite specs (item 5.6 — full cascade)" that builds a 2-level composite (outer → middle → leaf-x + leaf-y) and asserts all 4 runs land in the store with correct parent/root linkage. Fails on the pre-fix engine.
+
+apps/api/tests/agency-dry-run/healthz-db.test.ts:
+- "expands the FULL composite cascade through every level" replaces the old "surfaces the engine gap" case. Asserts ≥6 runs in the store + all 5 expected child agents (architect, tech-lead, code-reviewer, security-auditor, backend-engineer) spawn.
+- "emits one composite.usage_rollup per composite level" asserts exactly 3 rollups (principal + architect + tech-lead).
+
+Live-mode dry-run output (re-rendered to agency/dry-runs/2026-05-05-healthz-db-live.md):
+- ✅ composite completed
+- 6 runs in store (was 2)
+- 5 children spawn: architect, tech-lead, code-reviewer, security-auditor, backend-engineer
+- 3 composite.usage_rollup events (one per composite level)
+
+Verification:
+- @aldo-ai/orchestrator: 53/53 tests (was 52, +1 2-level test).
+- @aldo-ai/api: 542/542 (was 541, +1 from dry-run test rebalance).
+- @aldo-ai/engine: pre-existing pglite-related flake in postgres-run-store.test.ts (event-order assertion); fails on stashed pre-change tree too. Not caused by this commit.
+- All typechecks clean.
+
+Net: the agency primitive ships in stub form AND in full multi-level live form. Item 5.5b (real provider creds + real MCP tool host) is the only remaining piece before a real PR landing on a real remote. ~1-2 days of wiring; the structure is the same as 5.5a, just with createGateway + createMcpToolHost in place of the stubs. After that: agency primitive ships against a customer-shaped repo.
+
+Tangential conversation: discussed how the hosted ai.aldo.tech API would reach a user's local Ollama (firewall-blocked from the cloud). Two paths recommended: (A) Hybrid CLI — aldo binary runs locally for local-only agents, delegates cloud agents to hosted; (B) aldo bridge daemon — Bun-compiled cross-platform binary user installs, opens authenticated outbound tunnel. Cross-platform: macOS + Linux trivial; Windows needs EV cert (~$300-500/yr). Captured in auto-memory; not in MISSING_PIECES yet (separate distribution track).

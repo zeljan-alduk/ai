@@ -279,4 +279,89 @@ describe('engine ↔ orchestrator integration', () => {
     // Root defaults to id (single-node tree).
     expect(stored?.root).toBe(run.id);
   });
+
+  // MISSING_PIECES.md §13 / item 5.6 — engine spawn recursion.
+  //
+  // Pre-fix behaviour: PlatformRuntime.spawn always built a LeafAgentRun,
+  // so when a child spec carried its own composite block (e.g. an
+  // architect that supervises tech-lead + backend-engineer), the deeper
+  // cascade was silently skipped. Surfaced by the §13 Phase F live-mode
+  // dry-run against the real agency YAMLs.
+  //
+  // Post-fix behaviour: the engine detects spec.composite on every
+  // spawned child and dispatches through the orchestrator, so the full
+  // tree expands. This test fails without that fix.
+  it('recurses through nested composite specs (item 5.6 — full cascade)', async () => {
+    const registry = new MapRegistry();
+    // Two-level composite: outer sup -> middle sup -> two leaves.
+    registry.add(spec({ name: 'leaf-x' }));
+    registry.add(spec({ name: 'leaf-y' }));
+    registry.add(
+      spec({
+        name: 'middle',
+        composite: {
+          strategy: 'sequential',
+          subagents: [{ agent: 'leaf-x' }, { agent: 'leaf-y' }],
+        },
+      }),
+    );
+    registry.add(
+      spec({
+        name: 'outer',
+        composite: { strategy: 'sequential', subagents: [{ agent: 'middle' }] },
+      }),
+    );
+
+    const runStore = new InMemoryRunStore();
+    const rt = new PlatformRuntime({
+      modelGateway: new StubGateway(),
+      toolHost: new StubToolHost(),
+      registry,
+      tracer: new StubTracer(),
+      tenant: TENANT,
+      runStore,
+    });
+    const sup = new Supervisor({
+      runtime: rt.asSupervisorAdapter(),
+      emit: () => {},
+    });
+    rt.setOrchestrator(sup);
+
+    const run = await rt.runAgent({ name: 'outer' }, 'go');
+    const waited = await (
+      run as unknown as {
+        wait: () => Promise<{ ok: boolean; output: unknown }>;
+      }
+    ).wait();
+    expect(waited.ok).toBe(true);
+
+    // 4 runs: outer (composite) + middle (composite) + leaf-x + leaf-y.
+    const allRuns = runStore.listByRoot(run.id as RunId);
+    expect(allRuns.length).toBe(4);
+    const byName = new Map(allRuns.map((r) => [r.ref.name, r]));
+    expect(byName.has('outer')).toBe(true);
+    expect(byName.has('middle')).toBe(true);
+    expect(byName.has('leaf-x')).toBe(true);
+    expect(byName.has('leaf-y')).toBe(true);
+
+    // Composite supervisors carry compositeStrategy on the row;
+    // leaves don't.
+    expect(byName.get('outer')?.compositeStrategy).toBe('sequential');
+    expect(byName.get('middle')?.compositeStrategy).toBe('sequential');
+    expect(byName.get('leaf-x')?.compositeStrategy).toBeDefined(); // leaves carry the parent strategy
+    expect(byName.get('leaf-y')?.compositeStrategy).toBeDefined();
+
+    // Linkage: every row's root is the outer run id; middle's parent
+    // is outer; leaves' parent is middle.
+    const outerId = run.id;
+    expect(byName.get('outer')?.parent).toBeUndefined();
+    expect(byName.get('outer')?.root).toBe(outerId);
+    expect(byName.get('middle')?.parent).toBe(outerId);
+    expect(byName.get('middle')?.root).toBe(outerId);
+    const middleId = byName.get('middle')?.runId;
+    expect(byName.get('leaf-x')?.parent).toBe(middleId);
+    expect(byName.get('leaf-y')?.parent).toBe(middleId);
+    expect(byName.get('leaf-x')?.root).toBe(outerId);
+    expect(byName.get('leaf-y')?.root).toBe(outerId);
+  });
 });

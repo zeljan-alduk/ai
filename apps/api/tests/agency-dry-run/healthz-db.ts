@@ -727,7 +727,7 @@ function renderPostMortem(args: {
     args.mode === 'stub'
       ? '_Stub mode: 1-level mock SupervisorRuntimeAdapter. Run with mode: "live" to drive the real PlatformRuntime + Supervisor._'
       : args.mode === 'live'
-        ? '_Live mode (no network): real PlatformRuntime + Supervisor + stub gateway + stub tool host. Surfaces the engine gap noted in the §13 Phase F post-mortem (`agency/dry-runs/2026-05-04-healthz-db.md` §11): PlatformRuntime.spawn always creates a LeafAgentRun, so nested composite specs (e.g. architect.composite.subagents) are silently skipped when the child runs. The fix is an engine-side enhancement; tracked separately. Run with mode: "live:network" once provider creds + real MCP tool host are wired._'
+        ? '_Live mode (no network): real PlatformRuntime + Supervisor + stub gateway + stub tool host. Drives the full multi-level composite cascade — principal → architect → tech-lead → reviewer + auditor and architect → backend-engineer (item 5.6 fix landed). Run with mode: "live:network" once provider creds + a real MCP tool host are wired._'
         : '',
   ];
   return lines.filter((l) => l !== '').join('\n');

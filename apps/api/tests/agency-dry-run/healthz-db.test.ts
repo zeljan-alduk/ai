@@ -67,7 +67,6 @@ describe('agency dry-run — /v1/healthz/db (live mode, no network)', () => {
     const result = await runDryRun({ mode: 'live' });
     expect(result.mode).toBe('live');
     expect(result.ok).toBe(true);
-    expect(result.runStoreCount).toBeGreaterThanOrEqual(2);
   });
 
   it('emits composite events and rolls up usage from the stub gateway', async () => {
@@ -79,28 +78,39 @@ describe('agency dry-run — /v1/healthz/db (live mode, no network)', () => {
     expect(result.orchestration.totalUsage.tokensIn).toBeGreaterThan(0);
   });
 
-  it('surfaces the engine gap: spawn does not recurse on nested composite specs', async () => {
-    // Surface the §13 Phase F finding made tangible by live mode:
-    // PlatformRuntime.spawn always creates a LeafAgentRun, so when the
-    // architect (which itself has a composite block of tech-lead +
-    // backend-engineer) runs as a CHILD of principal, its own composite
-    // is silently skipped. The whole tree should be 6+ runs deep; in
-    // current engine behaviour the runStore lands the supervisor +
-    // architect-as-leaf only.
+  it('expands the FULL composite cascade through every level (item 5.6 fix landed)', async () => {
+    // Item 5.6 closed the gap that live mode v0 surfaced: PlatformRuntime.spawn
+    // now recurses on nested composite specs. Whole tree:
+    //   principal → architect → tech-lead → code-reviewer + security-auditor
+    //                        → backend-engineer
+    // Five children spawn, all six brief-touching agents reachable.
     const result = await runDryRun({ mode: 'live' });
-    expect(result.runStoreCount).toBeLessThanOrEqual(2); // gap observable
-    const architectSpawn = result.spawns.find((s) => s.agent === 'architect');
-    expect(architectSpawn).toBeDefined();
-    // The deeper agents (tech-lead, code-reviewer, security-auditor,
-    // backend-engineer) are NOT spawned in current engine behaviour.
-    for (const deeper of ['tech-lead', 'code-reviewer', 'security-auditor', 'backend-engineer']) {
-      expect(result.spawns.find((s) => s.agent === deeper)).toBeUndefined();
+    expect(result.runStoreCount).toBeGreaterThanOrEqual(6);
+    const spawnedAgents = new Set(result.spawns.map((s) => s.agent));
+    for (const expected of [
+      'architect',
+      'tech-lead',
+      'code-reviewer',
+      'security-auditor',
+      'backend-engineer',
+    ]) {
+      expect(spawnedAgents.has(expected)).toBe(true);
     }
+  });
+
+  it('emits one composite.usage_rollup per composite level (3: principal, architect, tech-lead)', async () => {
+    // Each composite supervisor (principal, architect, tech-lead) emits its
+    // own usage_rollup. backend-engineer / code-reviewer / security-auditor
+    // are leaves and don't emit a rollup of their own.
+    const result = await runDryRun({ mode: 'live' });
+    const rollupCount = result.events.filter((e) => e.type === 'composite.usage_rollup').length;
+    expect(rollupCount).toBe(3);
   });
 
   it('renders a live-mode post-mortem distinct from stub mode', async () => {
     const result = await runDryRun({ mode: 'live' });
     expect(result.postMortem).toContain('mode: live');
     expect(result.postMortem).toContain('Live mode (no network)');
+    expect(result.postMortem).toContain('item 5.6 fix landed');
   });
 });

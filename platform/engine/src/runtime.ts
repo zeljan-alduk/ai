@@ -224,6 +224,14 @@ class CompositeAgentRun implements AgentRun {
     readonly totalUsage: UsageRecord;
   }>;
   private readonly runStore: RunStore | undefined;
+  /**
+   * Cached terminal usage so collectUsage() can serve the supervisor
+   * adapter synchronously after wait() resolves. Populated by the
+   * recordEnd side-effect; before that completes, collectUsage()
+   * returns an empty array (the adapter's caller awaits wait() first
+   * in every code path that consults usage).
+   */
+  private cachedUsage: UsageRecord | null = null;
 
   constructor(
     id: RunId,
@@ -243,6 +251,7 @@ class CompositeAgentRun implements AgentRun {
   private async recordEnd(): Promise<void> {
     try {
       const r = await this.resultP;
+      this.cachedUsage = r.totalUsage;
       if (this.runStore) {
         await this.runStore.recordRunEnd({
           runId: this.id,
@@ -254,6 +263,17 @@ class CompositeAgentRun implements AgentRun {
         await this.runStore.recordRunEnd({ runId: this.id, status: 'failed' });
       }
     }
+  }
+
+  /**
+   * Adapter shim: returns the supervisor's rolled-up totalUsage as a
+   * single-record array so the engine's `asSupervisorAdapter().collectUsage`
+   * can treat composite child returns uniformly with leaf child returns.
+   * Empty before the underlying composite resolves; the caller awaits
+   * wait() first in every path that consults usage.
+   */
+  collectUsage(): UsageRecord[] {
+    return this.cachedUsage !== null ? [this.cachedUsage] : [];
   }
 
   async send(): Promise<void> {
@@ -344,6 +364,14 @@ export class PlatformRuntime implements Runtime {
     {
       readonly rootRunId: RunId;
       readonly compositeStrategy?: 'sequential' | 'parallel' | 'debate' | 'iterative';
+      /**
+       * Item 5.6 — depth tracked alongside root linkage so a composite
+       * spawn can compute its child's depth (parent.depth + 1) without
+       * threading a new SpawnOpts field through every caller. Populated
+       * for every run created through spawn() / runAgent's composite
+       * branch / spawn's composite branch.
+       */
+      readonly depth: number;
     }
   >();
   private readonly modelGateway: ModelGateway;
@@ -439,12 +467,37 @@ export class PlatformRuntime implements Runtime {
     }
 
     const spec = await this.registry.load(ref);
+
+    // Item 5.6 — recurse on nested composite specs. When a child spawned
+    // via the supervisor adapter (or any in-engine spawn) carries its own
+    // composite block, dispatch through the orchestrator instead of
+    // building a leaf. Without this branch, an architect-as-child whose
+    // spec is `composite: sequential[tech-lead, backend-engineer]` would
+    // silently degrade to a single LeafAgentRun and the deeper cascade
+    // would never fire — the gap surfaced by the §13 Phase F live dry-run.
+    if (spec.composite !== undefined) {
+      const parentDepth =
+        parent !== undefined ? this.runMeta.get(parent)?.depth ?? 0 : 0;
+      const childDepth = parent !== undefined ? parentDepth + 1 : 0;
+      return this.spawnCompositeWrapper(ref, spec, inputs, {
+        ...(parent !== undefined ? { parent } : {}),
+        ...(opts?.rootRunId !== undefined ? { rootRunId: opts.rootRunId } : {}),
+        ...(opts?.runId !== undefined ? { runId: opts.runId } : {}),
+        ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
+        depth: childDepth,
+      });
+    }
+
     const id = (opts?.runId ?? (randomUUID() as RunId)) as RunId;
     // Capture the root + strategy linkage so collectUsage / debug
     // tooling can retrieve it without round-tripping the run store.
     const rootRunId: RunId = opts?.rootRunId ?? parent ?? id;
+    const parentDepth =
+      parent !== undefined ? this.runMeta.get(parent)?.depth ?? 0 : 0;
+    const leafDepth = parent !== undefined ? parentDepth + 1 : 0;
     this.runMeta.set(id, {
       rootRunId,
+      depth: leafDepth,
       ...(opts?.compositeStrategy !== undefined
         ? { compositeStrategy: opts.compositeStrategy }
         : {}),
@@ -536,49 +589,17 @@ export class PlatformRuntime implements Runtime {
   ): Promise<AgentRun> {
     const spec = await this.registry.load(ref);
     if (spec.composite !== undefined) {
-      if (this.orchestrator === undefined) {
-        throw new CompositeRuntimeMissingError(spec.identity.name);
-      }
-      // Build a synthetic supervisor run-id so the orchestrator's
-      // events land on a real Run row (and so children can link via
-      // parent_run_id). Wave-X — honour caller-supplied opts.runId so
-      // the API↔engine bridge can pin events onto its pre-recorded
-      // queued row (same fix as the leaf-spawn path; without this the
-      // composite branch silently writes to a sibling row and the
-      // API's GET /v1/runs/:id never sees status flip from queued).
-      const supervisorId = (opts?.runId ?? (randomUUID() as RunId)) as RunId;
-      const rootRunId: RunId = opts?.root ?? opts?.parent ?? supervisorId;
-      this.runMeta.set(supervisorId, { rootRunId, compositeStrategy: spec.composite.strategy });
-      if (this.runStore) {
-        await this.runStore.recordRunStart({
-          runId: supervisorId,
-          tenant: this.tenant,
-          ref,
-          ...(opts?.parent !== undefined ? { parent: opts.parent } : {}),
-          root: rootRunId,
-          compositeStrategy: spec.composite.strategy,
-          // Wave-17: persist the supervisor's project assignment.
-          ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
-        });
-      }
-      // Construct and dispatch — runComposite resolves with the
-      // strategy's terminal output. We wrap the result in a tiny
-      // CompositeAgentRun so callers can `await run.wait()` and
-      // `run.id` exactly as they do for leaf runs.
-      const result = this.orchestrator.runComposite(spec, inputs, {
-        tenant: this.tenant,
-        parentRunId: supervisorId,
-        rootRunId,
-        depth: 0,
-        privacy: spec.modelPolicy.privacyTier,
-        // Wave-17: cascade the project assignment into the
-        // RunContext so every spawnChild inherits it via the
-        // strategies/common.ts forwarder.
+      // Top-level composite root — depth 0. Item 5.6 made
+      // spawnCompositeWrapper the shared seam; runAgent and the
+      // composite branch in spawn() both go through it now so the
+      // recursion logic lives in one place.
+      return this.spawnCompositeWrapper(ref, spec, inputs, {
+        ...(opts?.parent !== undefined ? { parent: opts.parent } : {}),
+        ...(opts?.root !== undefined ? { rootRunId: opts.root } : {}),
+        ...(opts?.runId !== undefined ? { runId: opts.runId } : {}),
         ...(opts?.projectId !== undefined ? { projectId: opts.projectId } : {}),
+        depth: 0,
       });
-      const wrapped = new CompositeAgentRun(supervisorId, result, this.runStore);
-      this.composites.set(supervisorId, wrapped);
-      return wrapped;
     }
     // MISSING_PIECES §9 / Phase B — iterative leaf branch.
     //
@@ -590,7 +611,10 @@ export class PlatformRuntime implements Runtime {
     if (spec.iteration !== undefined) {
       const id = (opts?.runId ?? (randomUUID() as RunId)) as RunId;
       const rootRunId: RunId = opts?.root ?? opts?.parent ?? id;
-      this.runMeta.set(id, { rootRunId });
+      const parentDepth =
+        opts?.parent !== undefined ? this.runMeta.get(opts.parent)?.depth ?? 0 : 0;
+      const depth = opts?.parent !== undefined ? parentDepth + 1 : 0;
+      this.runMeta.set(id, { rootRunId, depth });
       if (this.runStore) {
         await this.runStore.recordRunStart({
           runId: id,
@@ -642,6 +666,67 @@ export class PlatformRuntime implements Runtime {
   }
 
   /**
+   * Item 5.6 — shared composite-spawn helper. Builds the supervisor
+   * wrapper run, records it on the run store, and dispatches to the
+   * orchestrator. Used by both `runAgent` (top-level composite roots,
+   * depth=0) and `spawn`'s composite branch (nested composites,
+   * depth=parent.depth+1) so the recursion logic lives in exactly one
+   * place. Throws `CompositeRuntimeMissingError` when no orchestrator
+   * is wired (fail-closed: a composite spec with no runtime would
+   * silently degrade to a single-agent run).
+   */
+  private async spawnCompositeWrapper(
+    ref: AgentRef,
+    spec: AgentSpec,
+    inputs: unknown,
+    opts: {
+      readonly parent?: RunId;
+      readonly rootRunId?: RunId;
+      readonly runId?: RunId;
+      readonly projectId?: string;
+      readonly depth: number;
+    },
+  ): Promise<AgentRun> {
+    if (this.orchestrator === undefined) {
+      throw new CompositeRuntimeMissingError(spec.identity.name);
+    }
+    if (spec.composite === undefined) {
+      throw new Error(
+        `spawnCompositeWrapper called for '${spec.identity.name}' but spec has no composite block`,
+      );
+    }
+    const supervisorId = (opts.runId ?? (randomUUID() as RunId)) as RunId;
+    const rootRunId: RunId = opts.rootRunId ?? opts.parent ?? supervisorId;
+    this.runMeta.set(supervisorId, {
+      rootRunId,
+      compositeStrategy: spec.composite.strategy,
+      depth: opts.depth,
+    });
+    if (this.runStore) {
+      await this.runStore.recordRunStart({
+        runId: supervisorId,
+        tenant: this.tenant,
+        ref,
+        ...(opts.parent !== undefined ? { parent: opts.parent } : {}),
+        root: rootRunId,
+        compositeStrategy: spec.composite.strategy,
+        ...(opts.projectId !== undefined ? { projectId: opts.projectId } : {}),
+      });
+    }
+    const result = this.orchestrator.runComposite(spec, inputs, {
+      tenant: this.tenant,
+      parentRunId: supervisorId,
+      rootRunId,
+      depth: opts.depth,
+      privacy: spec.modelPolicy.privacyTier,
+      ...(opts.projectId !== undefined ? { projectId: opts.projectId } : {}),
+    });
+    const wrapped = new CompositeAgentRun(supervisorId, result, this.runStore);
+    this.composites.set(supervisorId, wrapped);
+    return wrapped;
+  }
+
+  /**
    * Wave-9: structural adapter handed to `@aldo-ai/orchestrator`'s
    * Supervisor so it can spawn children through the existing engine
    * code path. Exposed publicly so a caller can construct a Supervisor
@@ -663,24 +748,35 @@ export class PlatformRuntime implements Runtime {
           // PostgresRunStore.recordRunStart via SpawnOpts.
           ...(args.projectId !== undefined ? { projectId: args.projectId } : {}),
         };
-        const run = (await this.spawn(
-          args.agent,
-          args.inputs,
-          args.parentRunId,
-          opts,
-        )) as InternalAgentRun;
+        const run = await this.spawn(args.agent, args.inputs, args.parentRunId, opts);
+        // Item 5.6 — `spawn()` may return a CompositeAgentRun (when the
+        // child spec carries a nested composite block) or a leaf
+        // InternalAgentRun. Both expose `wait()`; only leaves expose
+        // `collectUsage()` over their own per-call records, but a
+        // composite child's CompositeAgentRun.collectUsage() returns
+        // [totalUsage] once the orchestrator's rollup resolves, which
+        // already accounts for every descendant in the sub-tree.
+        const composite = this.composites.get(run.id as RunId);
+        if (composite !== undefined) {
+          return {
+            runId: run.id,
+            wait: () => composite.wait(),
+            collectUsage: () => sumUsageRecords(composite.collectUsage()),
+          };
+        }
+        const leaf = run as InternalAgentRun;
         return {
-          runId: run.id,
-          wait: () => run.wait(),
+          runId: leaf.id,
+          wait: () => leaf.wait(),
           collectUsage: () => {
-            // Roll up the child's own usage + every descendant in
+            // Roll up the child's own usage + every leaf descendant in
             // the run tree. Walk the parent chain by inspecting each
             // tracked run; cheap because each child has a small graph
             // of children it spawned in turn.
-            const records: UsageRecord[] = [...run.collectUsage()];
+            const records: UsageRecord[] = [...leaf.collectUsage()];
             for (const other of this.runs.values()) {
-              if (other.id === run.id) continue;
-              if (this.isDescendant(other.id, run.id)) {
+              if (other.id === leaf.id) continue;
+              if (this.isDescendant(other.id, leaf.id)) {
                 records.push(...other.collectUsage());
               }
             }

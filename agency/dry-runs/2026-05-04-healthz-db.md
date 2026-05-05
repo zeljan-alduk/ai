@@ -540,3 +540,89 @@ live form. **Recursive composite expansion through the real agency
 tree is the one remaining engine gap before the multi-level dry-run
 can fire.** That's the §13 Phase F → "next primitive to fix" being
 named precisely.
+
+---
+
+## 12. Update — 2026-05-05 (item 5.6 — engine fix landed)
+
+`PlatformRuntime.spawn` now recurses on nested composite specs. The
+gap §11 named is closed.
+
+### What landed
+
+`platform/engine/src/runtime.ts`:
+
+- New private helper `spawnCompositeWrapper(ref, spec, inputs, opts)`
+  that builds the supervisor wrapper run, records it on the run
+  store, and dispatches to `orchestrator.runComposite`. Used by both
+  `runAgent` (top-level composite roots, depth=0) and `spawn`'s new
+  composite branch (nested composites, depth = parent.depth + 1) so
+  the recursion logic lives in exactly one place.
+- `spawn()` now detects `spec.composite !== undefined` after loading
+  the spec and routes through `spawnCompositeWrapper` before falling
+  through to `LeafAgentRun` construction.
+- Depth tracking added to `runMeta` so the new branch can compute
+  the child's depth from the parent's run id without threading
+  `depth` through every `SpawnOpts` field. Both leaf and composite
+  spawns set their own depth.
+- `CompositeAgentRun.collectUsage()` shim added (returns `[totalUsage]`
+  once the composite resolves) so the supervisor adapter can treat
+  composite child returns uniformly with leaf returns.
+- `asSupervisorAdapter()` now branches on `this.composites.get(id)`
+  vs `this.runs.get(id)` and returns the right `wait`/`collectUsage`
+  closure. Composite handles forward to the cached totalUsage; leaf
+  handles do the existing per-run walk through `runs`.
+
+`platform/orchestrator/tests/engine-integration.test.ts`:
+
+- New "recurses through nested composite specs" case asserting that
+  a 2-level composite (`outer → middle → leaf-x + leaf-y`) lands all
+  4 runs in the store with correct parent/root linkage, both
+  composite supervisors carry `compositeStrategy = 'sequential'`,
+  and leaves descend from `middle`. Fails on the pre-fix engine.
+
+`apps/api/tests/agency-dry-run/healthz-db.test.ts`:
+
+- "expands the FULL composite cascade through every level" replaces
+  the old "surfaces the engine gap" case. Asserts ≥ 6 runs in the
+  store + all five expected child agents (architect, tech-lead,
+  code-reviewer, security-auditor, backend-engineer) spawn.
+- "emits one composite.usage_rollup per composite level" asserts
+  exactly 3 rollups (principal + architect + tech-lead).
+
+### Verification
+
+- `@aldo-ai/orchestrator`: 53/53 tests (was 52; +1 2-level test).
+- `@aldo-ai/api`: 542/542 (was 541; rebalance + new dry-run case).
+- All typechecks clean. `@aldo-ai/engine` carries one **pre-existing,
+  unrelated** flake in `postgres-run-store.test.ts` (event-order
+  assertion against pglite) that was failing before this commit too.
+  Verified by `git stash` round-trip.
+
+### Live-mode dry-run after the fix
+
+Re-rendered `agency/dry-runs/2026-05-05-healthz-db-live.md`:
+
+- ✅ composite completed
+- 6 runs in store (was 2)
+- 5 children spawn: architect, tech-lead, code-reviewer,
+  security-auditor, backend-engineer
+- 3 `composite.usage_rollup` events (one per composite level)
+- $0.0150 synthetic spend / 4500 tokens-in / 750 tokens-out
+
+### What's left for the real customer-shaped dry-run
+
+| Item | Effort | Status |
+|---|---|---|
+| 5.5b Live-mode w/ real provider creds + real MCP tool host | 1–2 d | ⏳ |
+
+This is the last item before the agency primitive ships against a
+real customer-shaped repo with a real PR landing on a real remote.
+Wiring is the same shape as live mode v0 (real `PlatformRuntime` +
+`Supervisor`); the difference is replacing the stub gateway with
+`createGateway` from runtime-bootstrap and the stub tool host with
+`createMcpToolHost`. Plus a disposable worktree, `gh auth status`
+green, frontier or local model creds, and the actual run.
+
+After 5.5b: §12.4 customer-facing engagement surface and §12.5
+budget governance become the path to a real first paying engagement.
