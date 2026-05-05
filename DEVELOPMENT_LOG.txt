@@ -6369,3 +6369,63 @@ Honest scorecard for the user:
 
 @aldo-ai/gateway: 75/75 tests (was 63 + 12 new). Typecheck clean.
 @aldo-ai/local-discovery: 89/89 tests, typecheck clean.
+
+2026-05-05T21:55Z — engineer (claude opus 4.7, 1M ctx) — agency cascade ✅ COMPLETED end-to-end against LM Studio + qwen3.6-35b-a3b at $0.
+
+User pointed out: they have qwen3.6-35b-a3b loaded — much stronger than qwen2.5-coder. The right fix wasn't to pull a coder model; it was to recognise that backend-engineer.yaml's `code-fim` requirement was overspecified. The agent's actual job is writing code in a chat loop, not Fill-In-the-Middle autocomplete. Modern chat models (qwen3.x, llama-3.1+, claude-sonnet) generate code natively without needing FIM-specific training; FIM is a different training objective entirely (insert text BETWEEN two anchors), not a prerequisite for code generation.
+
+Fix: agency/delivery/backend-engineer.yaml — drop `code-fim` from capability_requirements. Keep [tool-use, 128k-context, reasoning, structured-output]. Comment in YAML explains the why.
+
+Verification — final cascade run:
+
+  ✅ composite completed
+  Stages: 8 ✅ (specs / providers / gateway / tool-host / runtime /
+  principal-dispatched / composite-running 42263ms / run-store-collected)
+  Spawns: 5 (architect, tech-lead, code-reviewer, security-auditor,
+  backend-engineer)
+  Events: 13 (5 child_started + 5 child_completed + 3 composite.usage_rollup)
+  Run store: 6 runs total
+  Cost: $0.00 (3995 tok in / 2869 tok out — local model, free)
+
+This is the §13 / MISSING_PIECES dogfood goal. The full agency cascade
+runs against any local LM Studio / Ollama loadout that has a capable
+chat model — no per-call cost, no frontier API key required, full
+audit trail in the run store, every composite level emits its own
+usage_rollup.
+
+What it took to get here, in chronological order (all in this session):
+
+1. apps/cli/src/bootstrap.ts — bootstrapAsync now merges live local-
+   discovery output into the gateway registry (was catalog-only).
+2. platform/local-discovery/src/probes/lmstudio.ts — fix one-line
+   drift: actually use the lookupCapabilities result instead of
+   hardcoding `provides: ['streaming']`.
+3. platform/local-discovery/src/model-capabilities.ts — added a
+   gemma-4 family rule.
+4. apps/api/tests/agency-dry-run/run-live-network.mjs — explicit
+   process.exit so dangling MCP children don't 10-min-hang the
+   harness on failure.
+5. platform/gateway/src/providers/openai-compat.ts (response_format)
+   — read providerConfig.extra.responseFormatModes; drop json_object
+   when target only accepts json_schema/text. LM Studio probe stamps
+   the right allowlist.
+6. platform/gateway/src/providers/openai-compat.ts (tool params) —
+   ensureParametersShape() helper. LM Studio rejects function.parameters
+   missing `properties`; some MCP tools (shell.pwd / shell.env) emit
+   schemas without it. Normalise on the way out.
+7. agency/delivery/backend-engineer.yaml — drop overspecified
+   `code-fim` capability. Backend engineer writes code in a chat
+   loop, not FIM autocomplete. Comment in YAML explains the why.
+
+Tests at the end of all this:
+- @aldo-ai/gateway: 75/75 (was 63 + 12 response_format/params shape).
+- @aldo-ai/local-discovery: 89/89.
+- @aldo-ai/cli: 225/225 + 1 skipped.
+- @aldo-ai/api: 568/568 + 1 skipped (dry-run subset 14/14).
+
+Net of this whole arc: ALDO can run the canonical agency primitive
+end-to-end against any local model the operator has loaded in LM
+Studio, Ollama, vLLM, llama.cpp, or MLX, with no per-call cost. The
+dogfood-against-customer-shaped-repo story §13 was reaching toward
+is operationally true — operators run `aldo run principal` (or the
+harness directly) and the cascade fires.

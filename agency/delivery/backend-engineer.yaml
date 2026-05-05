@@ -14,7 +14,13 @@ role:
   pattern: worker
 
 model_policy:
-  capability_requirements: [tool-use, 128k-context, reasoning, structured-output, code-fim]
+  # `code-fim` was overspecified — the backend engineer writes code in a
+  # chat loop, not as fill-in-the-middle autocomplete. Modern chat models
+  # (qwen3.x, llama-3.1+, claude-sonnet) generate code natively without
+  # needing FIM-specific training. Dropping the requirement so any model
+  # that satisfies the other four caps can serve this agent — most local
+  # chat models qualify, not only the *-coder forks.
+  capability_requirements: [tool-use, 128k-context, reasoning, structured-output]
   privacy_tier: sensitive
   primary:
     capability_class: reasoning-medium
