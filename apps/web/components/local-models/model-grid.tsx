@@ -1,51 +1,68 @@
 'use client';
 
 /**
- * Selectable card grid of discovered local LLMs.
+ * Multi-selectable card grid of discovered local LLMs.
  *
  * Each card carries the model id, source/port badge, and a row of
  * capability chips (Vision / Tool Use / Reasoning / Embedding)
  * inferred from the model id — see `capabilities.ts` for the
  * heuristics. False negatives are fine; we never claim a capability
  * we can't infer with confidence.
+ *
+ * Selection is multi: clicking a card toggles its membership in the
+ * selected set. The shell runs the suite against every selected model
+ * sequentially (never in parallel — bandwidth + RAM contention on a
+ * laptop are real, and parallel runs would also distort tok/s).
  */
 
 import { inferCapabilities } from './capabilities';
 import { CapabilityChip } from './capability-chip';
 import type { DiscoveredLocalModel } from './discovery-direct';
+import { type SelectedKey, modelKey } from './selection';
 
 interface Props {
   readonly models: readonly DiscoveredLocalModel[];
-  readonly selectedId: string | null;
-  readonly onSelect: (m: DiscoveredLocalModel) => void;
+  readonly selectedKeys: ReadonlySet<SelectedKey>;
+  readonly onToggle: (m: DiscoveredLocalModel) => void;
+  /** When true, cards do not respond to clicks (e.g. while a run is in flight). */
+  readonly disabled?: boolean;
 }
 
-export function ModelGrid({ models, selectedId, onSelect }: Props) {
+export function ModelGrid({ models, selectedKeys, onToggle, disabled }: Props) {
   if (models.length === 0) return null;
   return (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {models.map((m) => {
-        const selected = selectedId === m.id;
+        const key = modelKey(m);
+        const selected = selectedKeys.has(key);
         return (
-          <li key={`${m.source}::${m.id}::${m.port}`}>
+          <li key={key}>
             <button
               type="button"
-              onClick={() => onSelect(m)}
+              aria-pressed={selected}
+              onClick={() => {
+                if (!disabled) onToggle(m);
+              }}
+              disabled={disabled}
               className={[
                 'group flex w-full flex-col gap-3 rounded-xl border bg-bg p-4 text-left transition-all',
+                disabled ? 'cursor-not-allowed opacity-60' : '',
                 selected
                   ? 'border-accent shadow-sm ring-2 ring-accent/30'
                   : 'border-border hover:border-accent/50 hover:bg-bg-subtle',
               ].join(' ')}
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-sm font-medium text-fg" title={m.id}>
-                    {m.id}
-                  </p>
-                  <p className="mt-1 truncate font-mono text-[11px] text-fg-muted">
-                    {m.displayBaseUrl}
-                  </p>
+                <div className="flex min-w-0 flex-1 items-start gap-2">
+                  <SelectCheckbox checked={selected} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-sm font-medium text-fg" title={m.id}>
+                      {m.id}
+                    </p>
+                    <p className="mt-1 truncate font-mono text-[11px] text-fg-muted">
+                      {m.displayBaseUrl}
+                    </p>
+                  </div>
                 </div>
                 <SourceBadge source={m.source} />
               </div>
@@ -75,6 +92,33 @@ export function ModelGrid({ models, selectedId, onSelect }: Props) {
         );
       })}
     </ul>
+  );
+}
+
+function SelectCheckbox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={[
+        'mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+        checked
+          ? 'border-accent bg-accent text-accent-fg'
+          : 'border-border bg-bg group-hover:border-accent/60',
+      ].join(' ')}
+    >
+      {checked ? (
+        <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" aria-hidden>
+          <path
+            d="M2 6 L5 9 L10 3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : null}
+    </span>
   );
 }
 

@@ -31,9 +31,9 @@ export interface InlineSuite {
 export const LOCAL_MODEL_RATING_SUITE: InlineSuite = {
   id: 'local-model-rating',
   name: 'local-model-rating',
-  version: '0.1.0',
+  version: '0.2.0',
   description:
-    'Eight cases probing instruction-following, structured output, code reasoning, mid-context retrieval, multi-step inference, refusal, and long-context recall.',
+    'Thirteen cases probing instruction-following, structured output, code reasoning, mid-context retrieval, multi-step inference, refusal, arithmetic, character-level reasoning, tool-call shape, strict multi-line formatting, and long-context recall.',
   passThreshold: 0.6,
   cases: [
     {
@@ -139,6 +139,73 @@ export const LOCAL_MODEL_RATING_SUITE: InlineSuite = {
       },
       weight: 1,
       tags: ['structured-output'],
+    },
+    {
+      id: 'arithmetic-exact',
+      input:
+        'Compute 17 * 23. Reply with ONLY the integer result on a single line. No prose, no commas, no equation, no units.',
+      expect: {
+        kind: 'regex',
+        value: '^\\s*391\\s*$',
+      },
+      weight: 1,
+      tags: ['reasoning', 'arithmetic'],
+    },
+    {
+      id: 'count-letters',
+      input:
+        "How many times does the letter 'r' appear in the word 'strawberry'? Reply with ONLY the number on a single line. No prose, no explanation, no punctuation.",
+      expect: {
+        kind: 'regex',
+        value: '^\\s*3\\s*$',
+      },
+      weight: 1,
+      tags: ['reasoning', 'character-level'],
+    },
+    {
+      id: 'tool-call-shape',
+      input:
+        'You are emitting a tool-call envelope, not calling the tool.\n\nOutput ONLY a single JSON object on its own with this exact shape:\n\n  {\n    "name": "get_weather",\n    "arguments": { "city": "Paris", "unit": "celsius" }\n  }\n\nNo prose. No markdown fence. No trailing commentary.',
+      expect: {
+        kind: 'json_schema',
+        schema: {
+          type: 'object',
+          required: ['name', 'arguments'],
+          properties: {
+            name: {
+              type: 'string',
+              enum: ['get_weather'],
+            },
+            arguments: {
+              type: 'object',
+              required: ['city', 'unit'],
+              properties: {
+                city: {
+                  type: 'string',
+                  enum: ['Paris'],
+                },
+                unit: {
+                  type: 'string',
+                  enum: ['celsius'],
+                },
+              },
+            },
+          },
+        },
+      },
+      weight: 1,
+      tags: ['structured-output', 'tool-use'],
+    },
+    {
+      id: 'multi-constraint-format',
+      input:
+        'Output exactly four lines, in this order, with NOTHING else:\n\n  Line 1: starts with "ALPHA: " then any one word.\n  Line 2: starts with "BETA: " then any one word.\n  Line 3: starts with "GAMMA: " then any one word.\n  Line 4: the literal marker END_TRIPLE on its own.\n\nNo preamble. No trailing commentary. No code fence.',
+      expect: {
+        kind: 'regex',
+        value: '^\\s*ALPHA:\\s+\\S+\\s*\\nBETA:\\s+\\S+\\s*\\nGAMMA:\\s+\\S+\\s*\\nEND_TRIPLE\\s*$',
+      },
+      weight: 1,
+      tags: ['instruction-following', 'structured-output'],
     },
     {
       id: 'long-context-recall',

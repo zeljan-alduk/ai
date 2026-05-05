@@ -7074,3 +7074,60 @@ Final shape of the local-models surface:
   /login.
 
 Tests: web 383 passed; typecheck clean.
+
+────────────────────────────────────────────────────────────────────
+2026-05-05T23:41Z  Claude (Opus 4.7) — local-models v0.6: comparative bench, skip, +4 cases
+
+What changed: /local-models now lets a visitor compare multiple
+local models side-by-side, skip a stalled case mid-run, and
+exercises a richer suite. Three independent shifts in one pass:
+
+  1. Suite: 9 → 13 cases. Added arithmetic-exact, count-letters,
+     tool-call-shape, multi-constraint-format. All use existing
+     evaluator kinds (regex / json_schema), so the platform-side
+     YAML loader and `aldo bench --suite` keep working unchanged.
+     Suite version 0.1.0 → 0.2.0. YAML and inlined TS mirror.
+
+       agency/eval/local-model-rating/suite.yaml
+       apps/web/components/local-models/builtin-suite.ts
+
+  2. Skip: per-case AbortController inside the bench-direct loop,
+     wired through `onCaseStart(id, skip)` callback. The shell
+     keeps a `caseSkipRef` and exposes a "Skip case" button next
+     to "Stop". Distinguishing the two cancellation paths lets us
+     mark skipped rows explicitly (`skipped: true`), excluded from
+     the pass-rate denominator and rendered with a "–" badge
+     rather than ✗ — a deliberate user action is not a fail.
+
+       apps/web/components/local-models/bench-direct.ts
+       apps/web/components/local-models/bench-table.tsx
+       apps/web/components/local-models/local-models-shell.tsx
+
+  3. Multiselect: ModelGrid now multi-selects (set keyed by
+     source::id::port via apps/web/components/local-models/selection.ts).
+     The shell iterates the selection list sequentially — never
+     parallel; bandwidth + RAM contention on a laptop would
+     distort tok/s and is the real reason. New MultiBenchPanel
+     stacks one results section per model + a comparison strip
+     (pass / avg tok/s / p95) once 2+ are queued. Per-model phase:
+     queued → running → done | stopped | error.
+
+       apps/web/components/local-models/model-grid.tsx        (multi)
+       apps/web/components/local-models/multi-bench-panel.tsx (new)
+       apps/web/components/local-models/selection.ts          (new)
+
+Cancellation semantics:
+  - Stop  → global abort; in-flight case ends, queued models
+            transition to 'stopped' (not 'queued').
+  - Skip  → case-level abort; in-flight case becomes a 'skipped'
+            row, runner advances to the next case in the same
+            model, then on to the next model.
+
+What I did NOT change:
+  - platform/eval evaluator kinds: still {contains, not_contains,
+    regex, exact, json_schema}. The new cases all fit, so adding
+    `all_of`/`length_max` would have been needless schema churn.
+  - bench-suite SSE payload (platform/bench-suite): direct browser
+    path doesn't go through it; CLI/API still on the 0.1.0 wire.
+
+Tests: web 383 passed; typecheck clean; biome clean.

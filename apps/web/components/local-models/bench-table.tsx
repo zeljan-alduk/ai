@@ -125,15 +125,25 @@ function Row({
   onToggle: () => void;
   peakTps: number;
 }) {
-  const passSym = row.passed
+  const passSym = row.skipped
     ? {
-        glyph: '✓',
-        class: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-        label: 'pass',
+        glyph: '–',
+        class: 'bg-bg-subtle text-fg-muted',
+        label: 'skipped',
       }
-    : row.error !== undefined
-      ? { glyph: '!', class: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', label: 'error' }
-      : { glyph: '✗', class: 'bg-red-500/15 text-red-600 dark:text-red-400', label: 'fail' };
+    : row.passed
+      ? {
+          glyph: '✓',
+          class: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+          label: 'pass',
+        }
+      : row.error !== undefined
+        ? {
+            glyph: '!',
+            class: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+            label: 'error',
+          }
+        : { glyph: '✗', class: 'bg-red-500/15 text-red-600 dark:text-red-400', label: 'fail' };
   const tpsBarPct =
     row.tokPerSec !== null && peakTps > 0
       ? Math.min(100, Math.max(4, (row.tokPerSec / peakTps) * 100))
@@ -238,11 +248,13 @@ const PROMPT_TRUNCATE = 600;
 
 function ExpandedDetail({ row }: { row: BenchCaseRow }) {
   const expectLabel = describeExpect(row.expect);
-  const evaluatorOk = row.passed
-    ? 'pass'
-    : row.error !== undefined
-      ? `error: ${row.error}`
-      : 'fail';
+  const evaluatorOk = row.skipped
+    ? 'skipped — not evaluated'
+    : row.passed
+      ? 'pass'
+      : row.error !== undefined
+        ? `error: ${row.error}`
+        : 'fail';
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Section

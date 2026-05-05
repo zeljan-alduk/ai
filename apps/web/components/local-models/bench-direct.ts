@@ -37,6 +37,12 @@ export interface BenchCaseRow {
   readonly output: string;
   /** Combined reasoning_content streams when the provider emitted them. */
   readonly reasoningOutput: string;
+  /**
+   * `true` when the user pressed "Skip" mid-case. Skipped rows are not
+   * counted as fail in the summary — they're excluded from the
+   * denominator entirely.
+   */
+  readonly skipped: boolean;
   readonly error?: string;
   readonly detail?: unknown;
 }
@@ -56,7 +62,15 @@ export interface RunBenchOptions {
   /** OpenAI-compat base URL ending in `/v1`. The runner appends `/chat/completions`. */
   readonly chatBaseUrl: string;
   readonly maxTokens?: number;
+  /** Global abort: cuts the whole run short. Rows after the in-flight one are not produced. */
   readonly signal?: AbortSignal;
+  /**
+   * Called at the start of each case with a `skip()` thunk. Calling
+   * `skip()` aborts the in-flight HTTP request for that case only —
+   * the runner records the row as `skipped: true` and continues with
+   * the next case. Distinct from `signal`, which stops the whole run.
+   */
+  readonly onCaseStart?: (caseId: string, skip: () => void) => void;
   readonly onCase: (row: BenchCaseRow, index: number) => void;
 }
 
@@ -72,16 +86,44 @@ export async function runBenchDirect(opts: RunBenchOptions): Promise<{
     if (opts.signal?.aborted) break;
     const c = opts.suite.cases[i];
     if (c === undefined) continue;
-    const row = await runOne(c, {
+
+    // Per-case controller: the global signal AND the user's "Skip"
+    // button both fire through this. Linking the global signal to the
+    // case controller means a single fetch passes one signal, but we
+    // can still tell the two apart afterwards by inspecting which
+    // signal aborted.
+    const caseAc = new AbortController();
+    const onGlobalAbort = () => caseAc.abort();
+    if (opts.signal !== undefined) {
+      if (opts.signal.aborted) caseAc.abort();
+      else opts.signal.addEventListener('abort', onGlobalAbort, { once: true });
+    }
+    opts.onCaseStart?.(c.id, () => caseAc.abort());
+
+    const baseRow = await runOne(c, {
       chatBaseUrl: opts.chatBaseUrl,
       modelId: opts.modelId,
       maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-      ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+      signal: caseAc.signal,
     });
+    opts.signal?.removeEventListener('abort', onGlobalAbort);
+
+    const skipped = caseAc.signal.aborted && !(opts.signal?.aborted ?? false);
+    const row: BenchCaseRow = skipped
+      ? // Drop the noisy "AbortError" message for deliberate skips so the
+        // table reads as "user skipped" rather than "case errored out".
+        stripError({ ...baseRow, passed: false, score: 0, skipped: true })
+      : baseRow;
     rows.push(row);
     opts.onCase(row, i);
   }
   return { rows, summary: summarise(rows) };
+}
+
+function stripError(row: BenchCaseRow): BenchCaseRow {
+  const { error: _err, ...rest } = row;
+  void _err;
+  return rest as BenchCaseRow;
 }
 
 interface RunCtx {
@@ -111,6 +153,7 @@ async function runOne(c: InlineCase, ctx: RunCtx): Promise<BenchCaseRow> {
       expect: c.expect,
       output: '',
       reasoningOutput: '',
+      skipped: false,
       error: e instanceof Error ? e.message : String(e),
     };
   }
@@ -138,6 +181,7 @@ async function runOne(c: InlineCase, ctx: RunCtx): Promise<BenchCaseRow> {
     expect: c.expect,
     output: captured.content,
     reasoningOutput: captured.reasoning,
+    skipped: false,
     ...(evalResult.detail !== undefined ? { detail: evalResult.detail } : {}),
   };
 }
@@ -239,17 +283,22 @@ interface SseFrame {
 }
 
 export function summarise(rows: readonly BenchCaseRow[]): BenchSummary {
-  const passed = rows.filter((r) => r.passed).length;
-  const total = rows.length;
+  // Skipped cases are excluded from the summary entirely — they were
+  // user-triggered, not failures of the model. The total reflects the
+  // graded denominator so `passed/total` remains meaningful when
+  // comparing two models where one had cases skipped.
+  const graded = rows.filter((r) => !r.skipped);
+  const passed = graded.filter((r) => r.passed).length;
+  const total = graded.length;
   const passRate = total === 0 ? 0 : passed / total;
-  const tps = rows.map((r) => r.tokPerSec).filter((v): v is number => typeof v === 'number');
+  const tps = graded.map((r) => r.tokPerSec).filter((v): v is number => typeof v === 'number');
   const avgTokPerSec = tps.length > 0 ? tps.reduce((a, b) => a + b, 0) / tps.length : null;
-  const reason = rows
+  const reason = graded
     .map((r) => r.reasoningRatio)
     .filter((v): v is number => typeof v === 'number');
   const avgReasoningRatio =
     reason.length > 0 ? reason.reduce((a, b) => a + b, 0) / reason.length : null;
-  const sorted = rows.map((r) => r.totalMs).sort((a, b) => a - b);
+  const sorted = graded.map((r) => r.totalMs).sort((a, b) => a - b);
   const p95 =
     sorted.length === 0
       ? 0

@@ -10,14 +10,25 @@
  *   - bench: stream `/chat/completions` from the browser, score with
  *     a tiny browser-side evaluator port, render rows as they finish.
  *
+ * Multiselect comparison: clicking model cards toggles them into the
+ * selected set. Pressing "Run rating" iterates the selection in order
+ * (sequential, never parallel — bandwidth + RAM contention on a laptop
+ * is real and parallel runs would also distort tok/s).
+ *
+ * Two cancellation surfaces:
+ *   - Stop:  global abort → cuts the current case, doesn't queue the
+ *            next models, marks pending models as "stopped".
+ *   - Skip:  per-case abort → cuts the in-flight case, marks the row
+ *            as `skipped: true` (excluded from pass-rate denominator),
+ *            continues with the next case (or next model).
+ *
  * When every probe fails (most likely cause: CORS preflight blocked
  * because the LLM didn't allow our origin), we surface a CORS help
  * panel with copy-pasteable per-runtime config.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type BenchCaseRow, type BenchSummary, runBenchDirect, summarise } from './bench-direct';
-import { BenchTable } from './bench-table';
 import { LOCAL_MODEL_RATING_SUITE } from './builtin-suite';
 import { CorsHelpPanel } from './cors-help-panel';
 import {
@@ -26,18 +37,22 @@ import {
   discoverDirect,
 } from './discovery-direct';
 import { ModelGrid } from './model-grid';
+import { type ModelRunState, MultiBenchPanel, type RunPhase } from './multi-bench-panel';
 import { ProbeStatus } from './probe-status';
+import { type SelectedKey, modelKey } from './selection';
 
 type Phase = 'idle' | 'scanning' | 'ready' | 'running' | 'done' | 'error';
 
 export function LocalModelsShell() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [scan, setScan] = useState<DiscoverDirectResult | null>(null);
-  const [selected, setSelected] = useState<DiscoveredLocalModel | null>(null);
-  const [rows, setRows] = useState<readonly BenchCaseRow[]>([]);
-  const [summary, setSummary] = useState<BenchSummary | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<SelectedKey>>(new Set());
+  const [runs, setRuns] = useState<readonly ModelRunState[]>([]);
   const [runError, setRunError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  // Global abort: stops the whole campaign across all selected models.
+  const globalAbortRef = useRef<AbortController | null>(null);
+  // Per-case abort: skip just the in-flight case, run continues.
+  const caseSkipRef = useRef<(() => void) | null>(null);
 
   const startScan = useCallback(async () => {
     setPhase('scanning');
@@ -45,7 +60,14 @@ export function LocalModelsShell() {
     try {
       const r = await discoverDirect();
       setScan(r);
-      setSelected((cur) => cur ?? r.models[0] ?? null);
+      setSelectedKeys((prev) => {
+        // Auto-pick the first discovered model on the very first scan
+        // so a one-model laptop still gets a one-click run experience.
+        if (prev.size > 0) return prev;
+        const first = r.models[0];
+        if (first === undefined) return prev;
+        return new Set([modelKey(first)]);
+      });
       setPhase('ready');
     } catch {
       setPhase('error');
@@ -56,48 +78,123 @@ export function LocalModelsShell() {
     void startScan();
   }, [startScan]);
 
+  const toggleSelected = useCallback((m: DiscoveredLocalModel) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      const k = modelKey(m);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }, []);
+
+  // Resolve the ordered list of selected models from the scan + selection set.
+  const selectedList = useMemo<DiscoveredLocalModel[]>(() => {
+    const found = scan?.models ?? [];
+    return found.filter((m) => selectedKeys.has(modelKey(m)));
+  }, [scan, selectedKeys]);
+
   const startBench = useCallback(async () => {
-    if (selected === null) return;
-    setRows([]);
-    setSummary(null);
+    if (selectedList.length === 0) return;
     setRunError(null);
     setPhase('running');
     const ac = new AbortController();
-    abortRef.current = ac;
+    globalAbortRef.current = ac;
+
+    // Initialise per-model run state up-front so the comparison strip
+    // shows every queued model immediately, not as cases stream in.
+    const initial: ModelRunState[] = selectedList.map((m, idx) => ({
+      model: m,
+      phase: idx === 0 ? 'running' : 'queued',
+      rows: [],
+      summary: null,
+      error: null,
+    }));
+    setRuns(initial);
+
     try {
-      const accumulated: BenchCaseRow[] = [];
-      const res = await runBenchDirect({
-        suite: LOCAL_MODEL_RATING_SUITE,
-        modelId: selected.id,
-        chatBaseUrl: selected.chatBaseUrl,
-        signal: ac.signal,
-        onCase: (row) => {
-          accumulated.push(row);
-          setRows([...accumulated]);
-          setSummary(summarise(accumulated));
-        },
-      });
-      setSummary(res.summary);
+      for (let mi = 0; mi < selectedList.length; mi++) {
+        if (ac.signal.aborted) break;
+        const m = selectedList[mi];
+        if (m === undefined) continue;
+        if (mi > 0) {
+          setRuns((prev) =>
+            prev.map((r, i) => (i === mi ? { ...r, phase: 'running' as RunPhase } : r)),
+          );
+        }
+        const accumulated: BenchCaseRow[] = [];
+        try {
+          const res = await runBenchDirect({
+            suite: LOCAL_MODEL_RATING_SUITE,
+            modelId: m.id,
+            chatBaseUrl: m.chatBaseUrl,
+            signal: ac.signal,
+            onCaseStart: (_id, skip) => {
+              caseSkipRef.current = skip;
+            },
+            onCase: (row) => {
+              accumulated.push(row);
+              const snapshot = [...accumulated];
+              const summary = summarise(snapshot);
+              setRuns((prev) =>
+                prev.map((r, i) => (i === mi ? { ...r, rows: snapshot, summary } : r)),
+              );
+            },
+          });
+          // Decide how this model's run terminated. If the global abort
+          // fired during this model, we mark it stopped; otherwise it
+          // ran to completion (some cases may have been skipped — those
+          // are still a "done" outcome from the campaign's perspective).
+          const finalPhase: RunPhase = ac.signal.aborted ? 'stopped' : 'done';
+          setRuns((prev) =>
+            prev.map((r, i) => (i === mi ? { ...r, phase: finalPhase, summary: res.summary } : r)),
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setRuns((prev) =>
+            prev.map((r, i) => (i === mi ? { ...r, phase: 'error' as RunPhase, error: msg } : r)),
+          );
+        } finally {
+          caseSkipRef.current = null;
+        }
+      }
+      // Mark any models we didn't reach (because of global stop) as stopped.
+      setRuns((prev) =>
+        prev.map((r) => (r.phase === 'queued' ? { ...r, phase: 'stopped' as RunPhase } : r)),
+      );
       setPhase('done');
     } catch (e) {
       setRunError(e instanceof Error ? e.message : String(e));
       setPhase('error');
     } finally {
-      abortRef.current = null;
+      globalAbortRef.current = null;
+      caseSkipRef.current = null;
     }
-  }, [selected]);
+  }, [selectedList]);
 
   const stopBench = useCallback(() => {
-    abortRef.current?.abort();
-    setPhase('done');
+    globalAbortRef.current?.abort();
   }, []);
 
-  const total = LOCAL_MODEL_RATING_SUITE.cases.length;
-  const progress = phase === 'running' ? Math.round((rows.length / total) * 100) : 0;
+  const skipCase = useCallback(() => {
+    caseSkipRef.current?.();
+  }, []);
+
+  const totalCasesPerModel = LOCAL_MODEL_RATING_SUITE.cases.length;
+  const completedRows = useMemo(() => runs.reduce((sum, r) => sum + r.rows.length, 0), [runs]);
+  const totalRows = totalCasesPerModel * Math.max(1, selectedList.length);
+  const progress =
+    phase === 'running' && totalRows > 0 ? Math.round((completedRows / totalRows) * 100) : 0;
 
   const found = scan?.models ?? [];
   const showCorsHelp = phase === 'ready' && (scan?.likelyBlocked ?? false);
   const showEmpty = phase === 'ready' && found.length === 0 && !showCorsHelp;
+  const selectionLabel =
+    selectedList.length === 0
+      ? 'Pick at least one discovered model.'
+      : selectedList.length === 1
+        ? '1 model selected — pick more to compare side-by-side.'
+        : `${selectedList.length} models selected — they will run sequentially.`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -106,7 +203,11 @@ export function LocalModelsShell() {
         scan={scan}
         onRescan={startScan}
         progress={progress}
-        progressLabel={phase === 'running' ? `${rows.length}/${total} cases` : null}
+        progressLabel={
+          phase === 'running'
+            ? `${completedRows}/${totalRows} cases · ${selectedList.length} model${selectedList.length === 1 ? '' : 's'}`
+            : null
+        }
       />
 
       <section className="rounded-2xl border border-border bg-bg-elevated shadow-sm">
@@ -129,7 +230,12 @@ export function LocalModelsShell() {
           ) : showEmpty ? (
             <NoServersFound onRetry={startScan} />
           ) : (
-            <ModelGrid models={found} selectedId={selected?.id ?? null} onSelect={setSelected} />
+            <ModelGrid
+              models={found}
+              selectedKeys={selectedKeys}
+              onToggle={toggleSelected}
+              disabled={phase === 'running'}
+            />
           )}
           {/* Per-probe transparency: which runtimes responded, which
               didn't, and an inline CORS recipe for the ones that
@@ -148,28 +254,41 @@ export function LocalModelsShell() {
             </p>
             <h2 className="mt-1 text-base font-semibold text-fg">Rate quality × speed</h2>
             <p className="mt-1 max-w-xl text-xs leading-relaxed text-fg-muted">
-              Eight cases probe instruction-following, JSON output, code reasoning, retrieval,
-              multi-step inference, refusal, and long-context recall. Pass/fail per case is the
-              evaluator's call; the bench just times it.
+              Thirteen cases probe instruction-following, JSON output, code reasoning, retrieval,
+              multi-step inference, refusal, arithmetic, character-level reasoning, tool-call shape,
+              and strict multi-line formatting. Pick multiple models to compare side-by-side — they
+              run one at a time. Skip a case if it stalls; stop to abort the whole run.
             </p>
+            <p className="mt-2 text-xs font-medium text-fg-muted">{selectionLabel}</p>
           </div>
           <div className="flex items-center gap-2">
             {phase === 'running' ? (
-              <button
-                type="button"
-                onClick={stopBench}
-                className="rounded-lg border border-border bg-bg px-3 py-2 text-sm font-medium text-fg hover:bg-bg-subtle"
-              >
-                Stop
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={skipCase}
+                  className="rounded-lg border border-border bg-bg px-3 py-2 text-sm font-medium text-fg hover:bg-bg-subtle"
+                  title="Skip the in-flight case and continue with the next one"
+                >
+                  Skip case
+                </button>
+                <button
+                  type="button"
+                  onClick={stopBench}
+                  className="rounded-lg border border-border bg-bg px-3 py-2 text-sm font-medium text-fg hover:bg-bg-subtle"
+                  title="Stop the whole run — pending models will not start"
+                >
+                  Stop
+                </button>
+              </>
             ) : null}
             <button
               type="button"
               onClick={startBench}
-              disabled={selected === null || phase === 'running'}
+              disabled={selectedList.length === 0 || phase === 'running'}
               className={[
                 'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all',
-                selected !== null && phase !== 'running'
+                selectedList.length > 0 && phase !== 'running'
                   ? 'bg-accent text-accent-fg hover:shadow-md'
                   : 'bg-bg-subtle text-fg-muted opacity-60',
               ].join(' ')}
@@ -178,6 +297,8 @@ export function LocalModelsShell() {
                 <>
                   <Spinner /> Running…
                 </>
+              ) : selectedList.length > 1 ? (
+                <>Compare {selectedList.length} models →</>
               ) : (
                 <>Run rating →</>
               )}
@@ -186,12 +307,19 @@ export function LocalModelsShell() {
         </header>
 
         <div className="px-5 py-5">
-          {selected === null && phase !== 'running' ? (
+          {runError !== null ? (
+            <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              {runError}
+            </div>
+          ) : null}
+          {runs.length === 0 ? (
             <p className="text-sm text-fg-muted">
-              Pick a discovered model above, then run the rating.
+              {selectedList.length === 0
+                ? 'Pick one or more discovered models above, then run the rating.'
+                : 'Press “Run rating” to start.'}
             </p>
           ) : (
-            <BenchTable rows={rows} summary={summary} runError={runError} suiteCases={total} />
+            <MultiBenchPanel runs={runs} suiteCases={totalCasesPerModel} />
           )}
         </div>
       </section>
