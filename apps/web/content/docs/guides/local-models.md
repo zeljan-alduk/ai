@@ -304,8 +304,8 @@ to allow the web origin in your LLM's CORS config:
 |---|---|
 | Ollama | `OLLAMA_ORIGINS="https://app.aldo.tech,http://localhost:3000" ollama serve` |
 | LM Studio | Toggle CORS in the local server panel; choose origins. |
-| vLLM | `vllm serve ... --allowed-origins '["https://app.aldo.tech"]'` |
-| llama.cpp | `--api-cors '*'` (or specific origins). |
+| vLLM | `vllm serve ... --allowed-origins "https://app.aldo.tech"` (space-separated list). |
+| llama.cpp | `./llama-server ... --http-cors-origin "https://app.aldo.tech"` (defaults allow only localhost:8080 / 127.0.0.1:8080). |
 | text-generation-webui | `--api-cors-origin "https://app.aldo.tech"`. |
 
 For the current self-hosted flow, no CORS configuration is needed.

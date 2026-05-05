@@ -33,14 +33,14 @@ export const CORS_RECIPES: Readonly<Record<DiscoverySource, CorsRecipe>> = Objec
   vllm: {
     runtime: 'vLLM',
     port: '8000',
-    command: 'vllm serve … --allowed-origins \'["*"]\'',
-    hint: 'Add to your serve command. Use the host instead of `*` for production.',
+    command: 'vllm serve … --allowed-origins "*"',
+    hint: 'Add to your serve command. Pass an exact host instead of `*` for production (the flag accepts a space-separated list).',
   },
   llamacpp: {
     runtime: 'llama.cpp',
     port: '8080',
-    command: './llama-server … --api-cors "*"',
-    hint: 'Pass --api-cors at startup.',
+    command: './llama-server … --http-cors-origin "*"',
+    hint: 'Default allows localhost:8080 + 127.0.0.1:8080 only — you need this for any other origin.',
   },
 });
 
