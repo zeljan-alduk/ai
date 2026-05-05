@@ -5840,3 +5840,49 @@ Verification:
 Net of §14-B: any tenant can now POST /v1/integrations with `kind: 'telegram'` or `kind: 'email'` + a list of events to subscribe; the existing IntegrationDispatcher fans every emitted notification out to that channel. Operator can subscribe `approval_requested` to a Telegram bot and approve from a phone — exactly the agency-runs-while-you're-on-the-bus story §14 was reaching for. UI work to expose the new kinds in the integrations form remains; the wire surface is complete.
 
 Next: §12.4 — customer engagement surface.
+
+2026-05-05T18:41Z — engineer (claude opus 4.7, 1M ctx) — §12.4 customer engagement surface shipped (API + store + tests; UI deferred to a follow-up).
+
+Threads grouped runs by thread_id but lacked engagement-shaped semantics: no sign-off, no milestone tracking, no SOW-aligned change-request comments. §12.4 adds them as a first-class API surface so a customer can review the ticket queue, comment on architectural decisions, request changes mid-sprint, and sign off on milestones.
+
+Schema (mig 029):
+- engagements (id, tenant_id, slug, name, description, status, created_at, updated_at, archived_at). Status: active / paused / complete / archived. UNIQUE (tenant_id, slug); INDEX (tenant_id, status, created_at DESC).
+- engagement_milestones (id, engagement_id, tenant_id, title, description, status, due_at, signed_off_by, signed_off_at, rejected_reason, created_at, updated_at). Status: pending / in_review / signed_off / rejected (terminal). signed_off_by FKs users(id) ON DELETE SET NULL.
+- engagement_comments (id, engagement_id, tenant_id, run_id, author_user_id, body, kind, at). Kind: comment / change_request / architecture_decision. Optional run_id reference so a comment can pin to a specific run (architect's decision-log run, etc.).
+
+Store (apps/api/src/engagements-store.ts):
+- createEngagement, getEngagementBySlug, listEngagements (with optional status filter), updateEngagement (name/description/status; archived sets archived_at).
+- createMilestone, listMilestones, signOffMilestone, rejectMilestone. Mutual exclusion enforced at store level (MilestoneAlreadyDecidedError after a sign-off or reject).
+- createComment, listComments (with optional kind filter).
+- All queries tenant-scoped; cross-tenant access impossible.
+
+Routes (apps/api/src/routes/engagements.ts, wired in app.ts):
+  GET    /v1/engagements                                       — list (optional ?status=)
+  POST   /v1/engagements                                       — create (slug + name + description?)
+  GET    /v1/engagements/:slug                                 — fetch
+  PUT    /v1/engagements/:slug                                 — update name/description/status
+  GET    /v1/engagements/:slug/milestones                      — list
+  POST   /v1/engagements/:slug/milestones                      — create
+  POST   /v1/engagements/:slug/milestones/:mid/sign-off        — captures auth.userId + now()
+  POST   /v1/engagements/:slug/milestones/:mid/reject          — captures reason + 409 on second decision
+  GET    /v1/engagements/:slug/comments                        — list (optional ?kind=)
+  POST   /v1/engagements/:slug/comments                        — create (body, kind?, runId?)
+
+Errors:
+- HTTP 409 engagement_slug_conflict on duplicate (tenant, slug).
+- HTTP 409 milestone_already_decided when someone tries to sign-off-or-reject a terminal milestone.
+- HTTP 400 on invalid slug shape or unknown comment kind.
+- HTTP 404 on unknown slug.
+
+Tests (apps/api/tests/engagements.test.ts, +14):
+- list empty, create+list round-trip, slug 409, slug shape validation, cross-tenant isolation
+- update name/description/status, status=archived sets archived_at, GET unknown returns 404
+- milestone create + list, sign-off captures user + timestamp, reject captures reason, terminal-status 409 on second decision
+- comment create with default kind=comment, change_request + architecture_decision kinds, ?kind= filter, unknown kind 400
+
+Verification:
+- @aldo-ai/api: 568/568 tests pass + 1 skipped (was 554; +14 engagement tests). Typecheck clean.
+
+Net of §12.4: a customer (or the platform owner acting on their behalf) can now create an "ACME Q3 platform rebuild" engagement, attach milestones (`spec sign-off`, `staging deployed`, `go-live`), discuss architectural decisions in threaded comments, request changes that the agency's next milestone has to address, and sign off on milestones one-by-one. The wire surface is complete; the customer-facing UI to expose this in apps/web is the natural follow-up but does NOT block letting a friendly first customer run the agency through this surface today (the platform owner can drive it via REST on their behalf).
+
+Combined with §12.5 (budget cap) and §14-A/B (hybrid CLI + Telegram + email), the agency primitive is now ready for a friendly-first-customer engagement: cap their spend, route work between local + hosted, fan out approvals to their phone, give them a queue + sign-off surface. The original §12 "unattended single-engineer-replacement engagement" goalpost is now an integration + UI exercise, not a research one.

@@ -65,6 +65,7 @@ import { runsRoutes } from './routes/runs.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { sharesRoutes } from './routes/shares.js';
 import { spendRoutes } from './routes/spend.js';
+import { engagementsRoutes } from './routes/engagements.js';
 import { tenantsRoutes } from './routes/tenants.js';
 import { threadsRoutes } from './routes/threads.js';
 import { viewsRoutes } from './routes/views.js';
@@ -249,6 +250,8 @@ export function buildApp(deps: Deps, opts: BuildAppOptions = {}): Hono {
   app.route('/', evalPlaygroundRoutes(deps));
   app.route('/', secretsRoutes(deps));
   app.route('/', tenantsRoutes(deps));
+  // MISSING_PIECES §12.4 — customer engagement surface.
+  app.route('/', engagementsRoutes(deps));
   // Wave-3 — per-template gallery fork (companion to seed-default).
   app.route('/', galleryRoutes(deps));
   app.route('/', designPartnersRoutes(deps));
