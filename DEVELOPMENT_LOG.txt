@@ -5675,3 +5675,31 @@ Verification:
 Net: the agency primitive ships in stub form AND in full multi-level live form. Item 5.5b (real provider creds + real MCP tool host) is the only remaining piece before a real PR landing on a real remote. ~1-2 days of wiring; the structure is the same as 5.5a, just with createGateway + createMcpToolHost in place of the stubs. After that: agency primitive ships against a customer-shaped repo.
 
 Tangential conversation: discussed how the hosted ai.aldo.tech API would reach a user's local Ollama (firewall-blocked from the cloud). Two paths recommended: (A) Hybrid CLI — aldo binary runs locally for local-only agents, delegates cloud agents to hosted; (B) aldo bridge daemon — Bun-compiled cross-platform binary user installs, opens authenticated outbound tunnel. Cross-platform: macOS + Linux trivial; Windows needs EV cert (~$300-500/yr). Captured in auto-memory; not in MISSING_PIECES yet (separate distribution track).
+
+2026-05-05T14:20Z — engineer (claude opus 4.7, 1M ctx) — §13 / item 5.5b live:network mode wired, env-gated smoke.
+
+apps/api/src/runtime-bootstrap.ts:
+- Exported `loadProviderStateForLiveDryRun(env)` so the dry-run harness can run the same model-catalog + reachability probe production uses without re-implementing it. Returns `{enabledModels, modelRegistry, adapters}` — empty when no providers resolve.
+
+apps/api/tests/agency-dry-run/healthz-db.ts:
+- New `runLiveNetworkMode(brief)`: same shape as runLiveMode but with createGateway from @aldo-ai/gateway + createMcpToolHost from apps/api in place of stubs. Throws typed `LiveNetworkUnavailable` when no providers resolve so callers don't silently degrade.
+- `runDryRun({mode: 'live:network'})` routes here. Stub and live (no-network) modes unchanged.
+- Post-mortem renderer footer now distinguishes all three modes.
+
+apps/api/tests/agency-dry-run/healthz-db.test.ts:
+- Replaced "refuses live:network mode (not yet wired)" with "live:network mode throws LiveNetworkUnavailable when no providers are configured" — pins ALDO_LOCAL_DISCOVERY=none for the test so the local-discovery probe doesn't stall on macOS connect-retry quirks.
+- New `describe.skipIf(!liveNetworkEnabled)` block with one env-gated case that fires runDryRun({mode: 'live:network'}) when ALDO_DRY_RUN_LIVE=1 is set. 10-minute timeout for real composite work + network. Skipped by default — CI never burns inference.
+
+Operator pre-flight (documented in agency/dry-runs/2026-05-04-healthz-db.md §13):
+  ALDO_DRY_RUN_LIVE=1
+  ANTHROPIC_API_KEY=... (or local Ollama with right capability classes)
+  ALDO_FS_RW_ROOT, ALDO_SHELL_ENABLED+_ROOT, ALDO_GIT_ENABLED+_ROOT, ALDO_MEMORY_ENABLED+_ROOT+_TENANTS, all pointed at a disposable worktree
+  gh auth status green
+
+Verification:
+- 14 dry-run tests; 13 pass + 1 properly skipped under CI defaults.
+- @aldo-ai/api: 543/543 (542 pass + 1 skipped). Typecheck clean.
+
+Net: the agency primitive ships in three forms — stub / live (no network) / live:network. The third form is operator-invokable. Platform side is done. The next decision is NOT engineering: it's go/no-go on dogfood ($5-15 frontier or $0 local) vs. friendly-first-customer. Both need §12.5 budget cap (3d) + §12.4 engagement surface (1-2w) before exposing to a paying customer; neither is needed for an internal dogfood run.
+
+The original §13 Phase F target — "the agency primitive ships, or we have a named, testable list of what's still wrong with it" — is met both ways: it ships stub-and-live-no-network unconditionally, and live:network ships pending an actual run-through that turns up either nothing or a new punch list.

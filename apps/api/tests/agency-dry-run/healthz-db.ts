@@ -32,6 +32,9 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InMemoryRunStore, PlatformRuntime } from '@aldo-ai/engine';
+import { createGateway, createRouter } from '@aldo-ai/gateway';
+import { createMcpToolHost } from '../../src/mcp/tool-host.js';
+import { loadProviderStateForLiveDryRun } from '../../src/runtime-bootstrap.js';
 import type {
   AgentRef,
   AgentRegistry,
@@ -123,12 +126,10 @@ export interface RunEventCapture {
 
 export async function runDryRun(opts: DryRunOpts = {}): Promise<DryRunResult> {
   const mode: 'stub' | 'live' | 'live:network' = opts.mode ?? 'stub';
-  if (mode === 'live:network') {
-    throw new Error(
-      'agency-dry-run: live:network mode requires real provider credentials + a real MCP tool host; not yet wired',
-    );
-  }
   const brief = opts.brief ?? HEALTHZ_DB_BRIEF;
+  if (mode === 'live:network') {
+    return runLiveNetworkMode(brief);
+  }
   if (mode === 'live') {
     return runLiveMode(brief);
   }
@@ -333,6 +334,175 @@ async function runLiveMode(brief: string): Promise<DryRunResult> {
   return {
     ok: topOk,
     mode: 'live',
+    brief,
+    events,
+    spawns,
+    orchestration,
+    loadedSpecs: [...specs.keys()],
+    missingSpecs: missing,
+    postMortem,
+    runStoreCount: runs.length,
+  };
+}
+
+/**
+ * Item 5.5b — live network mode. Same shape as runLiveMode but with the
+ * production gateway + production MCP tool host instead of stubs:
+ *
+ *   - Gateway: createGateway from @aldo-ai/gateway with the operator's
+ *     provider state (anthropic/openai/google creds + locally-discovered
+ *     ollama/vllm/llama.cpp/etc). Throws `LiveNetworkUnavailable` when
+ *     no providers resolve so the caller doesn't silently fall back to
+ *     a stub.
+ *   - Tool host: createMcpToolHost() from apps/api/src/mcp/tool-host.ts.
+ *     The same one production wires; honours every ALDO_*_ENABLED env
+ *     this branch ships (aldo-fs always; aldo-shell + aldo-git +
+ *     aldo-memory opt-in via env).
+ *   - Registry: MapBackedRegistry (the loaded agency YAMLs) — same as
+ *     stub/live modes. We don't sync into Postgres for the dry-run.
+ *
+ * Operator pre-flight (without these, the run won't fire end-to-end):
+ *   - At least one provider's creds set (e.g. ANTHROPIC_API_KEY) OR a
+ *     reachable local provider (Ollama at localhost:11434 with a model
+ *     advertising the capability classes the agency YAMLs require).
+ *   - For tool I/O: ALDO_FS_RW_ROOT, ALDO_SHELL_ENABLED + ALDO_SHELL_ROOT,
+ *     ALDO_GIT_ENABLED + ALDO_GIT_ROOT, ALDO_MEMORY_ENABLED +
+ *     ALDO_MEMORY_ROOT + ALDO_MEMORY_TENANTS — pointed at a disposable
+ *     worktree.
+ *   - For PR creation: `gh auth status` green.
+ *
+ * The smoke test calls runDryRun({mode: 'live:network'}) only when
+ * ALDO_DRY_RUN_LIVE=1 is set; without it, the test asserts a clean
+ * "no providers configured" failure path.
+ */
+export class LiveNetworkUnavailable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LiveNetworkUnavailable';
+  }
+}
+
+async function runLiveNetworkMode(brief: string): Promise<DryRunResult> {
+  const events: RunEventCapture[] = [];
+  const spawns: SpawnRecord[] = [];
+
+  const { specs, missing } = await loadAgencySpecs(BRIEF_AGENT_PATHS);
+  const principalSpec = specs.get('principal');
+  if (!principalSpec) {
+    return failure(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `principal spec missing — cannot drive the composite. Errors: ${JSON.stringify(missing)}`,
+    );
+  }
+
+  // Operator-pre-flight checks. Throw with an actionable message
+  // rather than degrading to a stub silently.
+  const providerState = await loadProviderStateForLiveDryRun(
+    process.env as unknown as Parameters<typeof loadProviderStateForLiveDryRun>[0],
+  );
+  if (providerState.enabledModels.length === 0) {
+    throw new LiveNetworkUnavailable(
+      'live:network mode requires at least one provider — set ANTHROPIC_API_KEY (or another provider env) or run a local model server (e.g. Ollama at http://localhost:11434). No providers resolved.',
+    );
+  }
+
+  const tenant = 'tenant-dry-run-live-network' as TenantId;
+  const registry = new MapBackedRegistry(specs);
+  const runStore = new InMemoryRunStore();
+  const router = createRouter(providerState.modelRegistry);
+  const gateway = createGateway({
+    models: providerState.modelRegistry,
+    adapters: providerState.adapters,
+    router,
+  });
+  const toolHost = createMcpToolHost();
+
+  const runtime = new PlatformRuntime({
+    modelGateway: gateway,
+    toolHost,
+    registry,
+    tracer: new StubTracer(),
+    tenant,
+    runStore,
+  });
+
+  const supervisor = new Supervisor({
+    runtime: runtime.asSupervisorAdapter(),
+    emit: (e) => events.push({ type: e.type, payload: e.payload }),
+  });
+  runtime.setOrchestrator(supervisor);
+
+  let topRunId: RunId | undefined;
+  let topOk = false;
+  let topOutput: unknown;
+  try {
+    const compositeRun = await runtime.runAgent({ name: 'principal' }, brief);
+    topRunId = compositeRun.id as RunId;
+    const waited = await (
+      compositeRun as unknown as {
+        wait: () => Promise<{ ok: boolean; output: unknown }>;
+      }
+    ).wait();
+    topOk = waited.ok;
+    topOutput = waited.output;
+  } catch (err) {
+    return failure(
+      'live:network',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `runtime.runAgent threw: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const runs = topRunId !== undefined ? runStore.listByRoot(topRunId) : [];
+  for (const r of runs) {
+    if (r.runId === topRunId) continue;
+    spawns.push({
+      runId: r.runId,
+      agent: r.ref.name,
+      inputs: undefined,
+      output: null,
+      durationMs: 0,
+    });
+  }
+
+  const lastRollup = [...events]
+    .reverse()
+    .find((e) => e.type === 'composite.usage_rollup');
+  const totalUsage: UsageRecord =
+    lastRollup !== undefined && isRollupPayload(lastRollup.payload)
+      ? lastRollup.payload.total
+      : zeroUsage();
+
+  const orchestration: OrchestrationResult = {
+    ok: topOk,
+    strategy: principalSpec.composite?.strategy ?? 'sequential',
+    output: topOutput,
+    children: [],
+    totalUsage,
+  };
+
+  const postMortem = renderPostMortem({
+    mode: 'live:network',
+    brief,
+    events,
+    spawns,
+    orchestration,
+    loadedSpecs: [...specs.keys()],
+    missingSpecs: missing,
+  });
+
+  return {
+    ok: topOk,
+    mode: 'live:network',
     brief,
     events,
     spawns,
@@ -728,7 +898,9 @@ function renderPostMortem(args: {
       ? '_Stub mode: 1-level mock SupervisorRuntimeAdapter. Run with mode: "live" to drive the real PlatformRuntime + Supervisor._'
       : args.mode === 'live'
         ? '_Live mode (no network): real PlatformRuntime + Supervisor + stub gateway + stub tool host. Drives the full multi-level composite cascade — principal → architect → tech-lead → reviewer + auditor and architect → backend-engineer (item 5.6 fix landed). Run with mode: "live:network" once provider creds + a real MCP tool host are wired._'
-        : '',
+        : args.mode === 'live:network'
+          ? '_Live:network mode: real PlatformRuntime + Supervisor + production gateway (createGateway from @aldo-ai/gateway) + production tool host (createMcpToolHost). Drives every composite level through real model + real MCP servers. Set ANTHROPIC_API_KEY (or run Ollama locally) + ALDO_*_ENABLED env to point the tool host at a disposable worktree before invoking._'
+          : '',
   ];
   return lines.filter((l) => l !== '').join('\n');
 }

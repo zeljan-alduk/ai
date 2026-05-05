@@ -164,6 +164,20 @@ async function isReachable(baseUrl: string, timeoutMs = 1500): Promise<boolean> 
   }
 }
 
+/**
+ * Exported for the §13 / item 5.5b agency dry-run harness so it can
+ * decide whether to fire a live-network run without re-doing the
+ * model-catalog + reachability probe. Production callers continue to
+ * go through `getOrBuildRuntimeAsync`.
+ */
+export async function loadProviderStateForLiveDryRun(env: Env): Promise<{
+  readonly enabledModels: readonly ParsedModel[];
+  readonly modelRegistry: ModelRegistry;
+  readonly adapters: AdapterRegistry;
+}> {
+  return loadProviderStateAsync(env);
+}
+
 async function loadProviderStateAsync(env: Env): Promise<ProviderState> {
   if (providerStateCache !== null) return providerStateCache;
   if (providerStateLoading !== null) return providerStateLoading;

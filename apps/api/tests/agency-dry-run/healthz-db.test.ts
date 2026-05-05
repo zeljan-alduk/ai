@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { HEALTHZ_DB_BRIEF, runDryRun } from './healthz-db.js';
+import { HEALTHZ_DB_BRIEF, LiveNetworkUnavailable, runDryRun } from './healthz-db.js';
 
 describe('agency dry-run — /v1/healthz/db (stub mode)', () => {
   it('loads all five brief-touching agency specs', async () => {
@@ -51,9 +51,29 @@ describe('agency dry-run — /v1/healthz/db (stub mode)', () => {
     expect(result.postMortem).toContain('## Event histogram');
   });
 
-  it('refuses live:network mode (not yet wired)', async () => {
-    await expect(runDryRun({ mode: 'live:network' })).rejects.toThrow(/not yet wired/);
-  });
+  it(
+    'live:network mode throws LiveNetworkUnavailable when no providers are configured',
+    async () => {
+      // CI environment doesn't ship provider creds; this proves the
+      // graceful-failure path without ever touching a real model. The
+      // env-gated smoke (below) is what exercises a configured run.
+      //
+      // We pin ALDO_LOCAL_DISCOVERY=none so the probe stage is a
+      // no-op — without it, the per-endpoint AbortController timeouts
+      // can stall on macOS connect-retry quirks even for nothing-
+      // listening sockets, and the test wedges.
+      const prev = process.env.ALDO_LOCAL_DISCOVERY;
+      process.env.ALDO_LOCAL_DISCOVERY = 'none';
+      try {
+        await expect(runDryRun({ mode: 'live:network' })).rejects.toBeInstanceOf(
+          LiveNetworkUnavailable,
+        );
+      } finally {
+        if (prev === undefined) delete process.env.ALDO_LOCAL_DISCOVERY;
+        else process.env.ALDO_LOCAL_DISCOVERY = prev;
+      }
+    },
+  );
 
   it('accepts a custom brief override', async () => {
     const result = await runDryRun({ mode: 'stub', brief: 'do something else' });
@@ -113,4 +133,35 @@ describe('agency dry-run — /v1/healthz/db (live mode, no network)', () => {
     expect(result.postMortem).toContain('Live mode (no network)');
     expect(result.postMortem).toContain('item 5.6 fix landed');
   });
+});
+
+/**
+ * live:network smoke. Skipped by default — only fires when an operator
+ * explicitly opts in via ALDO_DRY_RUN_LIVE=1. CI never burns inference.
+ *
+ * Pre-flight (without these the test fails or no-ops):
+ *   ALDO_DRY_RUN_LIVE=1
+ *   plus at least one of:
+ *     ANTHROPIC_API_KEY=sk-...   OR
+ *     OPENAI_API_KEY=sk-...      OR
+ *     local Ollama running at http://localhost:11434 with a model that
+ *     advertises the capability classes the agency YAMLs require
+ *     (reasoning-large, reasoning-medium, local-reasoning, coding-frontier).
+ */
+const liveNetworkEnabled =
+  (process.env.ALDO_DRY_RUN_LIVE ?? '').toLowerCase() === '1' ||
+  (process.env.ALDO_DRY_RUN_LIVE ?? '').toLowerCase() === 'true';
+
+describe.skipIf(!liveNetworkEnabled)('agency dry-run — live:network (env-gated)', () => {
+  it('drives the principal composite through real providers + real MCP', async () => {
+    const result = await runDryRun({ mode: 'live:network' });
+    expect(result.mode).toBe('live:network');
+    // We don't assert ok=true: the run might legitimately fail if the
+    // operator's tool host is misconfigured for this brief. We DO
+    // assert the run dispatched + at least the principal supervisor
+    // landed in the run store.
+    expect(result.runStoreCount).toBeGreaterThanOrEqual(1);
+    expect(result.events.length).toBeGreaterThan(0);
+    expect(result.postMortem).toContain('mode: live:network');
+  }, 600_000); // up to 10 minutes for a real composite run
 });

@@ -614,7 +614,7 @@ Re-rendered `agency/dry-runs/2026-05-05-healthz-db-live.md`:
 
 | Item | Effort | Status |
 |---|---|---|
-| 5.5b Live-mode w/ real provider creds + real MCP tool host | 1–2 d | ⏳ |
+| 5.5b Live-mode w/ real provider creds + real MCP tool host | 1–2 d | ✅ wired (env-gated smoke) |
 
 This is the last item before the agency primitive ships against a
 real customer-shaped repo with a real PR landing on a real remote.
@@ -626,3 +626,104 @@ green, frontier or local model creds, and the actual run.
 
 After 5.5b: §12.4 customer-facing engagement surface and §12.5
 budget governance become the path to a real first paying engagement.
+
+---
+
+## 13. Update — 2026-05-05 (item 5.5b — live:network mode wired, env-gated smoke)
+
+`runDryRun({mode: 'live:network'})` is wired and exercises the
+**production gateway + production MCP tool host** against the agency
+YAMLs. Stub gateway / stub tool host from live mode v0 are replaced
+with the real construction path:
+
+- `createGateway` from `@aldo-ai/gateway` with the operator's
+  resolved provider state (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/etc.
+  cloud rows + locally-discovered Ollama/vLLM/llama.cpp/MLX rows).
+- `createMcpToolHost()` — the same one production runs. Honours
+  every `ALDO_*_ENABLED` env this branch ships: aldo-fs always;
+  aldo-shell + aldo-git + aldo-memory opt-in.
+- `runtime-bootstrap.ts` exports a new
+  `loadProviderStateForLiveDryRun(env)` so the harness can run the
+  same model-catalog + reachability probe production uses, without
+  re-implementing it.
+
+### Graceful failure when nothing's configured
+
+Without provider creds, `loadProviderStateForLiveDryRun` returns
+`{ enabledModels: [] }` and the harness throws a typed
+`LiveNetworkUnavailable` with an actionable message naming the env
+to set. Tested in CI: a non-env-gated test confirms the throw fires
+when no providers resolve. **CI never burns inference**.
+
+### Operator pre-flight (when an operator wants to actually fire it)
+
+```
+export ALDO_DRY_RUN_LIVE=1                 # gate the smoke
+
+# at least one of:
+export ANTHROPIC_API_KEY=sk-...            # frontier
+# OR run Ollama locally with a model that advertises the YAML's
+# capability classes (reasoning-large, reasoning-medium,
+# local-reasoning, coding-frontier).
+
+# tool I/O — point at a disposable worktree:
+export ALDO_FS_RW_ROOT=/tmp/dry-run-tree
+export ALDO_SHELL_ENABLED=true
+export ALDO_SHELL_ROOT=/tmp/dry-run-tree
+export ALDO_GIT_ENABLED=true
+export ALDO_GIT_ROOT=/tmp/dry-run-tree
+export ALDO_MEMORY_ENABLED=true
+export ALDO_MEMORY_ROOT=/tmp/dry-run-tree/.aldo/memory
+export ALDO_MEMORY_TENANTS=tenant-dry-run-live-network
+
+# for PR creation:
+gh auth status   # must be green
+
+# fire the smoke:
+pnpm --filter @aldo-ai/api test -- agency-dry-run/healthz-db
+```
+
+The smoke times out at 10 min (real composite work plus network
+latency on every leaf); usually completes in 1–3 minutes against a
+warm local model or a frontier-cloud run.
+
+### What this commit ships
+
+- `apps/api/src/runtime-bootstrap.ts`: exported
+  `loadProviderStateForLiveDryRun(env)`.
+- `apps/api/tests/agency-dry-run/healthz-db.ts`: new
+  `runLiveNetworkMode(brief)` + `LiveNetworkUnavailable` typed
+  error. Routed through `runDryRun` when `mode: 'live:network'`.
+  Stub-mode and live-mode behaviour unchanged.
+- `apps/api/tests/agency-dry-run/healthz-db.test.ts`:
+  - non-env-gated case asserting `LiveNetworkUnavailable` when no
+    providers resolve (stable in CI).
+  - env-gated `describe.skipIf(!liveNetworkEnabled)` smoke that
+    fires `runDryRun({mode: 'live:network'})` only when
+    `ALDO_DRY_RUN_LIVE=1` is set, with a 10-minute timeout.
+
+### Verification
+
+- 14 dry-run tests (was 13; +1 live:network env-gated, +1 graceful-
+  failure assertion). 13 pass + 1 skipped under CI defaults.
+- `@aldo-ai/api`: 543/543 (542 pass + 1 skipped). Typecheck clean.
+- The smoke is unverifiable in this session because the environment
+  doesn't carry provider creds. The wiring is correct by construction
+  and by typecheck; the actual run becomes a deterministic operator
+  invocation once the env is set.
+
+### What this means for the agency primitive
+
+The agency primitive **ships in three forms**:
+
+| Form | What proves it works | Inference cost |
+|---|---|---|
+| Stub | mock SupervisorRuntimeAdapter; 1-level | $0 |
+| Live (no network) | real PlatformRuntime + Supervisor + stub gateway/tools; full multi-level cascade through 6 agents | $0 |
+| Live:network | real PlatformRuntime + production gateway + production MCP tool host | ~$5–15 frontier or $0 local |
+
+The third form is now operator-invokable. The next obvious work is
+**actually running it** — either dogfood-internally with a $X budget
+cap (§12.5) or against a friendly first customer. That's a
+go/no-go decision, not an engineering task. The platform side is
+done.
