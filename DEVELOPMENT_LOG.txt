@@ -5812,3 +5812,31 @@ Verification:
 Net: a user with local Ollama + an ALDO_API_TOKEN can now `aldo run principal` and get the right dispatch automatically. Local-only agents stay local; cloud-tier agents delegate to ai.aldo.tech. The agency primitive is now reachable from a user's laptop without re-implementing the orchestrator on the client side.
 
 Next: §14-B NotificationFanOut + Telegram + Email — approval-from-anywhere channels for unsupervised runs.
+
+2026-05-05T18:36Z — engineer (claude opus 4.7, 1M ctx) — §14-B Telegram + Email channels shipped (NotificationFanOut already shipped as IntegrationDispatcher).
+
+The fan-out primitive (`IntegrationDispatcher` in `@aldo-ai/integrations`) was already shipped; §14-B's delta is two new IntegrationRunners:
+
+- `runners/telegram.ts`: POSTs to `https://api.telegram.org/bot<token>/sendMessage` with chat_id + MarkdownV2-formatted body. Hostname locked to `api.telegram.org` so a misconfigured row can't be coerced into an SSRF probe. MarkdownV2 reserved chars escaped in title + body so a `.` or `(` never desyncs the parser. Bot token URL-encoded but never logged.
+- `runners/email.ts`: v0 supports Resend (https://resend.com), JSON-only transactional API. POSTs to `https://api.resend.com/emails` with Bearer auth + html + text bodies + a `tags` field carrying the event id (so retries don't double-send when Resend's idempotency layer kicks in). Future kinds (Postmark/SES/SMTP) ship as separate runners; provider field locked to `'resend'` for now.
+
+Schema additions:
+- `IntegrationKind` enum: +`telegram`, +`email` (in `@aldo-ai/integrations` AND `@aldo-ai/api-contract`).
+- `IntegrationEvent` enum: +`approval_requested` — new event kind for the approval gate fan-out (the operator-from-anywhere story §14-B was reaching toward).
+- `TelegramConfig` (botToken + chatId), `EmailConfig` (provider+apiKey+from+to). Both exported from `@aldo-ai/integrations` index.
+- API encryption: `apps/api/src/routes/integrations.ts` ENCRYPTED_FIELDS map: `telegram: ['botToken']`, `email: ['apiKey']`. The same wave-7 secrets envelope flow applies — bot token + Resend api key never hit the DB in cleartext.
+- API redactor for GET /v1/integrations: telegram surfaces only `chatId`; email surfaces `provider` + `from` + `to` and drops the api key entirely.
+
+Tests:
+- `tests/telegram.test.ts` (5): success POST shape (chat_id + parse_mode + url-encoded token) / 4xx returns ok=false / AbortError → timedOut / validateConfig rejects missing fields and accepts both string + numeric chat_id / MarkdownV2 escapes reserved chars in title and body.
+- `tests/email.test.ts` (5): success Resend POST (Bearer auth, html+text+tags) / 422 returns ok=false / AbortError → timedOut / validateConfig rejects bad email + missing apiKey + accepts default provider / html-special-char escape (script tag never emitted in html body).
+- `tests/registry.test.ts`: bumped expected runner count 4 → 6, added telegram + email to the for-of.
+
+Verification:
+- @aldo-ai/integrations: 30/30 tests (was 19; +11 new). Typecheck clean.
+- @aldo-ai/api: 554/554 tests pass + 1 skipped (no regression). Typecheck clean.
+- @aldo-ai/api-contract: typecheck clean (IntegrationKind + IntegrationEvent enums kept in sync between contract + integrations packages).
+
+Net of §14-B: any tenant can now POST /v1/integrations with `kind: 'telegram'` or `kind: 'email'` + a list of events to subscribe; the existing IntegrationDispatcher fans every emitted notification out to that channel. Operator can subscribe `approval_requested` to a Telegram bot and approve from a phone — exactly the agency-runs-while-you're-on-the-bus story §14 was reaching for. UI work to expose the new kinds in the integrations form remains; the wire surface is complete.
+
+Next: §12.4 — customer engagement surface.

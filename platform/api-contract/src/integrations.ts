@@ -16,7 +16,15 @@
 
 import { z } from 'zod';
 
-export const IntegrationKindContract = z.enum(['slack', 'github', 'webhook', 'discord']);
+export const IntegrationKindContract = z.enum([
+  'slack',
+  'github',
+  'webhook',
+  'discord',
+  // MISSING_PIECES §14-B — approval-from-anywhere channels.
+  'telegram',
+  'email',
+]);
 export type IntegrationKindContract = z.infer<typeof IntegrationKindContract>;
 
 export const IntegrationEventContract = z.enum([
@@ -26,6 +34,8 @@ export const IntegrationEventContract = z.enum([
   'guards_blocked',
   'budget_threshold',
   'invitation_received',
+  // §14-B
+  'approval_requested',
 ]);
 export type IntegrationEventContract = z.infer<typeof IntegrationEventContract>;
 

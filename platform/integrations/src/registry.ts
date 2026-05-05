@@ -8,8 +8,10 @@
  */
 
 import { discordRunner } from './runners/discord.js';
+import { emailRunner } from './runners/email.js';
 import { githubRunner } from './runners/github.js';
 import { slackRunner } from './runners/slack.js';
+import { telegramRunner } from './runners/telegram.js';
 import { webhookRunner } from './runners/webhook.js';
 import type { IntegrationKind, IntegrationRunner } from './types.js';
 
@@ -18,6 +20,9 @@ const RUNNERS: Readonly<Record<IntegrationKind, IntegrationRunner>> = {
   github: githubRunner,
   webhook: webhookRunner,
   discord: discordRunner,
+  // MISSING_PIECES §14-B
+  telegram: telegramRunner,
+  email: emailRunner,
 };
 
 export function getRunner(kind: IntegrationKind): IntegrationRunner {

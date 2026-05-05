@@ -34,7 +34,15 @@ import { z } from 'zod';
  * adding a runner module + a literal here + a row in the registry;
  * the wire format never changes when a new kind appears.
  */
-export const IntegrationKind = z.enum(['slack', 'github', 'webhook', 'discord']);
+export const IntegrationKind = z.enum([
+  'slack',
+  'github',
+  'webhook',
+  'discord',
+  // MISSING_PIECES §14-B — approval-from-anywhere channels.
+  'telegram',
+  'email',
+]);
 export type IntegrationKind = z.infer<typeof IntegrationKind>;
 
 /**
@@ -54,6 +62,10 @@ export const IntegrationEvent = z.enum([
   'guards_blocked',
   'budget_threshold',
   'invitation_received',
+  // MISSING_PIECES §14-B — approval gate fires on a run waiting for
+  // operator decision. Subscribed channels fan it out so the operator
+  // can approve from anywhere (Telegram, email, Slack, …).
+  'approval_requested',
 ]);
 export type IntegrationEvent = z.infer<typeof IntegrationEvent>;
 
@@ -180,6 +192,45 @@ export const DiscordConfig = z.object({
   webhookUrl: z.string().url(),
 });
 export type DiscordConfig = z.infer<typeof DiscordConfig>;
+
+/**
+ * Telegram bot — uses the Bot API. The runner POSTs to
+ *   https://api.telegram.org/bot<token>/sendMessage
+ * with `chat_id` + Markdown-formatted text. The bot must already be
+ * a member of the chat (group/channel/DM). MISSING_PIECES §14-B.
+ *
+ * Hostname is locked so a misconfigured row can't be turned into an
+ * SSRF probe.
+ */
+export const TelegramConfig = z.object({
+  /** Bot token from @BotFather. Format: `<int>:<base64-ish>`. */
+  botToken: z.string().min(1),
+  /**
+   * Chat id from `getUpdates` or @userinfobot. Negative numbers
+   * indicate group chats; positive indicate users.
+   */
+  chatId: z.union([z.string().min(1), z.number().int()]),
+});
+export type TelegramConfig = z.infer<typeof TelegramConfig>;
+
+/**
+ * Email — v0 supports the Resend transactional API
+ * (https://resend.com). Resend is JSON-only, free-tier-friendly, and
+ * doesn't need an SMTP loop. Future kinds (Postmark, SendGrid, SES)
+ * register as separate runners; we don't try to multiplex providers
+ * inside one runner.
+ */
+export const EmailConfig = z.object({
+  /** Provider id. Only 'resend' supported in v0. */
+  provider: z.literal('resend').default('resend'),
+  /** Resend API key (re_...). */
+  apiKey: z.string().min(1),
+  /** Verified sender email registered with the provider. */
+  from: z.string().email(),
+  /** Recipient address. v0 single-recipient; multi-recipient = future kind. */
+  to: z.string().email(),
+});
+export type EmailConfig = z.infer<typeof EmailConfig>;
 
 /** Per-call dispatch timeout. The dispatcher applies this uniformly. */
 export const DEFAULT_DISPATCH_TIMEOUT_MS = 5_000;

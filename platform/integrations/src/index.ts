@@ -32,20 +32,24 @@
 export {
   DEFAULT_DISPATCH_TIMEOUT_MS,
   DiscordConfig,
+  EmailConfig,
   GithubConfig,
   Integration,
   IntegrationEvent,
   IntegrationEventPayload,
   IntegrationKind,
   SlackConfig,
+  TelegramConfig,
   WebhookConfig,
   type IntegrationDispatchResult,
   type IntegrationRunner,
 } from './types.js';
 
 export { discordRunner } from './runners/discord.js';
+export { emailRunner } from './runners/email.js';
 export { githubRunner } from './runners/github.js';
 export { slackRunner } from './runners/slack.js';
+export { telegramRunner } from './runners/telegram.js';
 export { signHmacSha256, webhookRunner } from './runners/webhook.js';
 
 export { getRunner, listRunners } from './registry.js';

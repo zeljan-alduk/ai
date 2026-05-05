@@ -7,13 +7,13 @@ import { getRunner, listRunners } from '../src/registry.js';
 
 describe('registry', () => {
   it('returns a runner for every known kind', () => {
-    for (const kind of ['slack', 'github', 'webhook', 'discord'] as const) {
+    for (const kind of ['slack', 'github', 'webhook', 'discord', 'telegram', 'email'] as const) {
       const runner = getRunner(kind);
       expect(runner.kind).toBe(kind);
       expect(typeof runner.dispatch).toBe('function');
       expect(typeof runner.validateConfig).toBe('function');
     }
-    expect(listRunners().length).toBe(4);
+    expect(listRunners().length).toBe(6);
   });
 
   it('throws for an unknown kind', () => {

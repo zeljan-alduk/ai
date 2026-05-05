@@ -60,6 +60,9 @@ const ENCRYPTED_FIELDS: Record<IntegrationKind, readonly string[]> = {
   github: ['token'],
   webhook: ['signingSecret'],
   discord: [],
+  // MISSING_PIECES §14-B
+  telegram: ['botToken'],
+  email: ['apiKey'],
 };
 
 export function integrationsRoutes(deps: Deps): Hono {
@@ -349,5 +352,19 @@ function redactConfig(row: IntegrationRow): Record<string, unknown> {
       }
       return { url: safe };
     }
+    // MISSING_PIECES §14-B
+    case 'telegram':
+      return {
+        // Bot token redacted entirely; chatId is non-secret (it's a
+        // public-ish identifier within the bot's reach).
+        chatId: cfg.chatId ?? null,
+      };
+    case 'email':
+      return {
+        provider: cfg.provider ?? 'resend',
+        from: cfg.from ?? '',
+        to: cfg.to ?? '',
+        // apiKey redacted entirely.
+      };
   }
 }
