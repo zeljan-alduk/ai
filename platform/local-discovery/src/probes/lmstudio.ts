@@ -66,6 +66,17 @@ export async function probe(opts: ProbeOptions = {}): Promise<readonly Discovere
       cost: { usdPerMtokIn: 0, usdPerMtokOut: 0 },
       providerConfig: {
         baseUrl: `${base}/v1`,
+        // LM Studio's openai-compat surface is stricter than OpenAI
+        // proper: it rejects `response_format: { type: 'json_object' }`
+        // with HTTP 400 ("must be 'json_schema' or 'text'"). The
+        // openai-compat adapter reads this list and drops the
+        // response_format hint when an agent's `decoding.mode: json`
+        // would otherwise produce an unsupported value. Without this
+        // tag, agency YAMLs with `decoding.mode: json` (code-reviewer,
+        // etc.) fail at HTTP layer instead of running cleanly.
+        extra: {
+          responseFormatModes: ['json_schema', 'text'],
+        },
       },
       discoveredAt,
       source: 'lmstudio',

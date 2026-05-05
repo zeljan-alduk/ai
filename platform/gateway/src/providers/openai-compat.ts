@@ -263,7 +263,12 @@ function buildHeaders(config: ProviderConfig): Headers {
   return h;
 }
 
-function buildChatBody(
+/**
+ * Exported for unit tests of provider-specific shape (e.g.
+ * response_format compatibility — LM Studio's stricter spec).
+ * Production callers go through `createOpenAICompatAdapter`.
+ */
+export function buildChatBody(
   req: CompletionRequest,
   model: ModelDescriptor,
   config: ProviderConfig,
@@ -279,8 +284,27 @@ function buildChatBody(
   if (req.maxOutputTokens !== undefined) body.max_tokens = req.maxOutputTokens;
   if (req.stop?.length) body.stop = [...req.stop];
   if (req.seed !== undefined) body.seed = req.seed;
+  // Per-target response_format compatibility. OpenAI accepts the
+  // full set (`json_object`, `json_schema`, `text`); LM Studio's
+  // openai-compat surface is stricter and rejects `json_object` —
+  // it only accepts `json_schema` or `text`. Local-discovery probes
+  // stamp `providerConfig.extra.responseFormatModes` to declare what
+  // the target accepts; absent = the OpenAI superset.
+  //
+  // Behaviour when the requested mode isn't supported:
+  //   - `json` (no schema)  → drop response_format entirely. The model
+  //     receives the system prompt + temperature, produces text. The
+  //     engine JSON.parses on the response side. Imperfect (the model
+  //     might emit invalid JSON), but better than HTTP 400 at dispatch.
+  //   - `json_schema`       → kept; every modern openai-compat surface
+  //     supports it. (LM Studio added it in 0.3.x; vLLM has it via
+  //     the structured-outputs branch.)
+  const supportedModes = readSupportedResponseFormatModes(config);
   if (req.responseFormat?.type === 'json') {
-    body.response_format = { type: 'json_object' };
+    if (supportedModes === undefined || supportedModes.has('json_object')) {
+      body.response_format = { type: 'json_object' };
+    }
+    // else: drop entirely; let the model produce text.
   } else if (req.responseFormat?.type === 'json_schema') {
     body.response_format = {
       type: 'json_schema',
@@ -291,6 +315,22 @@ function buildChatBody(
   const hint = config.extra?.grammarHint as GrammarHint | undefined;
   if (hint) return applyGrammarHint(body, hint);
   return body;
+}
+
+/**
+ * Read the optional `providerConfig.extra.responseFormatModes` array.
+ * Returns a Set when present (so callers do `set.has('json_object')`)
+ * and `undefined` when absent — absent meaning "trust the OpenAI
+ * superset", which is the historical behaviour.
+ */
+function readSupportedResponseFormatModes(config: ProviderConfig): ReadonlySet<string> | undefined {
+  const raw = config.extra?.responseFormatModes;
+  if (!Array.isArray(raw)) return undefined;
+  const out = new Set<string>();
+  for (const item of raw) {
+    if (typeof item === 'string') out.add(item);
+  }
+  return out.size > 0 ? out : undefined;
 }
 
 function toOpenAIMessage(m: Message): OpenAIMessage {
@@ -344,8 +384,41 @@ function toOpenAIMessage(m: Message): OpenAIMessage {
 function toOpenAITool(t: ToolSchema): Record<string, unknown> {
   return {
     type: 'function',
-    function: { name: t.name, description: t.description, parameters: t.inputSchema },
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: ensureParametersShape(t.inputSchema),
+    },
   };
+}
+
+/**
+ * Normalise an MCP tool's `inputSchema` into the shape every
+ * openai-compat surface accepts. OpenAI tolerates a parameters
+ * object missing `properties`; LM Studio's stricter spec rejects
+ * with HTTP 400 ("function.parameters.properties: Required"). Some
+ * MCP tools (notably `shell.pwd` / `shell.env` — schemas built from
+ * an empty `z.object({}).strict()`) emit `{ type: 'object',
+ * additionalProperties: false }` with no `properties` field.
+ *
+ * Rules:
+ *   - null / non-object → canonical empty-object shape.
+ *   - object missing `properties` → inject `properties: {}` and
+ *     default `type: 'object'` when also absent.
+ *   - otherwise → pass through unchanged.
+ *
+ * Pure: returns a fresh object when a change is needed; never
+ * mutates the input.
+ */
+function ensureParametersShape(schema: unknown): Record<string, unknown> {
+  if (schema === null || typeof schema !== 'object') {
+    return { type: 'object', properties: {} };
+  }
+  const obj = schema as Record<string, unknown>;
+  if (obj.properties === undefined) {
+    return { type: 'object', ...obj, properties: {} };
+  }
+  return obj;
 }
 
 function mapFinishReason(

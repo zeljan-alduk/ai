@@ -6324,3 +6324,48 @@ Verification of unrelated tests:
 - @aldo-ai/api: dry-run subset 14/14 pass + 1 properly skipped, typecheck clean.
 
 Net: agency dry-run against LM Studio now (a) routes through capability filtering correctly so qwen3.6 / qwen3-4b actually get picked, (b) exits the process when the run is done so operators don't see false hangs. The remaining `decoding.mode: json` ↔ LM Studio mismatch is the next chunk — three paths captured in the roadmap (per-provider response_format mapping; downgrade `json_object` → `text` when target doesn't accept; author local-friendly agency variants with `decoding.mode: free`).
+
+2026-05-05T21:48Z — engineer (claude opus 4.7, 1M ctx) — openai-compat adapter LM Studio compat: response_format + tool parameters shape. Agency cascade now executes 63s of real LLM work; new blocker is YAML capability spec, not infrastructure.
+
+(1) platform/gateway/src/providers/openai-compat.ts buildChatBody:
+- Read `providerConfig.extra.responseFormatModes` (when present, an allowlist of accepted response_format types).
+- When the requested mode is `'json'` AND `'json_object'` isn't in the allowlist, drop response_format entirely (let the model produce text; the engine JSON.parses on the response side; imperfect but functional vs HTTP 400 at dispatch).
+- `'json_schema'` path unchanged (every modern openai-compat surface accepts it).
+- New helper `readSupportedResponseFormatModes(config)`.
+
+(2) platform/local-discovery/src/probes/lmstudio.ts:
+- Stamp `providerConfig.extra: { responseFormatModes: ['json_schema', 'text'] }` on every discovered LM Studio model. Without this, `code-reviewer.yaml`'s `decoding.mode: json` (which becomes responseFormat type='json' in the request) hit HTTP 400 at LM Studio's stricter spec.
+
+(3) platform/gateway/src/providers/openai-compat.ts toOpenAITool:
+- New `ensureParametersShape(schema)` helper. LM Studio rejects tool definitions whose `function.parameters` object is missing `properties` (HTTP 400, "function.parameters.properties: Required"). Some MCP tools — notably `shell.pwd` / `shell.env` (and now the empty-input session tools I added earlier) — emit `{ type: 'object', additionalProperties: false }` from `z.object({}).strict()` with no `properties` field.
+- Rules: null/non-object → canonical empty-object shape; object missing `properties` → inject `properties: {}`; otherwise pass through unchanged. Pure; never mutates the input.
+
+(4) platform/gateway/tests/providers/openai-compat-response-format.test.ts (new): 12 tests. Six pin response_format compat (default → json_object; LM-Studio-shaped → drop; json_schema kept under both; explicit allowlist override; no responseFormat at all). Six pin parameters shape normalization (empty schema patched; existing properties unchanged; null + non-object → canonical; missing both type and properties → both injected; mixed list — only patched ones get changed).
+
+Verification — re-ran the live:network harness with all four fixes against LM Studio + qwen3.6:
+
+Before fix 3:
+  composite-running FAILED 5611ms — code-reviewer:
+    HTTP 400: 'response_format.type' must be 'json_schema' or 'text'
+
+After fixes 1+2 (response_format), before fix 3:
+  composite-running FAILED 897ms — code-reviewer:
+    HTTP 400: function.parameters.properties: Required (×3)
+  Same wall — different layer.
+
+After ALL four fixes:
+  composite-running FAILED 63818ms — architect → backend-engineer:
+    no eligible model: class="local-reasoning":
+    no model provides required caps [tool-use, 128k-context, reasoning, structured-output, code-fim]
+  Process exits cleanly. Code-reviewer + tech-lead + architect→top-level all dispatched and returned (visible from events count = 11, was 6).
+
+The new failure point is not infrastructure but YAML capability spec: backend-engineer.yaml requires `code-fim`, which only qwen-2.5-coder + qwen-3-coder + deepseek-coder advertise in the local-discovery capability table. The user's LM Studio has the qwen3 chat models (correctly do NOT claim code-fim). Path forward for the user: `lms get qwen2.5-coder:32b` (or any *-coder variant) → the agency cascade should complete end-to-end at $0.
+
+Honest scorecard for the user:
+- Adapter / harness / capability projection: all working. Verified.
+- Agency cascade fires 63s of real LLM work through architect + tech-lead + code-reviewer + (start of backend-engineer).
+- backend-engineer requires code-fim → blocked on LM Studio loadout.
+- Two paths to unblock: (a) pull a *-coder model, or (b) author local-friendly backend-engineer variant in agency/dev/.
+
+@aldo-ai/gateway: 75/75 tests (was 63 + 12 new). Typecheck clean.
+@aldo-ai/local-discovery: 89/89 tests, typecheck clean.
