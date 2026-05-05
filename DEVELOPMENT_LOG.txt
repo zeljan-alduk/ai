@@ -6904,3 +6904,50 @@ After this commit deploys, both:
  - the page itself loads its new browser-direct UI, and
  - the API process boots and the auth-proxy can reach it for any other
    route (login, signup, dashboard, etc.).
+
+----------------------------------------
+2026-05-06 00:50 UTC — agent (claude opus 4.7) — per-probe status + inline CORS fix
+
+User: "i dont se ollama models". Verified via chrome MCP: their
+Ollama IS running (ERR_FAILED, not ERR_CONNECTION_REFUSED — port
+open, request rejected). Most likely cause: no `OLLAMA_ORIGINS=*`
+set, so Ollama refuses cross-origin from `https://ai.aldo.tech`.
+
+The big CorsHelpPanel only fires when EVERY probe failed
+(`scan.likelyBlocked = every probe was fetch_failed`). With LM
+Studio responding, the panel was hidden — so the user got 4 LM
+Studio models but no actionable hint about Ollama.
+
+Three new files:
+ + cors-recipes.ts        — shared `CORS_RECIPES` map indexed by
+                              `DiscoverySource`. CorsHelpPanel reads
+                              from it now too (deduped from the
+                              old inline list).
+ + copyable-command.tsx   — small click-to-copy command pill.
+                              Reused by the big panel + per-probe rows.
+ + probe-status.tsx       — always-visible 4-card strip. Each card
+                              shows the runtime + port + status:
+                                ✓ N models      (responded, parsed)
+                                ✓ 0 models      (empty list)
+                                ✗ no response · CORS?  (fetch_failed)
+                                ⚠ HTTP <code>   (non-2xx response)
+                                ⚠ unexpected body  (non-OpenAI shape)
+                              Failed/warning rows expose a "Fix CORS
+                              for <runtime>" toggle that drops the
+                              copyable command + hint inline.
+
+local-models-shell.tsx: imports `ProbeStatus`, renders it in the
+Step-1 card right under the model grid. Suppressed when the big
+CorsHelpPanel is showing (already covers everything that's broken).
+
+Now when the user has LM Studio + Ollama both running but only LM
+Studio configured for CORS, they see:
+   Probe status
+     Ollama (11434)        ✗ no response · CORS?  [Fix CORS for Ollama]
+     LM Studio (1234)      ✓ 4 models
+     vLLM (8000)           ✗ no response · CORS?  [Fix CORS for vLLM]
+     llama.cpp (8080)      ✗ no response · CORS?  [Fix CORS for llama.cpp]
+Click "Fix CORS for Ollama" → `OLLAMA_ORIGINS="*" ollama serve`
+copy button + restart hint.
+
+Tests: 383 passed. Typecheck clean.

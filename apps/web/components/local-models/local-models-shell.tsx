@@ -26,6 +26,7 @@ import {
   discoverDirect,
 } from './discovery-direct';
 import { ModelGrid } from './model-grid';
+import { ProbeStatus } from './probe-status';
 
 type Phase = 'idle' | 'scanning' | 'ready' | 'running' | 'done' | 'error';
 
@@ -120,7 +121,7 @@ export function LocalModelsShell() {
             Probing 127.0.0.1 — Ollama · LM Studio · vLLM · llama.cpp
           </p>
         </header>
-        <div className="px-5 py-5">
+        <div className="flex flex-col gap-4 px-5 py-5">
           {phase === 'scanning' && found.length === 0 ? (
             <ScanningHint />
           ) : showCorsHelp ? (
@@ -130,6 +131,12 @@ export function LocalModelsShell() {
           ) : (
             <ModelGrid models={found} selectedId={selected?.id ?? null} onSelect={setSelected} />
           )}
+          {/* Per-probe transparency: which runtimes responded, which
+              didn't, and an inline CORS recipe for the ones that
+              failed. The big CorsHelpPanel above already covers the
+              case where every probe failed — skip the strip there to
+              avoid duplication. */}
+          {scan !== null && !showCorsHelp ? <ProbeStatus probes={scan.probes} /> : null}
         </div>
       </section>
 
