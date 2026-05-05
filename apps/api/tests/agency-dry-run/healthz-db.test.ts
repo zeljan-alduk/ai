@@ -51,13 +51,56 @@ describe('agency dry-run — /v1/healthz/db (stub mode)', () => {
     expect(result.postMortem).toContain('## Event histogram');
   });
 
-  it('refuses live mode (not yet wired)', async () => {
-    await expect(runDryRun({ mode: 'live' })).rejects.toThrow(/not yet wired/);
+  it('refuses live:network mode (not yet wired)', async () => {
+    await expect(runDryRun({ mode: 'live:network' })).rejects.toThrow(/not yet wired/);
   });
 
   it('accepts a custom brief override', async () => {
     const result = await runDryRun({ mode: 'stub', brief: 'do something else' });
     expect(result.brief).toBe('do something else');
     expect(result.orchestration.ok).toBe(true);
+  });
+});
+
+describe('agency dry-run — /v1/healthz/db (live mode, no network)', () => {
+  it('drives the principal composite through the real PlatformRuntime', async () => {
+    const result = await runDryRun({ mode: 'live' });
+    expect(result.mode).toBe('live');
+    expect(result.ok).toBe(true);
+    expect(result.runStoreCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('emits composite events and rolls up usage from the stub gateway', async () => {
+    const result = await runDryRun({ mode: 'live' });
+    const types = result.events.map((e) => e.type);
+    expect(types).toContain('composite.child_started');
+    expect(types).toContain('composite.child_completed');
+    expect(types).toContain('composite.usage_rollup');
+    expect(result.orchestration.totalUsage.tokensIn).toBeGreaterThan(0);
+  });
+
+  it('surfaces the engine gap: spawn does not recurse on nested composite specs', async () => {
+    // Surface the §13 Phase F finding made tangible by live mode:
+    // PlatformRuntime.spawn always creates a LeafAgentRun, so when the
+    // architect (which itself has a composite block of tech-lead +
+    // backend-engineer) runs as a CHILD of principal, its own composite
+    // is silently skipped. The whole tree should be 6+ runs deep; in
+    // current engine behaviour the runStore lands the supervisor +
+    // architect-as-leaf only.
+    const result = await runDryRun({ mode: 'live' });
+    expect(result.runStoreCount).toBeLessThanOrEqual(2); // gap observable
+    const architectSpawn = result.spawns.find((s) => s.agent === 'architect');
+    expect(architectSpawn).toBeDefined();
+    // The deeper agents (tech-lead, code-reviewer, security-auditor,
+    // backend-engineer) are NOT spawned in current engine behaviour.
+    for (const deeper of ['tech-lead', 'code-reviewer', 'security-auditor', 'backend-engineer']) {
+      expect(result.spawns.find((s) => s.agent === deeper)).toBeUndefined();
+    }
+  });
+
+  it('renders a live-mode post-mortem distinct from stub mode', async () => {
+    const result = await runDryRun({ mode: 'live' });
+    expect(result.postMortem).toContain('mode: live');
+    expect(result.postMortem).toContain('Live mode (no network)');
   });
 });

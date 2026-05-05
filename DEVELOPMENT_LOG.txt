@@ -5620,3 +5620,26 @@ What the stub run did NOT prove:
 - A real PR on a real remote.
 
 Honest call: the agency primitive ships in stub form. Item 5.5 (live-mode EngineRuntimeAdapter) is the one item between this and "agency primitive ships against a real customer-shaped repo" — estimated 1-2 days. The whole §13 Phase G alignment trio + aldo-memory + driver harness collapsed to a single calendar day (2026-05-05).
+
+2026-05-05T11:05Z — engineer (claude opus 4.7, 1M ctx) — §13 / item 5.5a live-mode harness + a discovered engine gap.
+
+apps/api/tests/agency-dry-run/healthz-db.ts: extended runDryRun with mode 'live' and 'live:network'. Live mode (no network) wires real PlatformRuntime + real Supervisor + InMemoryRunStore + StubGateway + StubToolHost + MapBackedRegistry against the loaded agency YAMLs. The whole stack is the same one apps/api uses in production for composite runs (modulo gateway/tool stubbing).
+
+What live mode v0 proved:
+- Engine's runtime.runAgent() routes composite specs through the orchestrator branch.
+- Supervisor.runComposite → SupervisorRuntimeAdapter.spawnChild → PlatformRuntime.spawn chain works against real agency-YAML specs with privacy cascade + run-store linkage honored.
+- composite.{child_started, child_completed, usage_rollup} fire and roll up the stub gateway's per-leaf usage.
+- 2 runs land in the store (supervisor + architect-as-leaf).
+
+What live mode v0 surfaced (real engine finding):
+- PlatformRuntime.spawn (runtime.ts:422) ALWAYS creates a LeafAgentRun regardless of whether the loaded spec carries a composite block.
+- So when the architect (sequential[tech-lead, backend-engineer]) runs as a CHILD, its own composite is silently skipped.
+- Whole tree should be 6+ runs deep; currently lands 2.
+- The orchestrator's engine-integration.test.ts only exercised 1-level composite trees, which is why the gap wasn't observable.
+- This is item 5.6: ~1-2 d engine fix. (1) detect composite in spawn() and dispatch through orchestrator, (2) make asSupervisorAdapter wait/collectUsage handle CompositeAgentRun returns too, (3) add 2-level composite test that fails without the fix.
+
+Tests: 12/12 dry-run cases (was 8; +4 live mode), 541/541 apps/api total (was 537), tsc clean. Live-mode post-mortem at agency/dry-runs/2026-05-05-healthz-db-live.md. Full §11 update in 2026-05-04-healthz-db.md naming the gap as item 5.6 and walking through the proposed fix.
+
+Honest call: the agency primitive ships in stub form + 1-level live form. Item 5.6 (engine spawn recursion) blocks the multi-level live dry-run; item 5.5b (live with real provider creds) blocks the real PR. After 5.6, 5.5b is straightforward. After 5.5b, the agency primitive ships against a real customer-shaped repo.
+
+Found a real engine gap without spending a single dollar of inference. Exactly what §13 Phase F was designed to do.

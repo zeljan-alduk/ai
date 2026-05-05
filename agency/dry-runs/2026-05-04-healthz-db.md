@@ -457,3 +457,86 @@ The whole §13 Phase G alignment trio + the §12.2 long pole + the
 driver harness collapsed to one calendar day. **The live-mode
 adapter is now the one item between stub and a real PR landing on
 a real remote.**
+
+---
+
+## 11. Update — 2026-05-05 (item 5.5 — live mode v0 + a real engine finding)
+
+`runDryRun({mode: 'live'})` is now wired and exercises the real
+`PlatformRuntime` + `Supervisor` + `InMemoryRunStore` against the
+loaded agency YAMLs. Stub gateway, stub tool host, no network — the
+goal is to prove the orchestration layer above the gateway/tool layer.
+
+### What live mode v0 *did* prove
+
+- All six agency YAMLs load and translate to `AgentSpec` cleanly
+  through the registry (already shown in stub mode; now confirmed
+  through the engine's `Registry.load` path too).
+- `PlatformRuntime.runAgent` dispatches the principal to the
+  composite branch (`spec.composite !== undefined`), creates the
+  supervisor wrapper, hands off to the orchestrator, and lands the
+  composite events on the parent stream.
+- The `Supervisor.runComposite → SupervisorRuntimeAdapter.spawnChild
+  → PlatformRuntime.spawn` chain works end-to-end against real
+  agency-YAML specs, with privacy cascade + run-store linkage
+  honored.
+- Captured `composite.{child_started, child_completed,
+  usage_rollup}` events fire in the right order; the `usage_rollup`
+  payload's `total` rolls up the stub gateway's per-leaf usage.
+- Live mode's run-store rolls up to 2 runs (supervisor + architect
+  leaf). Run linkage (`parent`, `root`) is correct.
+
+### What live mode v0 *surfaced* (real engine gap)
+
+**`PlatformRuntime.spawn` does not recurse on nested composite
+specs.** Look at `platform/engine/src/runtime.ts:422` — `spawn` always
+constructs a `LeafAgentRun` regardless of whether the loaded spec
+carries a `composite` block. So when the architect spec (which is
+itself composite: sequential[tech-lead, backend-engineer]) runs as a
+**child** of principal, its own composite block is silently skipped.
+The whole tree should be **6+ runs deep** (principal → architect →
+tech-lead → reviewer + auditor and architect → backend-engineer);
+the engine currently lands **2** (principal supervisor + architect
+leaf).
+
+The `engine-integration.test.ts` suite exercised composite
+specs only one level deep, so the gap was never observable until a
+real multi-level YAML tree was driven through the engine. Exactly
+the kind of finding §13 Phase F was designed to surface.
+
+The fix is small but engine-level — `spawn()` needs a branch
+analogous to `runAgent()` for composite specs (route through the
+orchestrator instead of constructing a leaf). Estimated effort: 1–2
+days, including:
+
+1. Detect `spec.composite` in `spawn` and dispatch through
+   `runAgent` (or a private composite-spawn helper) so the
+   orchestrator drives the nested cascade.
+2. Make sure the supervisor's `asSupervisorAdapter().wait()` /
+   `collectUsage()` work for both `LeafAgentRun` and
+   `CompositeAgentRun` returns (currently the wait/collect path
+   walks `runs` but composites live in `composites`).
+3. Add a 2-level composite test to `engine-integration.test.ts`
+   that fails without the fix.
+
+That's tracked as **item 5.6** in the next-leveraged-chunk note. It
+is genuinely the next thing — and the dry-run found it without a
+single dollar of inference.
+
+### Revised post-Phase-F sequencing
+
+| Item | Effort | Status |
+|---|---|---|
+| 5.1 `repo-fs` alias | ½ d | ✅ shipped 2026-05-05 |
+| 5.3 `github` alias + 4 gh tools | 1 d | ✅ shipped 2026-05-05 |
+| 5.2 `aldo-memory` MCP | 3–5 d | ✅ shipped 2026-05-05 (~½ d real) |
+| 5.4 Driver harness (stub) | 1 d | ✅ shipped 2026-05-05 |
+| 5.5a Live-mode adapter (no network) | 1 d | ✅ shipped 2026-05-05 |
+| 5.6 Engine `spawn` recurses on composite specs | 1–2 d | ⏳ surfaced today |
+| 5.5b Live-mode w/ real provider creds + real MCP tool host | 1–2 d | ⏳ |
+
+The agency primitive ships in stub form and in 1-level-composite
+live form. **Recursive composite expansion through the real agency
+tree is the one remaining engine gap before the multi-level dry-run
+can fire.** That's the §13 Phase F → "next primitive to fix" being
+named precisely.

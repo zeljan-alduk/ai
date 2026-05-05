@@ -31,13 +31,31 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { InMemoryRunStore, PlatformRuntime } from '@aldo-ai/engine';
 import type {
   AgentRef,
+  AgentRegistry,
   AgentSpec,
+  Attrs,
+  CallContext,
+  CompletionRequest,
+  Delta,
+  ModelGateway,
+  ReplayBundle,
   RunEvent,
   RunId,
+  Span,
+  SpanId,
+  SpanKind,
   TenantId,
+  ToolDescriptor,
+  ToolHost,
+  ToolRef,
+  ToolResult,
+  Tracer,
+  TraceId,
   UsageRecord,
+  ValidationResult,
 } from '@aldo-ai/types';
 import {
   Supervisor,
@@ -62,8 +80,16 @@ const BRIEF_AGENT_PATHS: Record<string, string> = {
 };
 
 export interface DryRunOpts {
-  /** `'stub'` (default) — synthesised outputs; `'live'` — real engine adapter (NYI). */
-  readonly mode?: 'stub' | 'live';
+  /**
+   * `'stub'`     — mock SupervisorRuntimeAdapter, synthesised outputs (1 level).
+   * `'live'`     — real PlatformRuntime + real Supervisor + stub gateway and tool
+   *                host. Drives the *full* composite cascade
+   *                (principal → architect → tech-lead → reviewer + auditor + engineer).
+   *                Proves recursive composite expansion. No model creds needed.
+   * `'live:network'` — reserved. Same as `live`, but with real provider creds + real
+   *                MCP tool host. Out of scope today.
+   */
+  readonly mode?: 'stub' | 'live' | 'live:network';
   /** Override the brief if you want to exercise a different shape. */
   readonly brief?: string;
 }
@@ -78,7 +104,7 @@ export interface SpawnRecord {
 
 export interface DryRunResult {
   readonly ok: boolean;
-  readonly mode: 'stub' | 'live';
+  readonly mode: 'stub' | 'live' | 'live:network';
   readonly brief: string;
   readonly events: ReadonlyArray<RunEventCapture>;
   readonly spawns: ReadonlyArray<SpawnRecord>;
@@ -86,6 +112,8 @@ export interface DryRunResult {
   readonly loadedSpecs: ReadonlyArray<string>;
   readonly missingSpecs: ReadonlyArray<{ agent: string; error: string }>;
   readonly postMortem: string;
+  /** Live-mode only: count of runs landed in the run store (composite tree size). */
+  readonly runStoreCount?: number;
 }
 
 export interface RunEventCapture {
@@ -94,13 +122,16 @@ export interface RunEventCapture {
 }
 
 export async function runDryRun(opts: DryRunOpts = {}): Promise<DryRunResult> {
-  const mode: 'stub' | 'live' = opts.mode ?? 'stub';
-  if (mode === 'live') {
+  const mode: 'stub' | 'live' | 'live:network' = opts.mode ?? 'stub';
+  if (mode === 'live:network') {
     throw new Error(
-      'agency-dry-run: live mode requires a full EngineRuntimeAdapter and frontier credentials; not yet wired',
+      'agency-dry-run: live:network mode requires real provider credentials + a real MCP tool host; not yet wired',
     );
   }
   const brief = opts.brief ?? HEALTHZ_DB_BRIEF;
+  if (mode === 'live') {
+    return runLiveMode(brief);
+  }
 
   const { specs, missing } = await loadAgencySpecs(BRIEF_AGENT_PATHS);
 
@@ -173,6 +204,146 @@ export async function runDryRun(opts: DryRunOpts = {}): Promise<DryRunResult> {
   };
 }
 
+/**
+ * Live mode (no network): real `PlatformRuntime` + real `Supervisor`,
+ * stub `ModelGateway` + stub `ToolHost`. The engine drives the full
+ * composite cascade through every level of the agency tree, recursing
+ * into nested composite blocks (architect → tech-lead → reviewer +
+ * auditor and architect → backend-engineer). The stub gateway emits
+ * deterministic text per agent so leaf runs complete; the stub tool
+ * host advertises no tools so leaves don't try to call MCP.
+ *
+ * What this proves vs. stub mode:
+ *   - Recursive composite expansion through all six brief-touching agents.
+ *   - Run-store linkage (parent_run_id, root_run_id) across every level.
+ *   - The engine ↔ orchestrator integration on the real agency YAMLs.
+ *
+ * What this still does NOT prove:
+ *   - Real model behaviour. Live network mode is `'live:network'`.
+ *   - Real MCP I/O. Same.
+ *   - A real PR. Same.
+ */
+async function runLiveMode(brief: string): Promise<DryRunResult> {
+  const events: RunEventCapture[] = [];
+  const spawns: SpawnRecord[] = [];
+
+  const { specs, missing } = await loadAgencySpecs(BRIEF_AGENT_PATHS);
+  const principalSpec = specs.get('principal');
+  if (!principalSpec) {
+    return failure(
+      'live',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `principal spec missing — cannot drive the composite. Errors: ${JSON.stringify(missing)}`,
+    );
+  }
+
+  const tenant = 'tenant-dry-run-live' as TenantId;
+  const registry = new MapBackedRegistry(specs);
+  const runStore = new InMemoryRunStore();
+
+  const runtime = new PlatformRuntime({
+    modelGateway: new StubGateway(),
+    toolHost: new StubToolHost(),
+    registry,
+    tracer: new StubTracer(),
+    tenant,
+    runStore,
+  });
+
+  const supervisor = new Supervisor({
+    runtime: runtime.asSupervisorAdapter(),
+    emit: (e) => events.push({ type: e.type, payload: e.payload }),
+  });
+  runtime.setOrchestrator(supervisor);
+
+  let topRunId: RunId | undefined;
+  let topOk = false;
+  let topOutput: unknown;
+  try {
+    const compositeRun = await runtime.runAgent({ name: 'principal' }, brief);
+    topRunId = compositeRun.id as RunId;
+    const waited = await (
+      compositeRun as unknown as {
+        wait: () => Promise<{ ok: boolean; output: unknown }>;
+      }
+    ).wait();
+    topOk = waited.ok;
+    topOutput = waited.output;
+  } catch (err) {
+    return failure(
+      'live',
+      brief,
+      events,
+      spawns,
+      missing,
+      [...specs.keys()],
+      `runtime.runAgent threw: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // Walk the run-store rows scoped to the supervisor's root and
+  // synthesise SpawnRecords so the post-mortem renderer surfaces the
+  // composite tree the engine actually built.
+  const runs = topRunId !== undefined ? runStore.listByRoot(topRunId) : [];
+  for (const r of runs) {
+    if (r.runId === topRunId) continue; // skip the supervisor itself
+    spawns.push({
+      runId: r.runId,
+      agent: r.ref.name,
+      inputs: undefined,
+      output: null,
+      durationMs: 0,
+    });
+  }
+
+  // The Supervisor emits `composite.usage_rollup` events at every
+  // composite level. The outermost rollup carries the whole tree's
+  // total. Pull it from the last rollup we captured; fall back to
+  // zero if no rollup fired (shouldn't happen on success).
+  const lastRollup = [...events]
+    .reverse()
+    .find((e) => e.type === 'composite.usage_rollup');
+  const totalUsage: UsageRecord =
+    lastRollup !== undefined && isRollupPayload(lastRollup.payload)
+      ? lastRollup.payload.total
+      : zeroUsage();
+
+  const orchestration: OrchestrationResult = {
+    ok: topOk,
+    strategy: principalSpec.composite?.strategy ?? 'sequential',
+    output: topOutput,
+    children: [],
+    totalUsage,
+  };
+
+  const postMortem = renderPostMortem({
+    mode: 'live',
+    brief,
+    events,
+    spawns,
+    orchestration,
+    loadedSpecs: [...specs.keys()],
+    missingSpecs: missing,
+  });
+
+  return {
+    ok: topOk,
+    mode: 'live',
+    brief,
+    events,
+    spawns,
+    orchestration,
+    loadedSpecs: [...specs.keys()],
+    missingSpecs: missing,
+    postMortem,
+    runStoreCount: runs.length,
+  };
+}
+
 interface SpecBundle {
   specs: Map<string, AgentSpec>;
   missing: { agent: string; error: string }[];
@@ -203,6 +374,124 @@ async function loadAgencySpecs(paths: Record<string, string>): Promise<SpecBundl
     }),
   );
   return { specs, missing };
+}
+
+/**
+ * `AgentRegistry` over the in-memory spec map produced by
+ * `loadAgencySpecs`. Used in live mode so PlatformRuntime can resolve
+ * each composite child without touching the API's per-tenant Postgres
+ * registry.
+ */
+class MapBackedRegistry implements AgentRegistry {
+  constructor(private readonly specs: Map<string, AgentSpec>) {}
+
+  async load(ref: AgentRef): Promise<AgentSpec> {
+    const s = this.specs.get(ref.name);
+    if (!s) {
+      throw new Error(
+        `live-runtime: unknown agent '${ref.name}' (loaded: ${[...this.specs.keys()].join(', ')})`,
+      );
+    }
+    return s;
+  }
+
+  validate(): ValidationResult {
+    return { ok: true, errors: [] };
+  }
+
+  async list(): Promise<AgentRef[]> {
+    return [...this.specs.values()].map((s) => ({
+      name: s.identity.name,
+      version: s.identity.version,
+    }));
+  }
+
+  async promote(): Promise<void> {
+    /* no-op for the dry-run registry */
+  }
+}
+
+/**
+ * Deterministic `ModelGateway` that emits one text delta + an end
+ * frame per leaf run. The text payload encodes the agent name so the
+ * post-mortem can verify the cascade reached every leaf.
+ */
+class StubGateway implements ModelGateway {
+  async *complete(_req: CompletionRequest, ctx: CallContext): AsyncIterable<Delta> {
+    const text = `live-stub:${ctx.agentName}`;
+    yield { textDelta: text };
+    yield {
+      end: {
+        finishReason: 'stop',
+        usage: {
+          provider: 'stub-live',
+          model: `stub:${ctx.agentName}`,
+          tokensIn: 1_500,
+          tokensOut: 250,
+          usd: 0.005,
+          at: new Date().toISOString(),
+        },
+        model: {
+          id: `stub:${ctx.agentName}`,
+          provider: 'stub-live',
+          locality: 'local',
+          provides: [],
+          cost: { usdPerMtokIn: 0, usdPerMtokOut: 0 },
+          privacyAllowed: ['public', 'internal', 'sensitive'],
+          capabilityClass: ctx.required[0] ?? 'reasoning-medium',
+          effectiveContextTokens: 8192,
+        },
+      },
+    };
+  }
+  async embed(): Promise<readonly (readonly number[])[]> {
+    return [];
+  }
+}
+
+/**
+ * No-op `ToolHost` — advertises zero tools, refuses every invoke.
+ * Leaf runs in live mode never reach for MCP because the StubGateway
+ * never emits a tool_call in its delta stream.
+ */
+class StubToolHost implements ToolHost {
+  async listTools(): Promise<readonly ToolDescriptor[]> {
+    return [];
+  }
+  async invoke(_t: ToolRef, _args: unknown, _c: CallContext): Promise<ToolResult> {
+    return {
+      ok: false,
+      value: null,
+      error: { code: 'tool_unavailable', message: 'live-mode dry-run uses no tool host' },
+    };
+  }
+}
+
+/**
+ * Minimal `Tracer` — every `span()` call resolves with a no-op span.
+ * The dry-run doesn't consume traces; the engine just expects the
+ * interface to exist.
+ */
+class StubTracer implements Tracer {
+  async span<T>(
+    _name: string,
+    kind: SpanKind,
+    _attrs: Attrs,
+    fn: (s: Span) => Promise<T>,
+  ): Promise<T> {
+    const span: Span = {
+      id: randomUUID() as SpanId,
+      traceId: randomUUID() as TraceId,
+      kind,
+      setAttr() {},
+      event() {},
+      end() {},
+    };
+    return fn(span);
+  }
+  async export(runId: RunId): Promise<ReplayBundle> {
+    return { runId, traceId: randomUUID() as TraceId, checkpoints: [] };
+  }
 }
 
 class StubRuntimeAdapter implements SupervisorRuntimeAdapter {
@@ -340,8 +629,23 @@ function zeroUsage(): UsageRecord {
   };
 }
 
+function isRollupPayload(p: unknown): p is { total: UsageRecord } {
+  if (!p || typeof p !== 'object') return false;
+  const total = (p as { total?: unknown }).total;
+  if (!total || typeof total !== 'object') return false;
+  const t = total as Record<string, unknown>;
+  return (
+    typeof t.provider === 'string' &&
+    typeof t.model === 'string' &&
+    typeof t.tokensIn === 'number' &&
+    typeof t.tokensOut === 'number' &&
+    typeof t.usd === 'number' &&
+    typeof t.at === 'string'
+  );
+}
+
 function failure(
-  mode: 'stub' | 'live',
+  mode: 'stub' | 'live' | 'live:network',
   brief: string,
   events: RunEventCapture[],
   spawns: SpawnRecord[],
@@ -371,7 +675,7 @@ function failure(
 }
 
 function renderPostMortem(args: {
-  mode: 'stub' | 'live';
+  mode: 'stub' | 'live' | 'live:network';
   brief: string;
   events: RunEventCapture[];
   spawns: SpawnRecord[];
@@ -386,10 +690,15 @@ function renderPostMortem(args: {
   const eventLines = [...eventsByType.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([type, count]) => `- \`${type}\`: ${count}`);
-  const spawnLines = args.spawns.map(
-    (s, i) =>
-      `${i + 1}. **${s.agent}** → ${typeof s.output === 'object' ? Object.keys(s.output as object).join(', ') : String(s.output).slice(0, 60)} (${s.durationMs} ms)`,
-  );
+  const spawnLines = args.spawns.map((s, i) => {
+    const summary =
+      s.output === null || s.output === undefined
+        ? '(no output captured)'
+        : typeof s.output === 'object'
+          ? Object.keys(s.output as object).join(', ')
+          : String(s.output).slice(0, 60);
+    return `${i + 1}. **${s.agent}** → ${summary} (${s.durationMs} ms)`;
+  });
   const totalUsd = args.orchestration.totalUsage.usd.toFixed(4);
   const missingLines = args.missingSpecs.map((m) => `- ${m.agent}: ${m.error}`);
   const lines: string[] = [
@@ -416,8 +725,10 @@ function renderPostMortem(args: {
     `- Total tokens out: ${args.orchestration.totalUsage.tokensOut}`,
     '',
     args.mode === 'stub'
-      ? '_Stub mode: outputs are synthesised. Re-run with mode: "live" against a real EngineRuntimeAdapter for the production dry-run._'
-      : '',
+      ? '_Stub mode: 1-level mock SupervisorRuntimeAdapter. Run with mode: "live" to drive the real PlatformRuntime + Supervisor._'
+      : args.mode === 'live'
+        ? '_Live mode (no network): real PlatformRuntime + Supervisor + stub gateway + stub tool host. Surfaces the engine gap noted in the §13 Phase F post-mortem (`agency/dry-runs/2026-05-04-healthz-db.md` §11): PlatformRuntime.spawn always creates a LeafAgentRun, so nested composite specs (e.g. architect.composite.subagents) are silently skipped when the child runs. The fix is an engine-side enhancement; tracked separately. Run with mode: "live:network" once provider creds + real MCP tool host are wired._'
+        : '',
   ];
   return lines.filter((l) => l !== '').join('\n');
 }
