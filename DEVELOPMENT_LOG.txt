@@ -7007,3 +7007,70 @@ Tests: 383 passed. Typecheck clean. Biome clean (one
 useKeyWithClickEvents ignore on the <tr> click handler — the chevron
 button inside provides the keyboard path, biome rule is overzealous
 on this composite-affordance pattern).
+
+----------------------------------------
+2026-05-06 01:30 UTC — agent (claude opus 4.7) — save progress: changelog, docs, README
+
+Closing the local-models work with the user-facing surface updates:
+
+ (1) apps/web/app/(marketing)/changelog/page.tsx — two new entries
+     prepended (newest first):
+       - "/local-models — public, browser-direct LLM scanner +
+         quality × speed bench" (web tag)
+       - "`aldo bench --suite` — quality × speed model rating from
+         the CLI" (platform tag)
+ (2) apps/web/content/docs/changelog.md — new "0.5.0 — 2026-05-06"
+     section at the top: /local-models, aldo bench --suite,
+     @aldo-ai/bench-suite package, tiered port scan, hero CTA.
+ (3) apps/web/content/docs/guides/local-models.md — rewrote the
+     "Web UI: /local-models" section to reflect the actual shipped
+     architecture (browser-direct, NOT API-routed). Added the four
+     well-known endpoints, capability chips description, per-row
+     expand mention, and reorganised the CORS table to be the
+     mandatory one-time setup (since browser-direct REQUIRES it,
+     unlike the previous server-to-server fantasy). Per-runtime
+     recipes are accurate now (vllm `--allowed-origins "*"` not
+     JSON list, llama.cpp `--http-cors-origin` not `--api-cors`).
+ (4) README.md — added a "Quality × speed model rating" subsection
+     under Quick start with both the CLI invocation and a link to
+     /local-models, pointing readers at the local-models guide.
+
+Final shape of the local-models surface:
+
+  /local-models page (public, marketing-chromed, no signup)
+    ├─ Hero        Polished gradient, pulsing dot CTA pill
+    ├─ Step 1      Browser-direct discovery
+    │   ├─ Model grid (cards w/ source-tinted badge + ctx + caps)
+    │   └─ Probe-status strip (✓ / ✗ per runtime + inline CORS fix)
+    └─ Step 2      Bench rating
+        ├─ Run/Stop CTA
+        ├─ Live table (8 cases, fade-in rows)
+        │   └─ Per-row expand: prompt, expected, output, reasoning,
+        │      evaluator detail
+        └─ Summary footer (pass / avg tok/s / avg reasoning / p95)
+
+  apps/web/components/local-models/  (the implementation):
+    ├─ builtin-suite.ts        the 8 cases + 3 prompt fixtures inline
+    ├─ discovery-direct.ts     fetch() ollama/lmstudio/vllm/llamacpp
+    ├─ evaluator-direct.ts     contains/regex/json_schema/...
+    ├─ bench-direct.ts         streaming POST /chat/completions
+    ├─ capabilities.ts         id → vision/tool-use/reasoning/embed
+    ├─ capability-chip.tsx     icon + colour pill
+    ├─ cors-recipes.ts         shared per-runtime command map
+    ├─ copyable-command.tsx    click-to-copy pill
+    ├─ cors-help-panel.tsx     all-failed full panel
+    ├─ probe-status.tsx        partial-failure per-runtime strip
+    ├─ model-grid.tsx          selectable cards
+    ├─ bench-table.tsx         live results + expand/collapse
+    └─ local-models-shell.tsx  state machine + composition
+
+  Hero CTA (marketing landing): apps/web/app/(marketing)/page.tsx
+   — primary "Scan local models" button at the top of the CTA row
+     with pulsing dot, links to /local-models.
+
+  Web middleware allow-list: /local-models is in `MARKETING_PATHS`
+  + `PUBLIC_BOUNDED`, so the chromeless branch fires (marketing
+  layout, no app sidebar) and the route guard doesn't redirect to
+  /login.
+
+Tests: web 383 passed; typecheck clean.

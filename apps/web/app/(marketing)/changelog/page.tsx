@@ -57,6 +57,42 @@ const TAG_BADGE: Record<Entry['tag'], string> = {
  */
 const ENTRIES: ReadonlyArray<Entry> = [
   {
+    date: '2026-05-06',
+    tag: 'web',
+    title: '/local-models — public, browser-direct LLM scanner + quality × speed bench',
+    body:
+      'New public surface at ai.aldo.tech/local-models. Probes 127.0.0.1 directly ' +
+      'from the browser for any OpenAI-compatible LLM (Ollama, LM Studio, vLLM, ' +
+      'llama.cpp), then runs an eight-case eval suite on the model you pick — ' +
+      'pass/fail per case, TTFT, tokens, reasoning split, tok/s — streamed live ' +
+      'as each case completes. Hosted API is not in the path: every byte is ' +
+      "between the visitor's browser and 127.0.0.1, no signup, nothing leaves " +
+      'localhost. Per-runtime probe-status strip with one-click CORS recipes ' +
+      '(OLLAMA_ORIGINS / LM Studio toggle / vllm --allowed-origins / ' +
+      'llama.cpp --http-cors-origin) for the runtimes that didn\'t respond. ' +
+      'Capability chips on each discovered model (Vision / Tool Use / Reasoning ' +
+      '/ Embedding) inferred from the id. Bench rows expand to show the full ' +
+      "prompt, the expected condition, the model's actual output (with the " +
+      'matched needle highlighted), the reasoning trace, and the evaluator ' +
+      'detail. Hero CTA "Scan local models" on the marketing landing.',
+  },
+  {
+    date: '2026-05-06',
+    tag: 'platform',
+    title: '`aldo bench --suite` — quality × speed model rating from the CLI',
+    body:
+      'CLI counterpart to the web /local-models flow. ' +
+      '`aldo bench --suite local-model-rating --model <id>` fires the same ' +
+      'eight cases at any OpenAI-compatible endpoint and prints a fixed-width ' +
+      'ASCII table per case (case · pass · total · tok in/out · reason% · tok/s) ' +
+      'plus a summary footer with pass-rate, avg tok/s, avg reasoning ratio, ' +
+      'and p95 latency. Engine lives in @aldo-ai/bench-suite (workspace package) ' +
+      'and is shared with the new POST /v1/bench/suite SSE API endpoint. ' +
+      '`aldo models discover --scan` adds a curated ~60-port localhost sweep ' +
+      'on top of the well-known LLM ports; `--exhaustive` walks 1024..65535. ' +
+      'CORS posture documented in the local-models guide.',
+  },
+  {
     date: '2026-05-05',
     tag: 'eval',
     title: 'Agency dry-run unblocked at $0 — LM Studio probe stamps real `provides` + harness exits cleanly',

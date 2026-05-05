@@ -6,6 +6,27 @@ summary: Release history — newest first.
 This page is the user-facing release history. Internal milestones
 live in `DEVELOPMENT_LOG.txt` in the repository root.
 
+## 0.5.0 — 2026-05-06
+
+- **`/local-models` (public).** Browser-direct LLM scanner + quality
+  × speed bench. Probes `127.0.0.1` for Ollama / LM Studio / vLLM /
+  llama.cpp from the browser, runs an eight-case eval suite on the
+  model you pick, streams results live. No signup. Nothing leaves
+  localhost. Per-runtime CORS recipes inline; capability chips
+  (Vision / Tool Use / Reasoning / Embedding); per-row expand to
+  see prompt + output + evaluator detail.
+- **`aldo bench --suite`.** CLI counterpart — fires the same suite
+  from the terminal, prints a fixed-width ASCII table.
+- **`@aldo-ai/bench-suite` (new package).** Quality × speed engine
+  shared between the CLI, the API SSE endpoint, and the web UI.
+- **Tiered local-LLM port scan.** `aldo models discover --scan` adds
+  a curated ~60-port sweep; `--exhaustive` walks 1024..65535.
+  Default host across discovery is now `127.0.0.1` (sidesteps IPv6
+  hairpinning on machines where `localhost` resolves to `::1`).
+- **Hero CTA.** "Scan local models" button at the top of the
+  marketing landing — primary, public, links straight to
+  `/local-models`.
+
 ## 0.4.0 — 2026-04-26 (wave 15)
 
 - **Documentation site.** Real, indexed docs at `/docs`. Quickstart,

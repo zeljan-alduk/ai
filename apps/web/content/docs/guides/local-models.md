@@ -260,55 +260,66 @@ or path on the command line.
 
 ## Web UI: `/local-models`
 
-The same engine drives the in-app **Local models** page. It does
-three things in one flow:
+The public `/local-models` page is **browser-direct** — the visitor's
+browser fetches `127.0.0.1` itself, the hosted ALDO API server isn't
+in the path. That's the only design that works for a hosted
+demo: the cloud API can't reach your loopback regardless of how it's
+wired. Consequence: the LLM has to allow CORS from the page's origin
+(`https://ai.aldo.tech` in production), and the page does too.
 
-1. Fires `GET /v1/models/discover` to enumerate every reachable
-   local LLM server. Three scan modes:
-   - **Default ports** — Ollama (11434), LM Studio (1234), vLLM
-     (8000), llama.cpp (8080). Sub-second.
-   - **Common dev ports** — adds a curated ~60-port list documented
-     by every local-LLM tool we know about (text-generation-webui,
-     mlx-lm, KoboldCpp, GPT4All, Jan, ramalama, OpenLLM, …). Adds
-     1–2 s.
-   - **Every localhost port** — full sweep of `127.0.0.1:1024..65535`.
-     10–30 s on a typical laptop. Useful when a custom port is in
-     play and you don't know which.
-2. Lets you pick any discovered model + any server-side suite.
-3. Streams per-case results via SSE — you watch the table fill in
-   as each case completes, with TTFT, tokens, reasoning split, and
-   tok/s for each row.
+### What the page does
 
-Discovery defaults to **127.0.0.1** rather than `localhost` to
-sidestep IPv6 hairpinning on machines where `localhost` resolves
-to `::1` while the local LLM only binds `0.0.0.0`. Override via
-`LM_STUDIO_BASE_URL` / `OLLAMA_BASE_URL` / `VLLM_BASE_URL` /
-`LLAMA_CPP_BASE_URL` if your setup is non-standard.
+1. **Discovers** local LLMs by hitting four well-known endpoints in
+   parallel:
+   - `GET http://127.0.0.1:11434/api/tags` (Ollama)
+   - `GET http://127.0.0.1:1234/v1/models` (LM Studio)
+   - `GET http://127.0.0.1:8000/v1/models` (vLLM)
+   - `GET http://127.0.0.1:8080/v1/models` (llama.cpp)
+2. **Tags** each discovered model with capability chips inferred from
+   the id — Vision / Tool Use / Reasoning / Embedding.
+3. **Runs** an eight-case eval suite (the same `local-model-rating`
+   the CLI uses) against the model you pick. Each case streams
+   `/chat/completions` directly from the browser to the model's port.
+4. **Scores** each case with a tiny browser-side evaluator port
+   (`contains` / `not_contains` / `regex` / `exact` / `json_schema`)
+   and renders the row immediately.
 
-### Port-scan + CORS
+Per-row expand shows the full prompt, the expected condition, the
+model's actual output (with the matched needle highlighted), the
+reasoning trace when the provider emitted one, and the evaluator's
+detail (json-schema validation errors, regex misses, etc.).
 
-The browser never talks to the LLM directly — discovery and bench
-calls go through the ALDO API server, which then talks to
-`http://127.0.0.1:<port>`. Server-to-server fetches don't trigger
-CORS, so you don't need to configure anything on the LLM side for
-the web UI to work, **provided the API and the LLM are on the same
-machine**.
+### CORS configuration (mandatory for the browser-direct flow)
 
-If you're running a hosted API (e.g. `app.aldo.tech`) and want to
-hit local LLMs on your laptop, the API can't reach your loopback —
-you'd need a bridge (run `aldo` locally + tunnel, or use the CLI).
-A browser-direct mode is on the roadmap; when it ships, you'll need
-to allow the web origin in your LLM's CORS config:
+Each runtime needs to allow CORS from your page's origin. Defaults
+deny by design — flip the right setting once and it's permanent:
 
-| Server | How to allow CORS |
+| Runtime | One-time setup |
 |---|---|
-| Ollama | `OLLAMA_ORIGINS="https://app.aldo.tech,http://localhost:3000" ollama serve` |
-| LM Studio | Toggle CORS in the local server panel; choose origins. |
-| vLLM | `vllm serve ... --allowed-origins "https://app.aldo.tech"` (space-separated list). |
-| llama.cpp | `./llama-server ... --http-cors-origin "https://app.aldo.tech"` (defaults allow only localhost:8080 / 127.0.0.1:8080). |
-| text-generation-webui | `--api-cors-origin "https://app.aldo.tech"`. |
+| **Ollama** | `OLLAMA_ORIGINS="*" ollama serve` (or scope to `https://ai.aldo.tech`). On macOS: `launchctl setenv OLLAMA_ORIGINS "*"` then quit + restart Ollama. On Linux + systemd: `Environment="OLLAMA_ORIGINS=*"` in the service unit. |
+| **LM Studio** | Server → Settings → toggle **Enable CORS**. No restart needed. |
+| **vLLM** | `vllm serve … --allowed-origins "*"` (space-separated list, accepts multiple). |
+| **llama.cpp** | `./llama-server … --http-cors-origin "*"` (defaults allow only `localhost:8080` / `127.0.0.1:8080` — anything else needs the flag explicitly). |
 
-For the current self-hosted flow, no CORS configuration is needed.
+Discovery + CORS detection: when a probe `TypeError`s, the browser
+can't tell "port closed" from "CORS denied" apart — both look like
+`fetch failed`. The page surfaces a per-runtime status strip with an
+inline "Fix CORS for &lt;runtime&gt;" toggle for any probe that
+failed; copy the recipe, restart the runtime, hit Rescan.
+
+### Why 127.0.0.1 not localhost
+
+Discovery defaults to **127.0.0.1** rather than `localhost` to sidestep
+IPv6 hairpinning on machines where `localhost` resolves to `::1` while
+the LLM binds only `0.0.0.0` (a recurring failure mode on Linux + some
+macOS configs).
+
+### Self-hosted: same browser-direct flow
+
+Whether you run ALDO at `https://ai.aldo.tech` or behind your own
+domain (e.g. `https://aldo.example.com`), the `/local-models` page is
+identical and the CORS recipes apply the same way — just substitute
+your origin in for `https://ai.aldo.tech`.
 
 ## Privacy tiers
 

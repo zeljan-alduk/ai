@@ -238,6 +238,19 @@ approval dialogs at destructive boundaries, slash commands
 (`aldo code --tui --resume <thread-id>`). Built on the same
 `IterativeAgentRun` primitive the API + assistant chat panel use.
 
+**Quality × speed model rating** ships in two surfaces:
+
+- **CLI**: `aldo bench --suite local-model-rating --model qwen/qwen3.6-35b-a3b`
+  fires an eight-case eval (instruction-following, JSON, code
+  reasoning, retrieval, multi-step inference, refusal, long-context
+  recall) at any OpenAI-compatible endpoint and prints a fixed-width
+  table with TTFT, tokens, reasoning split, and tok/s per case.
+- **Web**: [`/local-models`](https://ai.aldo.tech/local-models) is the
+  same flow in a browser — public, no signup, runs entirely
+  client-side. Probes `127.0.0.1` directly, surfaces per-runtime
+  CORS recipes when probes fail, streams results live as each case
+  completes. See [`docs/guides/local-models.md`](./apps/web/content/docs/guides/local-models.md).
+
 The CLI's `run` command spawns real model calls via the engine. The
 API does too (since the wave-X bridge — see
 [`PROGRESS.md`](./PROGRESS.md)). Local engines (Ollama, vLLM,
